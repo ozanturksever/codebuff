@@ -20,6 +20,10 @@ import {
   waitForAllClientsDisconnected,
   listen as webSocketListen,
 } from './websockets/server'
+import {
+  initializeRateLimiter,
+  cleanupRateLimiter,
+} from './websockets/rate-limiter'
 
 // Grace period for graceful shutdown
 const SHUTDOWN_GRACE_PERIOD_MS = 30 * 60 * 1000
@@ -96,10 +100,15 @@ server.listen(port, () => {
 })
 webSocketListen(server, '/ws')
 
+// Initialize rate limiter
+initializeRateLimiter()
+logger.info('Rate limiter initialized')
+
 let shutdownInProgress = false
 // Graceful shutdown handler for both SIGTERM and SIGINT
 async function handleShutdown(signal: string) {
   flushAnalytics()
+  cleanupRateLimiter() // Clean up rate limiter resources
   if (env.NEXT_PUBLIC_CB_ENVIRONMENT === 'dev') {
     server.close((error) => {
       console.log('Received error closing server', { error })

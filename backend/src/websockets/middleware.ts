@@ -18,6 +18,7 @@ import { sendAction } from './websocket-action'
 import { withAppContext } from '../context/app-context'
 import { checkAuth } from '../util/check-auth'
 import { logger } from '../util/logger'
+import { isRateLimited } from './rate-limiter'
 
 import type { UserInfo } from './auth'
 import type { ClientAction, ServerAction } from '@codebuff/common/actions'
@@ -150,6 +151,35 @@ protec.use(async (action, clientSessionId, ws, userInfo) =>
     clientSessionId,
   }),
 )
+
+// Rate limiting middleware - runs after auth so we have the user ID
+protec.use(async (action, clientSessionId, ws, userInfo) => {
+  const userId = userInfo?.id
+
+  // Only rate limit authenticated users
+  if (!userId) {
+    return undefined
+  }
+
+  // Check if user is rate limited
+  if (isRateLimited(userId)) {
+    logger.warn(
+      {
+        userId,
+        actionType: action.type,
+        clientSessionId,
+      },
+      'Request rate limited',
+    )
+
+    return getServerErrorAction(action, {
+      error: 'Rate limited',
+      message: 'Too many requests. Please slow down and try again in a moment.',
+    })
+  }
+
+  return undefined
+})
 
 // Organization repository coverage detection middleware
 protec.use(async (action, clientSessionId, ws, userInfo) => {
