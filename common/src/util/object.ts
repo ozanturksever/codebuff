@@ -1,3 +1,4 @@
+// TODO: Replace lodash functions isEqual, mapValues, union with native JS equivalents (e.g., use JSON.stringify(a) === JSON.stringify(b) for deep equality, Object.fromEntries(Object.entries(obj).map(([k,v]) => v)) to map values, and Array.from(new Set([...arr1,...arr2])) for union).
 import { isEqual, mapValues, union } from 'lodash'
 
 export const removeUndefinedProps = <T extends object>(
