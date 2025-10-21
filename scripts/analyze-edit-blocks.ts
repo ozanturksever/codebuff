@@ -1,3 +1,4 @@
+// TODO: Replace lodash shuffle with a native shuffle implementation using Fisher-Yates algorithm (e.g., for arrays).
 import fs from 'fs'
 import path from 'path'
 
