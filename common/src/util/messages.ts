@@ -1,18 +1,6 @@
 import { buildArray } from './array'
+import { cloneDeep, isEqual } from './lodash-replacements'
 
-// Deep clone using JSON serialization (works for serializable objects)
-function cloneDeep<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj))
-}
-
-// Deep equality check using JSON serialization
-function isEqual(a: unknown, b: unknown): boolean {
-  try {
-    return JSON.stringify(a) === JSON.stringify(b)
-  } catch {
-    return a === b
-  }
-}
 import { getToolCallString } from '../tools/utils'
 
 import type {
@@ -34,9 +22,9 @@ export function toContentString(msg: ModelMessage): string {
 export function withCacheControl<
   T extends { providerOptions?: ProviderMetadata },
 >(obj: T): T {
-  const wrapper = cloneDeep(obj)
+  const wrapper = cloneDeep(obj) as T
   if (!wrapper.providerOptions) {
-    wrapper.providerOptions = {}
+    wrapper.providerOptions = {} as ProviderMetadata
   }
   if (!wrapper.providerOptions.anthropic) {
     wrapper.providerOptions.anthropic = {}
@@ -52,12 +40,10 @@ export function withCacheControl<
 export function withoutCacheControl<
   T extends { providerOptions?: ProviderMetadata },
 >(obj: T): T {
-  const wrapper = cloneDeep(obj)
-  if (
-    wrapper.providerOptions?.anthropic?.cacheControl &&
-    'type' in wrapper.providerOptions.anthropic.cacheControl
-  ) {
-    delete (wrapper.providerOptions.anthropic.cacheControl as any).type
+  const wrapper = cloneDeep(obj) as T
+  const anthropicCache = wrapper.providerOptions?.anthropic?.cacheControl
+  if (anthropicCache && typeof anthropicCache === 'object' && 'type' in anthropicCache) {
+    delete (anthropicCache as any).type
   }
   if (
     Object.keys(wrapper.providerOptions?.anthropic?.cacheControl ?? {})
@@ -69,11 +55,9 @@ export function withoutCacheControl<
     delete wrapper.providerOptions?.anthropic
   }
 
-  if (
-    wrapper.providerOptions?.openrouter?.cacheControl &&
-    'type' in wrapper.providerOptions.openrouter.cacheControl
-  ) {
-    delete (wrapper.providerOptions.openrouter.cacheControl as any).type
+  const openrouterCache = wrapper.providerOptions?.openrouter?.cacheControl
+  if (openrouterCache && typeof openrouterCache === 'object' && 'type' in openrouterCache) {
+    delete (openrouterCache as any).type
   }
   if (
     Object.keys(wrapper.providerOptions?.openrouter?.cacheControl ?? {})

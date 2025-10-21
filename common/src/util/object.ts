@@ -1,26 +1,4 @@
-// Deep equality check using JSON serialization
-function isEqual(a: unknown, b: unknown): boolean {
-  try {
-    return JSON.stringify(a) === JSON.stringify(b)
-  } catch {
-    return a === b
-  }
-}
-
-// Map values of an object
-function mapValues<T extends object, R>(
-  obj: T,
-  fn: (value: any, key: keyof T) => R,
-): { [K in keyof T]: R } {
-  return Object.fromEntries(
-    Object.entries(obj).map(([k, v]) => [k, fn(v, k as keyof T)]),
-  ) as { [K in keyof T]: R }
-}
-
-// Union of two arrays
-function union<T>(arr1: T[], arr2: T[]): T[] {
-  return Array.from(new Set([...arr1, ...arr2]))
-}
+import { isEqual, mapValues, union } from './lodash-replacements'
 
 export const removeUndefinedProps = <T extends object>(
   obj: T,
@@ -81,7 +59,7 @@ export const subtractObjects = <T extends { [key: string]: number }>(
 }
 
 export const hasChanges = <T extends object>(obj: T, partial: Partial<T>) => {
-  const currValues = mapValues(partial, (_, key: keyof T) => obj[key])
+  const currValues = mapValues(partial as T, (_, key: keyof T) => obj[key])
   return !isEqual(currValues, partial as any)
 }
 

@@ -2,11 +2,7 @@ import * as os from 'os'
 import path from 'path'
 
 import { getFileTokenScores } from '@codebuff/code-map/parse'
-
-// Deep clone using JSON serialization (works for serializable objects)
-function cloneDeep<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj))
-}
+import { cloneDeep } from '@codebuff/common/util/lodash-replacements'
 
 import {
   getProjectFileTree,

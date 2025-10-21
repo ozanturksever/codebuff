@@ -1,9 +1,6 @@
 import path from 'path'
 
-// Deep clone using JSON serialization (works for serializable objects)
-function cloneDeep<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj))
-}
+import { cloneDeep } from '@codebuff/common/util/lodash-replacements'
 
 import { initialSessionState, applyOverridesToSessionState } from './run-state'
 import { stripToolCallPayloads } from './tool-xml-buffer'

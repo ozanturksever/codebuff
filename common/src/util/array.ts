@@ -1,12 +1,4 @@
-// Deep equality check using JSON serialization
-// Note: Not exported to avoid type recursion issues
-function isEqual(a: unknown, b: unknown): boolean {
-  try {
-    return JSON.stringify(a) === JSON.stringify(b)
-  } catch {
-    return a === b
-  }
-}
+import { isEqual } from './lodash-replacements'
 
 export function filterDefined<T>(array: (T | null | undefined)[]) {
   return array.filter((item) => item !== null && item !== undefined) as T[]

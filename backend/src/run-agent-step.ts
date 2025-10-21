@@ -19,11 +19,7 @@ import { supportsCacheControl } from '@codebuff/common/old-constants'
 import { TOOLS_WHICH_WONT_FORCE_NEXT_STEP } from '@codebuff/common/tools/constants'
 import { buildArray } from '@codebuff/common/util/array'
 import { getErrorObject } from '@codebuff/common/util/error'
-
-// Deep clone using JSON serialization (works for serializable objects)
-function cloneDeep<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj))
-}
+import { cloneDeep } from '@codebuff/common/util/lodash-replacements'
 
 import { runProgrammaticStep } from './run-programmatic-step'
 import { processStreamWithTools } from './tools/stream-parser'

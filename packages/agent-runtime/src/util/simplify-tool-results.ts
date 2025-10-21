@@ -1,9 +1,5 @@
 import { getErrorObject } from '@codebuff/common/util/error'
-
-// Deep clone using JSON serialization (works for serializable objects)
-function cloneDeep<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj))
-}
+import { cloneDeep } from '@codebuff/common/util/lodash-replacements'
 
 import type { CodebuffToolOutput } from '@codebuff/common/tools/list'
 import type { Logger } from '@codebuff/common/types/contracts/logger'
