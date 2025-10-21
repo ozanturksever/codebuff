@@ -79,3 +79,44 @@ export function partition<T>(
 export function uniq<T>(arr: T[]): T[] {
   return Array.from(new Set(arr))
 }
+
+// Add debounce implementation export below
+export function debounce<T extends (...args: any[]) => any>(fn: T, wait = 0) {
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  let lastArgs: any
+  let lastThis: any
+  let result: ReturnType<T>
+
+  const debounced = function (this: any, ...args: Parameters<T>) {
+    lastArgs = args
+    lastThis = this
+    if (timeout) clearTimeout(timeout)
+    timeout = setTimeout(() => {
+      timeout = null
+      result = fn.apply(lastThis, lastArgs)
+    }, wait)
+    return result
+  } as unknown as T & {
+    cancel: () => void
+    flush: () => ReturnType<T> | undefined
+  }
+
+  debounced.cancel = () => {
+    if (timeout) {
+      clearTimeout(timeout)
+      timeout = null
+    }
+  }
+
+  debounced.flush = () => {
+    if (timeout) {
+      clearTimeout(timeout)
+      timeout = null
+      result = fn.apply(lastThis, lastArgs)
+      return result
+    }
+    return result
+  }
+
+  return debounced
+}
