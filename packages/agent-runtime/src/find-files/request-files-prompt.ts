@@ -6,7 +6,7 @@ import {
   type FinetunedVertexModel,
 } from '@codebuff/common/old-constants'
 import { getAllFilePaths } from '@codebuff/common/project-file-tree'
-import { range, shuffle } from '@codebuff/common/util/lodash-replacements'
+import { range, shuffle, uniq } from '@codebuff/common/util/lodash-replacements'
 
 import { promptFlashWithFallbacks } from '../llm-api/gemini-with-fallbacks'
 import {
@@ -82,7 +82,7 @@ export async function requestRelevantFiles(
 
   const candidateFiles = (await keyPromise).files
 
-  validateFilePaths(Array.from(new Set(candidateFiles)))
+  validateFilePaths(uniq(candidateFiles))
 
   // logger.info(
   //   {
@@ -149,7 +149,7 @@ export async function requestRelevantFilesForTraining(
   })
 
   const candidateFiles = [...keyFiles.files, ...nonObviousFiles.files]
-  const validatedFiles = validateFilePaths(Array.from(new Set(candidateFiles)))
+  const validatedFiles = validateFilePaths(uniq(candidateFiles))
   logger.debug(
     { keyFiles, nonObviousFiles, validatedFiles },
     'requestRelevantFilesForTraining: results',
@@ -322,10 +322,7 @@ function getExampleFileList(params: {
     selectedDirectories.add(dirname(filePath))
   }
 
-  return Array.from(new Set([...selectedFiles, ...randomFilePaths])).slice(
-    0,
-    count,
-  )
+  return uniq([...selectedFiles, ...randomFilePaths]).slice(0, count)
 }
 
 function generateNonObviousRequestFilesPrompt(

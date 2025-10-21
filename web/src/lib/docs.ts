@@ -34,5 +34,5 @@ export async function getNewsArticles(): Promise<NewsArticle[]> {
 
 // export function getAllCategories() {
 //   if (!allDocs) return []
-//   return Array.from(new Set((allDocs as Doc[]).map((doc: Doc) => doc.category)))
+//   return uniq((allDocs as Doc[]).map((doc: Doc) => doc.category))
 // }

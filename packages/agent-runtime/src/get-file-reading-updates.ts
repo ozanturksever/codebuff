@@ -1,4 +1,5 @@
 import type { RequestFilesFn } from '@codebuff/common/types/contracts/client'
+import { uniq } from '@codebuff/common/util/lodash-replacements'
 
 export async function getFileReadingUpdates(params: {
   requestFiles: RequestFilesFn
@@ -11,7 +12,7 @@ export async function getFileReadingUpdates(params: {
 > {
   const { requestFiles, requestedFiles } = params
 
-  const allFilePaths = Array.from(new Set(requestedFiles))
+  const allFilePaths = uniq(requestedFiles)
   const loadedFiles = await requestFiles({ filePaths: allFilePaths })
 
   const addedFiles = allFilePaths

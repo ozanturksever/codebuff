@@ -54,11 +54,11 @@ export function union<T>(arr1: T[], arr2: T[]): T[] {
 export function partition<T, S extends T>(
   array: T[],
   predicate: (value: T) => value is S,
-): [S[], Exclude<T, S>[]];
+): [S[], Exclude<T, S>[]]
 export function partition<T>(
   array: T[],
   predicate: (value: T) => boolean,
-): [T[], T[]];
+): [T[], T[]]
 export function partition<T>(
   array: T[],
   predicate: (value: T) => boolean,
@@ -73,4 +73,9 @@ export function partition<T>(
     }
   }
   return [truthy, falsy]
+}
+
+// Remove duplicates from an array
+export function uniq<T>(arr: T[]): T[] {
+  return Array.from(new Set(arr))
 }

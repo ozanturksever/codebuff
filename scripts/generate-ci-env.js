@@ -7,6 +7,7 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { uniq } from '../common/src/util/lodash-replacements.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -88,7 +89,7 @@ function generateGitHubEnv() {
   } else if (scope === 'client') {
     selected = varsByScope.client
   } else {
-    selected = Array.from(new Set([...varsByScope.server, ...varsByScope.client]))
+    selected = uniq([...varsByScope.server, ...varsByScope.client])
   }
 
   if (prefix) {
