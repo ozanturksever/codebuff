@@ -1,4 +1,7 @@
-import { sumBy } from 'lodash'
+// Sum an array by extracting numeric values with a function
+function sumBy<T>(arr: T[], fn: (item: T) => number): number {
+  return arr.reduce((sum, item) => sum + fn(item), 0)
+}
 
 export const truncateString = (str: string, maxLength: number) => {
   if (str.length <= maxLength) {

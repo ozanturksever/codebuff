@@ -1,7 +1,6 @@
 import path from 'path'
 
 import * as ignore from 'ignore'
-import { sortBy } from 'lodash'
 
 import { DEFAULT_IGNORED_PATHS } from './old-constants'
 import { isValidProjectRoot } from './util/file'
@@ -209,10 +208,9 @@ export function getLastReadFilePaths(
   flattenedNodes: FileTreeNode[],
   count: number,
 ) {
-  return sortBy(
-    flattenedNodes.filter((node) => node.lastReadTime),
-    'lastReadTime',
-  )
+  return flattenedNodes
+    .filter((node) => node.lastReadTime)
+    .sort((a, b) => (a.lastReadTime || 0) - (b.lastReadTime || 0))
     .reverse()
     .slice(0, count)
     .map((node) => node.filePath)

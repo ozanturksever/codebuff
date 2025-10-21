@@ -8,7 +8,11 @@ import {
 } from '@codebuff/common/tools/constants'
 import { buildArray } from '@codebuff/common/util/array'
 import { generateCompactId } from '@codebuff/common/util/string'
-import { cloneDeep } from 'lodash'
+
+// Deep clone using JSON serialization (works for serializable objects)
+function cloneDeep<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj))
+}
 
 import { executeCustomToolCall, executeToolCall } from './tool-executor'
 

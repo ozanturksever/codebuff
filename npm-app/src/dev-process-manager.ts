@@ -1,9 +1,7 @@
-// TODO: Replace lodash has with native property check using optional chaining or Object.prototype.hasOwnProperty.call.
 import path from 'path'
 
 import { codebuffConfigFile } from '@codebuff/common/json-config/constants'
 import { generateCompactId } from '@codebuff/common/util/string'
-import { has } from 'lodash'
 import { yellow } from 'picocolors'
 
 import { runBackgroundCommand } from './terminal/background'
@@ -60,7 +58,8 @@ export function startDevProcesses(
         stderrFile,
       },
       (result) => {
-        if (has(result[0].value, 'processId')) {
+        const value = result[0].value as any
+        if ('processId' in value) {
           console.log(yellow(`- ${name}: ${command}`))
         } else {
           console.log(yellow(`- ${name}: ${command} — failed to start`))

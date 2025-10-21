@@ -1,5 +1,4 @@
 import { generateCompactId } from '@codebuff/common/util/string'
-import { has } from 'lodash'
 import micromatch from 'micromatch'
 import { bold, gray } from 'picocolors'
 
@@ -67,7 +66,8 @@ export async function runFileChangeHooks(filesChanged: string[]): Promise<{
         undefined,
         undefined,
       )
-      if (has(result[0].value, 'exitCode') && result[0].value.exitCode !== 0) {
+      const value = result[0].value as any
+      if ('exitCode' in value && value.exitCode !== 0) {
         someHooksFailed = true
         // Show user this hook failed?
         // logger.warn(

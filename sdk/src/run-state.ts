@@ -2,7 +2,11 @@ import * as os from 'os'
 import path from 'path'
 
 import { getFileTokenScores } from '@codebuff/code-map/parse'
-import { cloneDeep } from 'lodash'
+
+// Deep clone using JSON serialization (works for serializable objects)
+function cloneDeep<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj))
+}
 
 import {
   getProjectFileTree,
@@ -36,7 +40,7 @@ export type InitialSessionStateOptions = {
   customToolDefinitions?: CustomToolDefinition[]
   maxAgentSteps?: number
   fs?: CodebuffFileSystem
-};
+}
 
 /**
  * Processes agent definitions array and converts handleSteps functions to strings
@@ -167,11 +171,11 @@ function deriveKnowledgeFiles(
 
 export function initialSessionState(
   options: InitialSessionStateOptions,
-): Promise<SessionState>;
+): Promise<SessionState>
 export function initialSessionState(
   cwd: string,
   options?: Omit<InitialSessionStateOptions, 'cwd'>,
-): Promise<SessionState>;
+): Promise<SessionState>
 export async function initialSessionState(
   arg1: string | InitialSessionStateOptions,
   arg2?: Omit<InitialSessionStateOptions, 'cwd'>,

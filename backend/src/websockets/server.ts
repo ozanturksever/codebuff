@@ -1,6 +1,5 @@
 import { setSessionConnected } from '@codebuff/agent-runtime/live-user-inputs'
 import { CLIENT_MESSAGE_SCHEMA } from '@codebuff/common/websockets/websocket-schema'
-import { isError } from 'lodash'
 import { WebSocketServer } from 'ws'
 
 import { Switchboard } from './switchboard'
@@ -27,7 +26,7 @@ export class MessageParseError extends Error {
 }
 
 function serializeError(err: unknown) {
-  return isError(err) ? err.message : 'Unexpected error.'
+  return err instanceof Error ? err.message : 'Unexpected error.'
 }
 
 async function processMessage(params: {

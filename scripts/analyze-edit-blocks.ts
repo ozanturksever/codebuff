@@ -1,4 +1,3 @@
-// TODO: Replace lodash shuffle with a native shuffle implementation using Fisher-Yates algorithm (e.g., for arrays).
 import fs from 'fs'
 import path from 'path'
 
@@ -6,7 +5,16 @@ import { db } from '@codebuff/common/db'
 import * as schema from '@codebuff/common/db/schema'
 import { fileRegex } from '@codebuff/common/util/file'
 import { eq, desc } from 'drizzle-orm'
-import { shuffle } from 'lodash'
+
+// Fisher-Yates shuffle algorithm
+function shuffle<T>(array: T[]): T[] {
+  const result = [...array]
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[result[i], result[j]] = [result[j], result[i]]
+  }
+  return result
+}
 
 interface EditBlock {
   filePath: string

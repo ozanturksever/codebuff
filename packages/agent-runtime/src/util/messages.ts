@@ -3,7 +3,20 @@ import { AssertionError } from 'assert'
 import { buildArray } from '@codebuff/common/util/array'
 import { getErrorObject } from '@codebuff/common/util/error'
 import { closeXml } from '@codebuff/common/util/xml'
-import { cloneDeep, isEqual } from 'lodash'
+
+// Deep clone using JSON serialization (works for serializable objects)
+function cloneDeep<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj))
+}
+
+// Deep equality check using JSON serialization
+function isEqual(a: unknown, b: unknown): boolean {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b)
+  } catch {
+    return a === b
+  }
+}
 
 import { simplifyTerminalCommandResults } from './simplify-tool-results'
 import { countTokensJson } from './token-counter'

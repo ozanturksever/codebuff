@@ -7,8 +7,12 @@ import { promptAiSdkStructured } from '@codebuff/backend/llm-apis/vercel-ai-sdk/
 import { getErrorObject } from '@codebuff/common/util/error'
 import { withTimeout } from '@codebuff/common/util/promise'
 import { generateCompactId } from '@codebuff/common/util/string'
-import { cloneDeep } from 'lodash'
 import pLimit from 'p-limit'
+
+// Deep clone using JSON serialization (works for serializable objects)
+function cloneDeep<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj))
+}
 
 import { resetRepoToCommit } from '../scaffolding'
 import { createInitialSessionState } from '../test-setup'

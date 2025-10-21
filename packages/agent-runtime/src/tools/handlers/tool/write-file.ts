@@ -1,6 +1,26 @@
-import { partition } from 'lodash'
-
 import { processFileBlock } from '../../../process-file-block'
+
+// Partition an array into two arrays based on a predicate
+function partition<T, S extends T>(
+  array: T[],
+  predicate: (value: T) => value is S,
+): [S[], Exclude<T, S>[]]
+function partition<T>(array: T[], predicate: (value: T) => boolean): [T[], T[]]
+function partition<T>(
+  array: T[],
+  predicate: (value: T) => boolean,
+): [T[], T[]] {
+  const truthy: T[] = []
+  const falsy: T[] = []
+  for (const item of array) {
+    if (predicate(item)) {
+      truthy.push(item)
+    } else {
+      falsy.push(item)
+    }
+  }
+  return [truthy, falsy]
+}
 
 import type { CodebuffToolHandlerFunction } from '../handler-function-type'
 import type {

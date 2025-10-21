@@ -12,7 +12,6 @@ import {
 } from '@codebuff/common/util/agent-name-resolver'
 import { isDir } from '@codebuff/common/util/file'
 import { pluralize } from '@codebuff/common/util/string'
-import { uniq } from 'lodash'
 import {
   blueBright,
   bold,
@@ -526,17 +525,19 @@ export class CLI {
 
       return p
     }
-    const matchingPaths = uniq(
-      allFiles
-        .map((filePath) => {
-          let candidate = null
-          while (filePath.includes(searchTerm)) {
-            candidate = filePath
-            filePath = path.dirname(filePath) + '/'
-          }
-          return candidate
-        })
-        .filter((filePath): filePath is string => !!filePath),
+    const matchingPaths = Array.from(
+      new Set(
+        allFiles
+          .map((filePath) => {
+            let candidate = null
+            while (filePath.includes(searchTerm)) {
+              candidate = filePath
+              filePath = path.dirname(filePath) + '/'
+            }
+            return candidate
+          })
+          .filter((filePath): filePath is string => !!filePath),
+      ),
     ).sort((a, b) => priority(a) - priority(b))
 
     if (matchingPaths.length > 0) {

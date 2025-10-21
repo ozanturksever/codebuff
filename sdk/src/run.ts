@@ -1,6 +1,9 @@
 import path from 'path'
 
-import { cloneDeep } from 'lodash'
+// Deep clone using JSON serialization (works for serializable objects)
+function cloneDeep<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj))
+}
 
 import { initialSessionState, applyOverridesToSessionState } from './run-state'
 import { stripToolCallPayloads } from './tool-xml-buffer'
@@ -466,8 +469,7 @@ export async function run({
           chunkType !== 'subagent-finish'
         ) {
           await emitPendingSection(ROOT_AGENT_KEY)
-          const pendingAgentId =
-            'agentId' in chunk ? chunk.agentId : undefined
+          const pendingAgentId = 'agentId' in chunk ? chunk.agentId : undefined
           if (pendingAgentId && pendingAgentId !== ROOT_AGENT_KEY) {
             await emitPendingSection(pendingAgentId, pendingAgentId)
           }

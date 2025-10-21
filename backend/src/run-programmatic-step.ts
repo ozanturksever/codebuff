@@ -1,7 +1,11 @@
 import { SandboxManager } from '@codebuff/agent-runtime/util/quickjs-sandbox'
 import { getToolCallString } from '@codebuff/common/tools/utils'
 import { getErrorObject } from '@codebuff/common/util/error'
-import { cloneDeep } from 'lodash'
+
+// Deep clone using JSON serialization (works for serializable objects)
+function cloneDeep<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj))
+}
 
 import { executeToolCall } from './tools/tool-executor'
 

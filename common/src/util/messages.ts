@@ -1,6 +1,18 @@
-import { cloneDeep, has, isEqual } from 'lodash'
-
 import { buildArray } from './array'
+
+// Deep clone using JSON serialization (works for serializable objects)
+function cloneDeep<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj))
+}
+
+// Deep equality check using JSON serialization
+function isEqual(a: unknown, b: unknown): boolean {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b)
+  } catch {
+    return a === b
+  }
+}
 import { getToolCallString } from '../tools/utils'
 
 import type {
@@ -41,8 +53,11 @@ export function withoutCacheControl<
   T extends { providerOptions?: ProviderMetadata },
 >(obj: T): T {
   const wrapper = cloneDeep(obj)
-  if (has(wrapper.providerOptions?.anthropic?.cacheControl, 'type')) {
-    delete wrapper.providerOptions?.anthropic?.cacheControl?.type
+  if (
+    wrapper.providerOptions?.anthropic?.cacheControl &&
+    'type' in wrapper.providerOptions.anthropic.cacheControl
+  ) {
+    delete (wrapper.providerOptions.anthropic.cacheControl as any).type
   }
   if (
     Object.keys(wrapper.providerOptions?.anthropic?.cacheControl ?? {})
@@ -54,8 +69,11 @@ export function withoutCacheControl<
     delete wrapper.providerOptions?.anthropic
   }
 
-  if (has(wrapper.providerOptions?.openrouter?.cacheControl, 'type')) {
-    delete wrapper.providerOptions?.openrouter?.cacheControl?.type
+  if (
+    wrapper.providerOptions?.openrouter?.cacheControl &&
+    'type' in wrapper.providerOptions.openrouter.cacheControl
+  ) {
+    delete (wrapper.providerOptions.openrouter.cacheControl as any).type
   }
   if (
     Object.keys(wrapper.providerOptions?.openrouter?.cacheControl ?? {})

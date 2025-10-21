@@ -1,6 +1,5 @@
 import { models } from '@codebuff/common/old-constants'
 import { closeXml } from '@codebuff/common/util/xml'
-import { uniq } from 'lodash'
 import { z } from 'zod/v4'
 
 import { fetchContext7LibraryDocumentation } from '@codebuff/agent-runtime/llm-api/context7-api'
@@ -75,11 +74,13 @@ export async function getDocumentationForQuery(
   ).flat()
 
   const maxChunks = 25
-  const allUniqueChunks = uniq(
-    allRawChunks
-      .filter((chunk) => chunk !== null)
-      .join(DELIMITER)
-      .split(DELIMITER),
+  const allUniqueChunks = Array.from(
+    new Set(
+      allRawChunks
+        .filter((chunk) => chunk !== null)
+        .join(DELIMITER)
+        .split(DELIMITER),
+    ),
   ).slice(0, maxChunks)
 
   if (allUniqueChunks.length === 0) {

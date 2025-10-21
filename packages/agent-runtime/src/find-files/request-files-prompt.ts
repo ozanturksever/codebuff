@@ -6,7 +6,21 @@ import {
   type FinetunedVertexModel,
 } from '@codebuff/common/old-constants'
 import { getAllFilePaths } from '@codebuff/common/project-file-tree'
-import { range, shuffle, uniq } from 'lodash'
+
+// Fisher-Yates shuffle algorithm
+function shuffle<T>(array: T[]): T[] {
+  const result = [...array]
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[result[i], result[j]] = [result[j], result[i]]
+  }
+  return result
+}
+
+// Generate a range of numbers
+function range(count: number): number[] {
+  return Array.from({ length: count }, (_, i) => i)
+}
 
 import { promptFlashWithFallbacks } from '../llm-api/gemini-with-fallbacks'
 import {
@@ -82,7 +96,7 @@ export async function requestRelevantFiles(
 
   const candidateFiles = (await keyPromise).files
 
-  validateFilePaths(uniq(candidateFiles))
+  validateFilePaths(Array.from(new Set(candidateFiles)))
 
   // logger.info(
   //   {
@@ -149,7 +163,7 @@ export async function requestRelevantFilesForTraining(
   })
 
   const candidateFiles = [...keyFiles.files, ...nonObviousFiles.files]
-  const validatedFiles = validateFilePaths(uniq(candidateFiles))
+  const validatedFiles = validateFilePaths(Array.from(new Set(candidateFiles)))
   logger.debug(
     { keyFiles, nonObviousFiles, validatedFiles },
     'requestRelevantFilesForTraining: results',
@@ -322,7 +336,10 @@ function getExampleFileList(params: {
     selectedDirectories.add(dirname(filePath))
   }
 
-  return uniq([...selectedFiles, ...randomFilePaths]).slice(0, count)
+  return Array.from(new Set([...selectedFiles, ...randomFilePaths])).slice(
+    0,
+    count,
+  )
 }
 
 function generateNonObviousRequestFilesPrompt(

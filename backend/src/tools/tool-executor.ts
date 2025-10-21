@@ -4,8 +4,12 @@ import { codebuffToolDefs } from '@codebuff/agent-runtime/tools/definitions/list
 import { endsAgentStepParam } from '@codebuff/common/tools/constants'
 import { generateCompactId } from '@codebuff/common/util/string'
 import { type ToolCallPart } from 'ai'
-import { cloneDeep } from 'lodash'
 import z from 'zod/v4'
+
+// Deep clone using JSON serialization (works for serializable objects)
+function cloneDeep<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj))
+}
 import { convertJsonSchemaToZod } from 'zod-from-json-schema'
 
 import { codebuffToolHandlers } from './handlers/list'
