@@ -1,3 +1,4 @@
+// TODO: Replace lodash has with native property check using optional chaining or Object.prototype.hasOwnProperty.call.
 import path from 'path'
 
 import { codebuffConfigFile } from '@codebuff/common/json-config/constants'
