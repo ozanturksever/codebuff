@@ -1,3 +1,4 @@
+// TODO: Replace lodash functions with native equivalents (e.g., use array.filter(Boolean) instead of compact, array.flat(Infinity) instead of flattenDeep, JSON.stringify-based deep compare instead of isEqual).
 import { compact, flattenDeep, isEqual } from 'lodash'
 
 export function filterDefined<T>(array: (T | null | undefined)[]) {
