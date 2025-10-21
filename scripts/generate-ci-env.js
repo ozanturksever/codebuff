@@ -7,7 +7,10 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { uniq } from '../common/src/util/lodash-replacements.ts'
+// Native uniq implementation (lodash replacement)
+function uniq(arr) {
+  return Array.from(new Set(arr))
+}
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
