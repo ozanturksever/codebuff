@@ -727,7 +727,42 @@ const renderNode = (
         state,
         node.type,
       )
-      const nodes = [...children]
+      let nodes = [...children]
+
+      // Add indentation for lettered sub-items (a), b), c), etc.)
+      // Process text nodes to add indentation at the start and after each newline
+      // Check both root and listItem context
+      if (parentType === 'root' || parentType === 'listItem') {
+        const processedNodes: ReactNode[] = []
+
+        for (const child of nodes) {
+          if (typeof child === 'string') {
+            // Split by newlines and add indentation for lettered items
+            const lines = child.split('\n')
+            const processedLines: string[] = []
+
+            for (let i = 0; i < lines.length; i++) {
+              const line = lines[i]
+              const needsIndent = line.match(/^([a-z])\)\s/)
+
+              if (needsIndent) {
+                // Use 3 spaces for sub-items under list items, 6 for root level
+                const indent = parentType === 'listItem' ? '   ' : '      '
+                processedLines.push(indent + line)
+              } else {
+                processedLines.push(line)
+              }
+            }
+
+            processedNodes.push(processedLines.join('\n'))
+          } else {
+            processedNodes.push(child)
+          }
+        }
+
+        nodes = processedNodes
+      }
+
       if (parentType === 'listItem') {
         nodes.push('\n')
       } else if (parentType === 'blockquote') {

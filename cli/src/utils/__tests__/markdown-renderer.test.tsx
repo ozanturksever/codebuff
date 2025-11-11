@@ -321,9 +321,270 @@ codebuff "implement feature" --verbose
 
     const inlineCode = nodes[1] as React.ReactElement
     const inlineContent = flattenChildren(inlineCode.props.children).join('')
-    
+
     // Should preserve quotes and special characters within inline code
     expect(inlineContent).toContain('git commit -m "fix: bug"')
     expect(nodes[2]).toBe(' to commit.')
+  })
+
+  describe('lettered sub-item indentation', () => {
+    test('renders numbered questions with lettered sub-items (real world example)', () => {
+      const markdown = `Questions:**
+1. What is your preferred storage backend for real-time metrics aggregation?
+a) (DEFAULT) PostgreSQL with time-series optimized indexes (leverages existing infrastructure)
+b) Dedicated time-series database (InfluxDB/TimescaleDB) for better performance at scale
+c) Redis for real-time aggregation with periodic PostgreSQL sync
+2. For the metrics dashboard visualization library:
+a) (DEFAULT) Recharts (already used in the project, consistent with existing charts)
+b) Apache ECharts (more powerful for complex visualizations)
+c) D3.js (maximum flexibility, steeper learning curve)
+3. Alert webhook delivery priority:
+a) (DEFAULT) Implement webhook system first (most flexible for enterprise customers)
+b) Focus on email/in-app notifications first (simpler to implement)`
+
+      const output = renderMarkdown(markdown)
+      const nodes = flattenNodes(output)
+
+      // Convert all nodes to text to check indentation
+      const textContent = nodes
+        .map((node) => {
+          if (typeof node === 'string') return node
+          if (React.isValidElement(node)) {
+            return flattenChildren(node.props.children).join('')
+          }
+          return ''
+        })
+        .join('')
+
+      // Lettered items should be indented (3 spaces when under numbered lists)
+      expect(textContent).toContain('   a) (DEFAULT) PostgreSQL')
+      expect(textContent).toContain('   b) Dedicated time-series')
+      expect(textContent).toContain('   c) Redis for real-time')
+      expect(textContent).toContain('   a) (DEFAULT) Recharts')
+      expect(textContent).toContain('   b) Apache ECharts')
+      expect(textContent).toContain('   c) D3.js')
+      expect(textContent).toContain('   a) (DEFAULT) Implement webhook')
+      expect(textContent).toContain('   b) Focus on email')
+    })
+
+    test('renders simple numbered list with lettered sub-items', () => {
+      const markdown = `1. First question?
+a) First option
+b) Second option
+c) Third option
+2. Second question?
+a) Another option
+b) One more option`
+
+      const output = renderMarkdown(markdown)
+      const nodes = flattenNodes(output)
+
+      const textContent = nodes
+        .map((node) => {
+          if (typeof node === 'string') return node
+          if (React.isValidElement(node)) {
+            return flattenChildren(node.props.children).join('')
+          }
+          return ''
+        })
+        .join('')
+
+      // All lettered items should have 3 spaces of indentation (under numbered lists)
+      expect(textContent).toContain('   a) First option')
+      expect(textContent).toContain('   b) Second option')
+      expect(textContent).toContain('   c) Third option')
+      expect(textContent).toContain('   a) Another option')
+      expect(textContent).toContain('   b) One more option')
+    })
+
+    test('renders lettered items without numbered parents', () => {
+      const markdown = `a) First standalone option
+b) Second standalone option
+c) Third standalone option`
+
+      const output = renderMarkdown(markdown)
+      const nodes = flattenNodes(output)
+
+      const textContent = nodes
+        .map((node) => {
+          if (typeof node === 'string') return node
+          if (React.isValidElement(node)) {
+            return flattenChildren(node.props.children).join('')
+          }
+          return ''
+        })
+        .join('')
+
+      // Should still be indented even without numbered parents
+      expect(textContent).toContain('      a) First standalone')
+      expect(textContent).toContain('      b) Second standalone')
+      expect(textContent).toContain('      c) Third standalone')
+    })
+
+    test('renders lettered items with DEFAULT markers', () => {
+      const markdown = `1. Choose your option:
+a) (DEFAULT) Standard configuration
+b) Custom configuration
+c) Advanced configuration`
+
+      const output = renderMarkdown(markdown)
+      const nodes = flattenNodes(output)
+
+      const textContent = nodes
+        .map((node) => {
+          if (typeof node === 'string') return node
+          if (React.isValidElement(node)) {
+            return flattenChildren(node.props.children).join('')
+          }
+          return ''
+        })
+        .join('')
+
+      // Should preserve DEFAULT markers and apply indentation (3 spaces under list)
+      expect(textContent).toContain('   a) (DEFAULT) Standard')
+      expect(textContent).toContain('   b) Custom')
+      expect(textContent).toContain('   c) Advanced')
+    })
+
+    test('renders lettered items with long text', () => {
+      const markdown = `1. Which approach do you prefer?
+a) This is a very long option that contains lots of detailed information about the approach and its benefits
+b) Short option
+c) Another very detailed option explaining all the trade-offs and considerations you should think about`
+
+      const output = renderMarkdown(markdown)
+      const nodes = flattenNodes(output)
+
+      const textContent = nodes
+        .map((node) => {
+          if (typeof node === 'string') return node
+          if (React.isValidElement(node)) {
+            return flattenChildren(node.props.children).join('')
+          }
+          return ''
+        })
+        .join('')
+
+      // Long text should still be indented (3 spaces under list)
+      expect(textContent).toContain('   a) This is a very long option')
+      expect(textContent).toContain('   b) Short option')
+      expect(textContent).toContain('   c) Another very detailed')
+    })
+
+    test('renders extended lettered lists (d, e, f)', () => {
+      const markdown = `1. Pick one:
+a) Option A
+b) Option B
+c) Option C
+d) Option D
+e) Option E
+f) Option F`
+
+      const output = renderMarkdown(markdown)
+      const nodes = flattenNodes(output)
+
+      const textContent = nodes
+        .map((node) => {
+          if (typeof node === 'string') return node
+          if (React.isValidElement(node)) {
+            return flattenChildren(node.props.children).join('')
+          }
+          return ''
+        })
+        .join('')
+
+      // All lettered items a-f should be indented (3 spaces under list)
+      expect(textContent).toContain('   a) Option A')
+      expect(textContent).toContain('   b) Option B')
+      expect(textContent).toContain('   c) Option C')
+      expect(textContent).toContain('   d) Option D')
+      expect(textContent).toContain('   e) Option E')
+      expect(textContent).toContain('   f) Option F')
+    })
+
+    test('does not indent uppercase lettered items', () => {
+      const markdown = `A) This should not be indented
+B) Neither should this`
+
+      const output = renderMarkdown(markdown)
+      const nodes = flattenNodes(output)
+
+      const textContent = nodes
+        .map((node) => {
+          if (typeof node === 'string') return node
+          if (React.isValidElement(node)) {
+            return flattenChildren(node.props.children).join('')
+          }
+          return ''
+        })
+        .join('')
+
+      // Uppercase should NOT be indented (only lowercase a-z)
+      expect(textContent).not.toContain('      A)')
+      expect(textContent).not.toContain('      B)')
+      expect(textContent).toContain('A) This should not')
+      expect(textContent).toContain('B) Neither should')
+    })
+
+    test('renders mixed content with paragraphs and lettered items', () => {
+      const markdown = `Here's some context before the questions.
+
+1. First question?
+a) Option one
+b) Option two
+
+And some text in between questions.
+
+2. Second question?
+a) Another option
+b) Final option
+
+Conclusion text at the end.`
+
+      const output = renderMarkdown(markdown)
+      const nodes = flattenNodes(output)
+
+      const textContent = nodes
+        .map((node) => {
+          if (typeof node === 'string') return node
+          if (React.isValidElement(node)) {
+            return flattenChildren(node.props.children).join('')
+          }
+          return ''
+        })
+        .join('')
+
+      // Context and conclusion should not be indented
+      expect(textContent).toContain('Here\'s some context')
+      expect(textContent).toContain('And some text in between')
+      expect(textContent).toContain('Conclusion text at the end')
+
+      // Lettered items should be indented (3 spaces under list)
+      expect(textContent).toContain('   a) Option one')
+      expect(textContent).toContain('   b) Option two')
+      expect(textContent).toContain('   a) Another option')
+      expect(textContent).toContain('   b) Final option')
+    })
+
+    test('does not indent text that happens to start with letter and parenthesis mid-sentence', () => {
+      const markdown = `This is a sentence that mentions a) something in the middle.`
+
+      const output = renderMarkdown(markdown)
+      const nodes = flattenNodes(output)
+
+      const textContent = nodes
+        .map((node) => {
+          if (typeof node === 'string') return node
+          if (React.isValidElement(node)) {
+            return flattenChildren(node.props.children).join('')
+          }
+          return ''
+        })
+        .join('')
+
+      // Should not add indentation for a) in the middle of a sentence
+      expect(textContent).not.toContain('      a) something')
+      expect(textContent).toContain('a) something in the middle')
+    })
   })
 })
