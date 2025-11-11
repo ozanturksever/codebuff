@@ -729,33 +729,52 @@ const renderNode = (
       )
       let nodes = [...children]
 
-      // Add indentation for lettered sub-items (a), b), c), etc.)
-      // Process text nodes to add indentation at the start and after each newline
-      // Check both root and listItem context
+      // Check if this paragraph contains lettered sub-items (a), b), c), etc.)
+      // If so, wrap each line that's a lettered item in a span with indentation
       if (parentType === 'root' || parentType === 'listItem') {
         const processedNodes: ReactNode[] = []
+        const indentSpaces = parentType === 'listItem' ? '   ' : '      '
 
         for (const child of nodes) {
           if (typeof child === 'string') {
-            // Split by newlines and add indentation for lettered items
+            // Split by newlines and wrap each lettered item in a span
             const lines = child.split('\n')
-            const processedLines: string[] = []
-
             for (let i = 0; i < lines.length; i++) {
               const line = lines[i]
-              const needsIndent = line.match(/^([a-z])\)\s/)
+              const isLetteredItem = line.match(/^([a-z])\)\s/)
 
-              if (needsIndent) {
-                // Use 3 spaces for sub-items under list items, 6 for root level
-                const indent = parentType === 'listItem' ? '   ' : '      '
-                processedLines.push(indent + line)
+              if (isLetteredItem) {
+                // Check if this option is marked as DEFAULT
+                const isDefault = line.includes('(DEFAULT)')
+
+                // Wrap this lettered item in a span with indentation
+                // If DEFAULT, make the entire line bold
+                const content = isDefault ? (
+                  <span key={state.nextKey()} attributes={TextAttributes.BOLD}>
+                    {line}
+                  </span>
+                ) : (
+                  line
+                )
+
+                processedNodes.push(
+                  <span key={state.nextKey()}>
+                    {indentSpaces}
+                    {content}
+                  </span>
+                )
               } else {
-                processedLines.push(line)
+                // Not a lettered item, keep as is
+                processedNodes.push(line)
+              }
+
+              // Add newline between lines (except after last line)
+              if (i < lines.length - 1) {
+                processedNodes.push('\n')
               }
             }
-
-            processedNodes.push(processedLines.join('\n'))
           } else {
+            // Non-string node (React element), keep as is
             processedNodes.push(child)
           }
         }

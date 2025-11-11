@@ -39,6 +39,73 @@ const flattenNodes = (input: React.ReactNode): React.ReactNode[] => {
 const flattenChildren = (value: React.ReactNode): React.ReactNode[] =>
   flattenNodes(value)
 
+// Helper to find all elements matching a predicate (recursively)
+const findAllElements = (
+  input: React.ReactNode,
+  predicate: (element: React.ReactElement) => boolean,
+): React.ReactElement[] => {
+  const results: React.ReactElement[] = []
+
+  const visit = (value: React.ReactNode): void => {
+    if (
+      value === null ||
+      value === undefined ||
+      typeof value === 'boolean' ||
+      typeof value === 'string' ||
+      typeof value === 'number'
+    ) {
+      return
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach(visit)
+      return
+    }
+
+    if (React.isValidElement(value)) {
+      // Check if this element matches
+      if (predicate(value)) {
+        results.push(value)
+      }
+      // Always recurse into children
+      if (value.props?.children) {
+        visit(value.props.children)
+      }
+    }
+  }
+
+  visit(input)
+  return results
+}
+
+// Helper to extract all text content recursively
+const getAllTextContent = (input: React.ReactNode): string => {
+  const texts: string[] = []
+
+  const visit = (value: React.ReactNode): void => {
+    if (value === null || value === undefined || typeof value === 'boolean') {
+      return
+    }
+
+    if (typeof value === 'string' || typeof value === 'number') {
+      texts.push(String(value))
+      return
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach(visit)
+      return
+    }
+
+    if (React.isValidElement(value)) {
+      visit(value.props?.children)
+    }
+  }
+
+  visit(input)
+  return texts.join('')
+}
+
 describe('markdown renderer', () => {
   test('renders bold and italic emphasis', () => {
     const output = renderMarkdown('Hello **bold** and *italic*!')
@@ -343,18 +410,9 @@ a) (DEFAULT) Implement webhook system first (most flexible for enterprise custom
 b) Focus on email/in-app notifications first (simpler to implement)`
 
       const output = renderMarkdown(markdown)
-      const nodes = flattenNodes(output)
 
-      // Convert all nodes to text to check indentation
-      const textContent = nodes
-        .map((node) => {
-          if (typeof node === 'string') return node
-          if (React.isValidElement(node)) {
-            return flattenChildren(node.props.children).join('')
-          }
-          return ''
-        })
-        .join('')
+      // Convert to text content (recursively extracts all text including from nested spans)
+      const textContent = getAllTextContent(output)
 
       // Lettered items should be indented (3 spaces when under numbered lists)
       expect(textContent).toContain('   a) (DEFAULT) PostgreSQL')
@@ -428,17 +486,9 @@ b) Custom configuration
 c) Advanced configuration`
 
       const output = renderMarkdown(markdown)
-      const nodes = flattenNodes(output)
 
-      const textContent = nodes
-        .map((node) => {
-          if (typeof node === 'string') return node
-          if (React.isValidElement(node)) {
-            return flattenChildren(node.props.children).join('')
-          }
-          return ''
-        })
-        .join('')
+      // Convert to text content (recursively extracts all text including from nested spans)
+      const textContent = getAllTextContent(output)
 
       // Should preserve DEFAULT markers and apply indentation (3 spaces under list)
       expect(textContent).toContain('   a) (DEFAULT) Standard')
@@ -585,6 +635,61 @@ Conclusion text at the end.`
       // Should not add indentation for a) in the middle of a sentence
       expect(textContent).not.toContain('      a) something')
       expect(textContent).toContain('a) something in the middle')
+    })
+
+    test('makes DEFAULT options bold', () => {
+      const markdown = `1. Choose your option:
+a) (DEFAULT) Standard configuration
+b) Custom configuration
+c) Advanced configuration`
+
+      const output = renderMarkdown(markdown)
+
+      // Find all span elements with BOLD attribute (recursively)
+      const boldSpans = findAllElements(
+        output,
+        (el) => el.type === 'span' && el.props.attributes === TextAttributes.BOLD
+      )
+
+      // Should have at least one bold span
+      expect(boldSpans.length).toBeGreaterThan(0)
+
+      // Check that bold span contains DEFAULT text
+      const boldTexts = boldSpans.map((span) =>
+        flattenChildren(span.props.children).join('')
+      )
+      const hasDEFAULT = boldTexts.some((text) => text.includes('(DEFAULT)'))
+      expect(hasDEFAULT).toBe(true)
+    })
+
+    test('bolds multiple DEFAULT options', () => {
+      const markdown = `1. First question:
+a) (DEFAULT) Option A
+b) Option B
+2. Second question:
+a) (DEFAULT) Another default
+b) Non-default option`
+
+      const output = renderMarkdown(markdown)
+
+      // Find all span elements with BOLD attribute (recursively)
+      const boldSpans = findAllElements(
+        output,
+        (el) => el.type === 'span' && el.props.attributes === TextAttributes.BOLD
+      )
+
+      // Should have at least 2 bold spans
+      expect(boldSpans.length).toBeGreaterThanOrEqual(2)
+
+      // Both bold spans should contain DEFAULT text
+      const boldTexts = boldSpans.map((span) =>
+        flattenChildren(span.props.children).join('')
+      )
+      const defaultCount = boldTexts.filter((text) =>
+        text.includes('(DEFAULT)')
+      ).length
+
+      expect(defaultCount).toBeGreaterThanOrEqual(2)
     })
   })
 })
