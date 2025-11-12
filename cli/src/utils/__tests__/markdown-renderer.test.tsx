@@ -957,4 +957,41 @@ c) Third option`
       expect(defaultSpans.length).toBeGreaterThanOrEqual(2)
     })
   })
+
+  describe('ordering and styling', () => {
+    test('keeps trailing paragraphs after lettered sections', () => {
+      const markdown = `1. Decide on rollout strategy:
+   - a) (DEFAULT) Gradual enablement with guardrails
+   - b) Dual-track rollout with feature flags
+
+Please confirm whether you want QA sign-off before deployment.`
+
+      const output = renderLetteredItemsWithBoxes(markdown)
+      const textContent = getAllTextContent(output)
+      expect(textContent).toContain('Please confirm whether you want QA sign-off before deployment.')
+      expect(textContent.indexOf('Please confirm whether you want QA sign-off before deployment.')).toBeGreaterThan(
+        textContent.indexOf('Dual-track rollout'),
+      )
+    })
+
+    test('applies custom text color and attributes', () => {
+      const markdown = `1. Pick next step:
+   - a) Move forward`
+
+      const output = renderLetteredItemsWithBoxes(markdown, {
+        textColor: '#ff0000',
+        textAttributes: TextAttributes.ITALIC,
+      })
+
+      const textElements = findAllElements(
+        output,
+        (el) => el.type === 'text' && el.props.style?.fg === '#ff0000',
+      )
+
+      expect(textElements.length).toBeGreaterThan(0)
+      textElements.forEach((el) => {
+        expect(el.props.attributes).toBe(TextAttributes.ITALIC)
+      })
+    })
+  })
 })

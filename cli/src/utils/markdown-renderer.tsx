@@ -52,11 +52,14 @@ export interface MarkdownPalette {
   codeTextFg: string
   codeMonochrome: boolean
   defaultOptionFg: string
+  bodyTextFg: string
 }
 
 export interface MarkdownRenderOptions {
   palette?: Partial<MarkdownPalette>
   codeBlockWidth?: number
+  textColor?: string
+  textAttributes?: TextAttributes
 }
 
 const defaultPalette: MarkdownPalette = {
@@ -79,6 +82,7 @@ const defaultPalette: MarkdownPalette = {
   codeMonochrome: false,
   // Soft green matching inline code color - conveys "recommended choice"
   defaultOptionFg: '#86efac',
+  bodyTextFg: 'white',
 }
 
 const resolvePalette = (
@@ -119,16 +123,21 @@ interface RenderState {
   palette: MarkdownPalette
   codeBlockWidth: number
   nextKey: () => string
+  textColor?: string
+  textAttributes?: TextAttributes
 }
 
 const createRenderState = (
   palette: MarkdownPalette,
   codeBlockWidth: number,
+  options: { textColor?: string; textAttributes?: TextAttributes } = {},
 ): RenderState => {
   let counter = 0
   return {
     palette,
     codeBlockWidth,
+    textColor: options.textColor,
+    textAttributes: options.textAttributes,
     nextKey: () => {
       counter += 1
       return `markdown-${counter}`
@@ -1034,40 +1043,59 @@ const hasLetteredItemsInListItem = (item: ListItem): boolean => {
   return false
 }
 
+type LetteredItemSegment =
+  | { kind: 'main'; nodes: ReactNode[] }
+  | { kind: 'lettered'; items: { content: ReactNode[]; text: string }[] }
+
 /**
- * Separate a list item's children into main content and lettered sub-items
- * Handles both paragraph-based and nested-list-based lettered items
+ * Walk a list item's children and produce ordered segments so that we can render
+ * the original structure without reordering text around lettered items.
  */
-const separateLetteredItems = (
+const buildListItemSegments = (
   listItem: ListItem,
   state: RenderState,
-): {
-  mainContent: ReactNode[]
-  letteredItems: { content: ReactNode[]; text: string }[]
-} => {
-  const mainContent: ReactNode[] = []
-  const letteredItems: { content: ReactNode[]; text: string }[] = []
+): LetteredItemSegment[] => {
+  const segments: LetteredItemSegment[] = []
+
+  const appendMain = (nodes: ReactNode[]): void => {
+    if (nodes.length === 0) {
+      return
+    }
+    const last = segments[segments.length - 1]
+    if (last?.kind === 'main') {
+      last.nodes.push(...nodes)
+    } else {
+      segments.push({ kind: 'main', nodes: [...nodes] })
+    }
+  }
+
+  const appendLettered = (items: { content: ReactNode[]; text: string }[]): void => {
+    if (items.length === 0) {
+      return
+    }
+    const last = segments[segments.length - 1]
+    if (last?.kind === 'lettered') {
+      last.items.push(...items)
+    } else {
+      segments.push({ kind: 'lettered', items: [...items] })
+    }
+  }
 
   for (const child of listItem.children) {
-    // Case 1: Direct paragraph with lettered item (e.g., "a) Option")
     if (isParagraphWithLetteredItem(child)) {
       const para = child as Paragraph
       const content = renderNodes(para.children as MarkdownNode[], state, para.type)
       const text = getChildrenText(para.children as MarkdownNode[])
-      letteredItems.push({ content, text })
+      appendLettered([{ content, text }])
+      continue
     }
-    // Case 2: Nested unordered list with lettered items (e.g., "- a) Option")
-    else if (child.type === 'list') {
+
+    if (child.type === 'list') {
       const nestedList = child as List
       if (!nestedList.ordered) {
-        // Check if this is a lettered list
-        const hasLettered = nestedList.children.some((item) =>
-          isLetteredListItem(item as ListItem)
-        )
-
-        if (hasLettered) {
-          // Extract each nested list item as a lettered item
-          for (const nestedItem of nestedList.children) {
+        const letteredItems = nestedList.children
+          .filter((item) => isLetteredListItem(item as ListItem))
+          .map((nestedItem) => {
             const nestedListItem = nestedItem as ListItem
             const content = renderNodes(
               nestedListItem.children as MarkdownNode[],
@@ -1075,22 +1103,37 @@ const separateLetteredItems = (
               'listItem',
             )
             const text = getChildrenText(nestedListItem.children as MarkdownNode[])
-            letteredItems.push({ content, text })
-          }
-        } else {
-          // Regular nested list - add to main content
-          mainContent.push(...renderNode(child, state, 'listItem', undefined))
+            return { content, text }
+          })
+
+        if (letteredItems.length === nestedList.children.length) {
+          appendLettered(letteredItems)
+          continue
         }
-      } else {
-        // Ordered nested list - add to main content
-        mainContent.push(...renderNode(child, state, 'listItem', undefined))
       }
-    } else {
-      mainContent.push(...renderNode(child, state, 'listItem', undefined))
     }
+
+    appendMain(renderNode(child as MarkdownNode, state, 'listItem', undefined))
   }
 
-  return { mainContent, letteredItems }
+  return segments
+}
+
+const createLetteredText = (
+  state: RenderState,
+  children: ReactNode,
+  options: { key?: string; style?: Record<string, any> } = {},
+): ReactNode => {
+  const baseStyle = {
+    wrapMode: 'word' as const,
+    fg: state.textColor ?? state.palette.bodyTextFg,
+  }
+  const style = options.style ? { ...baseStyle, ...options.style } : baseStyle
+  return (
+    <text key={options.key} style={style} attributes={state.textAttributes}>
+      {children}
+    </text>
+  )
 }
 
 /**
@@ -1133,7 +1176,7 @@ const groupLetteredSections = (
 
     result.push(
       <box key={state.nextKey()} style={{ paddingLeft: 3 }}>
-        <text>{items}</text>
+        {createLetteredText(state, items)}
       </box>,
     )
 
@@ -1178,42 +1221,90 @@ const renderListWithLetteredItems = (
                 ? `${start + idx}. `
                 : '- '
 
-        const { mainContent, letteredItems } = separateLetteredItems(listItem, state)
+        const segments = buildListItemSegments(listItem, state)
+        const renderedSegments: ReactNode[] = []
+
+        const renderMarkerLine = (nodes?: ReactNode[]): ReactNode =>
+          createLetteredText(
+            state,
+            <>
+              <span key={nextKey()} fg={palette.listBulletFg}>
+                {marker}
+              </span>
+              {nodes && nodes.length > 0 ? (
+                <KeyedFragment key={nextKey()}>
+                  {wrapSegmentsInFragments(nodes, nextKey())}
+                </KeyedFragment>
+              ) : null}
+            </>,
+          )
+
+        const renderIndentedContent = (nodes: ReactNode[]): ReactNode => (
+          <box key={nextKey()} style={{ paddingLeft: 3 }}>
+            {createLetteredText(
+              state,
+              <KeyedFragment key={nextKey()}>
+                {wrapSegmentsInFragments(nodes, nextKey())}
+              </KeyedFragment>,
+            )}
+          </box>
+        )
+
+        const renderLetteredBlock = (
+          items: { content: ReactNode[]; text: string }[],
+        ): ReactNode => (
+          <box key={nextKey()} style={{ paddingLeft: 3 }}>
+            {createLetteredText(
+              state,
+              items.map((letteredItem, letterIdx) => {
+                const isDefault = letteredItem.text.includes('(DEFAULT)')
+                const innerContent = wrapSegmentsInFragments(
+                  letteredItem.content,
+                  nextKey(),
+                )
+                return (
+                  <KeyedFragment key={nextKey()}>
+                    {isDefault ? (
+                      <span bg={palette.defaultOptionFg} fg="#000000">
+                        {innerContent}
+                      </span>
+                    ) : (
+                      innerContent
+                    )}
+                    {letterIdx < items.length - 1 && '\n'}
+                  </KeyedFragment>
+                )
+              }),
+            )}
+          </box>
+        )
+
+        let markerRendered = false
+
+        if (segments.length === 0) {
+          renderedSegments.push(renderMarkerLine())
+        } else {
+          segments.forEach((segment) => {
+            if (segment.kind === 'main') {
+              if (!markerRendered) {
+                renderedSegments.push(renderMarkerLine(segment.nodes))
+                markerRendered = true
+              } else {
+                renderedSegments.push(renderIndentedContent(segment.nodes))
+              }
+            } else {
+              if (!markerRendered) {
+                renderedSegments.push(renderMarkerLine())
+                markerRendered = true
+              }
+              renderedSegments.push(renderLetteredBlock(segment.items))
+            }
+          })
+        }
 
         return (
           <box key={nextKey()} style={{ flexDirection: 'column', gap: 0 }}>
-            {/* Main list item */}
-            <text>
-              <span fg={palette.listBulletFg}>{marker}</span>
-              {mainContent.length > 0 ? (
-                <KeyedFragment key={nextKey()}>
-                  {wrapSegmentsInFragments(mainContent, nextKey())}
-                </KeyedFragment>
-              ) : null}
-            </text>
-
-            {/* Lettered sub-items with paddingLeft */}
-            {letteredItems.length > 0 && (
-              <box style={{ paddingLeft: 3 }}>
-                <text>
-                  {letteredItems.map((item, i) => {
-                    const isDefault = item.text.includes('(DEFAULT)')
-                    return (
-                      <KeyedFragment key={nextKey()}>
-                        {isDefault ? (
-                          <span bg={palette.defaultOptionFg} fg="#000000">
-                            {item.content}
-                          </span>
-                        ) : (
-                          item.content
-                        )}
-                        {i < letteredItems.length - 1 && '\n'}
-                      </KeyedFragment>
-                    )
-                  })}
-                </text>
-              </box>
-            )}
+            {renderedSegments}
           </box>
         )
       })}
@@ -1232,7 +1323,10 @@ export function renderLetteredItemsWithBoxes(
   try {
     const palette = resolvePalette(options.palette)
     const codeBlockWidth = options.codeBlockWidth ?? 80
-    const state = createRenderState(palette, codeBlockWidth)
+    const state = createRenderState(palette, codeBlockWidth, {
+      textColor: options.textColor,
+      textAttributes: options.textAttributes,
+    })
     const ast = processor.parse(markdown) as Root
     applyInlineFallbackFormatting(ast)
 
@@ -1250,7 +1344,7 @@ export function renderLetteredItemsWithBoxes(
           const content = renderNode(para, state, 'root', undefined)
           sections.push({
             type: 'paragraph',
-            content: <text key={state.nextKey()}>{content}</text>,
+            content: createLetteredText(state, content, { key: state.nextKey() }),
           })
         }
       } else if (node.type === 'list') {
@@ -1270,7 +1364,7 @@ export function renderLetteredItemsWithBoxes(
           const content = renderList(list, state)
           sections.push({
             type: 'list',
-            content: <text key={state.nextKey()}>{content}</text>,
+            content: createLetteredText(state, content, { key: state.nextKey() }),
           })
         }
       } else {
@@ -1278,7 +1372,7 @@ export function renderLetteredItemsWithBoxes(
         const content = renderNode(node, state, 'root', undefined)
         sections.push({
           type: node.type,
-          content: <text key={state.nextKey()}>{content}</text>,
+          content: createLetteredText(state, content, { key: state.nextKey() }),
         })
       }
     }

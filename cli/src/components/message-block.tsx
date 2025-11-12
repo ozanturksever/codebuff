@@ -97,6 +97,9 @@ interface ContentWithMarkdownProps {
   isStreaming: boolean
   codeBlockWidth: number
   palette: MarkdownPalette
+  textColor?: string
+  textAttributes?: TextAttributes
+  renderWrapper?: (node: ReactNode, info: { isLettered: boolean }) => ReactNode
 }
 
 const ContentWithMarkdown = memo(
@@ -105,15 +108,47 @@ const ContentWithMarkdown = memo(
     isStreaming,
     codeBlockWidth,
     palette,
+    textColor,
+    textAttributes,
+    renderWrapper,
   }: ContentWithMarkdownProps) => {
+    if (!content) {
+      return null
+    }
+
+    const wrap =
+      renderWrapper ??
+      ((node: ReactNode) => {
+        if (node === '' || node === null || node === undefined) {
+          return null
+        }
+        return node
+      })
+
+    const options = {
+      codeBlockWidth,
+      palette,
+      textColor,
+      textAttributes,
+    }
+
+    if (!isStreaming && hasLetteredItems(content)) {
+      return wrap(renderLetteredItemsWithBoxes(content, options), {
+        isLettered: true,
+      })
+    }
+
     if (!hasMarkdown(content)) {
-      return content
+      return wrap(content, { isLettered: false })
     }
-    const options = { codeBlockWidth, palette }
+
     if (isStreaming) {
-      return renderStreamingMarkdown(content, options)
+      return wrap(renderStreamingMarkdown(content, options), {
+        isLettered: false,
+      })
     }
-    return renderMarkdown(content, options)
+
+    return wrap(renderMarkdown(content, options), { isLettered: false })
   },
 )
 
@@ -150,12 +185,22 @@ const PlanBox = memo(
           paddingBottom: 1,
         }}
       >
-        <text style={{ wrapMode: 'word', fg: theme.foreground }}>
-          {renderMarkdown(planContent, {
-            codeBlockWidth: Math.max(10, availableWidth - 8),
-            palette: markdownPalette,
-          })}
-        </text>
+        <ContentWithMarkdown
+          content={planContent}
+          isStreaming={false}
+          codeBlockWidth={Math.max(10, availableWidth - 8)}
+          palette={markdownPalette}
+          textColor={theme.foreground}
+          renderWrapper={(node, { isLettered }) =>
+            isLettered ? (
+              <box style={{ width: '100%' }}>{node}</box>
+            ) : (
+              <text style={{ wrapMode: 'word', fg: theme.foreground }}>
+                {node}
+              </text>
+            )
+          }
+        />
         <BuildModeButtons
           theme={theme}
           onBuildFast={onBuildFast}
@@ -319,32 +364,34 @@ const ToolBranch = memo(
       },
     }
 
-    const displayContent = (
+    const textAttributes =
+      theme.messageTextAttributes && theme.messageTextAttributes !== 0
+        ? theme.messageTextAttributes
+        : undefined
+
+    const renderableDisplayContent = (
       <ContentWithMarkdown
         content={fullContent}
         isStreaming={false}
         codeBlockWidth={agentMarkdownOptions.codeBlockWidth}
         palette={agentMarkdownOptions.palette}
+        textColor={theme.foreground}
+        textAttributes={textAttributes}
+        renderWrapper={(node, { isLettered }) =>
+          isLettered ? (
+            <box style={{ width: '100%' }}>{node}</box>
+          ) : (
+            <text
+              fg={theme.foreground}
+              style={{ wrapMode: 'word' }}
+              attributes={textAttributes}
+            >
+              {node}
+            </text>
+          )
+        }
       />
     )
-
-    const renderableDisplayContent =
-      displayContent === null ||
-      displayContent === undefined ||
-      displayContent === false ||
-      displayContent === '' ? null : (
-        <text
-          fg={theme.foreground}
-          style={{ wrapMode: 'word' }}
-          attributes={
-            theme.messageTextAttributes && theme.messageTextAttributes !== 0
-              ? theme.messageTextAttributes
-              : undefined
-          }
-        >
-          {displayContent}
-        </text>
-      )
 
     const headerName = displayInfo.name
 
@@ -539,24 +586,42 @@ const AgentBody = memo(
           const marginBottom = textBlock.marginBottom ?? 0
           const explicitColor = textBlock.color
           const nestedTextColor = explicitColor ?? theme.foreground
+          const marginLeft = Math.max(0, indentLevel * 2)
           nodes.push(
-            <text
+            <ContentWithMarkdown
               key={renderKey}
-              style={{
-                wrapMode: 'word',
-                fg: nestedTextColor,
-                marginLeft: Math.max(0, indentLevel * 2),
-                marginTop,
-                marginBottom,
-              }}
-            >
-              <ContentWithMarkdown
-                content={filteredNestedContent}
-                isStreaming={isNestedStreamingText}
-                codeBlockWidth={markdownOptionsForLevel.codeBlockWidth}
-                palette={markdownOptionsForLevel.palette}
-              />
-            </text>,
+              content={filteredNestedContent}
+              isStreaming={isNestedStreamingText}
+              codeBlockWidth={markdownOptionsForLevel.codeBlockWidth}
+              palette={markdownOptionsForLevel.palette}
+              textColor={nestedTextColor}
+              renderWrapper={(node, { isLettered }) =>
+                isLettered ? (
+                  <box
+                    style={{
+                      marginLeft,
+                      marginTop,
+                      marginBottom,
+                      width: '100%',
+                    }}
+                  >
+                    {node}
+                  </box>
+                ) : (
+                  <text
+                    style={{
+                      wrapMode: 'word',
+                      fg: nestedTextColor,
+                      marginLeft,
+                      marginTop,
+                      marginBottom,
+                    }}
+                  >
+                    {node}
+                  </text>
+                )
+              }
+            />,
           )
           nestedIdx++
           break
@@ -793,19 +858,30 @@ const SimpleContent = memo(
       ? trimTrailingNewlines(content)
       : content.trim()
 
+    const textAttributes = isUser ? TextAttributes.ITALIC : undefined
+
     return (
-      <text
+      <ContentWithMarkdown
         key={`message-content-${messageId}`}
-        style={{ wrapMode: 'word', fg: textColor }}
-        attributes={isUser ? TextAttributes.ITALIC : undefined}
-      >
-        <ContentWithMarkdown
-          content={normalizedContent}
-          isStreaming={isStreamingMessage}
-          codeBlockWidth={codeBlockWidth}
-          palette={palette}
-        />
-      </text>
+        content={normalizedContent}
+        isStreaming={isStreamingMessage}
+        codeBlockWidth={codeBlockWidth}
+        palette={palette}
+        textColor={textColor}
+        textAttributes={textAttributes}
+        renderWrapper={(node, { isLettered }) =>
+          isLettered ? (
+            <box style={{ width: '100%' }}>{node}</box>
+          ) : (
+            <text
+              style={{ wrapMode: 'word', fg: textColor }}
+              attributes={textAttributes}
+            >
+              {node}
+            </text>
+          )
+        }
+      />
     )
   },
 )
@@ -869,24 +945,42 @@ const SingleBlock = memo(
         const marginBottom = textBlock.marginBottom ?? 0
         const explicitColor = textBlock.color
         const blockTextColor = explicitColor ?? textColor
+        const textAttributes = isUser ? TextAttributes.ITALIC : undefined
         return (
-          <text
+          <ContentWithMarkdown
             key={renderKey}
-            style={{
-              wrapMode: 'word',
-              fg: blockTextColor,
-              marginTop,
-              marginBottom,
-            }}
-            attributes={isUser ? TextAttributes.ITALIC : undefined}
-          >
-            <ContentWithMarkdown
-              content={filteredContent}
-              isStreaming={isStreamingText}
-              codeBlockWidth={codeBlockWidth}
-              palette={markdownPalette}
-            />
-          </text>
+            content={filteredContent}
+            isStreaming={isStreamingText}
+            codeBlockWidth={codeBlockWidth}
+            palette={markdownPalette}
+            textColor={blockTextColor}
+            textAttributes={textAttributes}
+            renderWrapper={(node, { isLettered }) =>
+              isLettered ? (
+                <box
+                  style={{
+                    marginTop,
+                    marginBottom,
+                    width: '100%',
+                  }}
+                >
+                  {node}
+                </box>
+              ) : (
+                <text
+                  style={{
+                    wrapMode: 'word',
+                    fg: blockTextColor,
+                    marginTop,
+                    marginBottom,
+                  }}
+                  attributes={textAttributes}
+                >
+                  {node}
+                </text>
+              )
+            }
+          />
         )
       }
 

@@ -17,6 +17,7 @@ export interface MarkdownThemeOverrides {
   dividerFg?: string
   codeMonochrome?: boolean
   defaultOptionFg?: string
+  bodyTextFg?: string
 }
 
 /**

@@ -915,6 +915,7 @@ export const createMarkdownPalette = (theme: ChatTheme): MarkdownPalette => {
     codeTextFg: theme.markdown?.codeTextFg ?? theme.foreground,
     codeMonochrome: theme.markdown?.codeMonochrome ?? true,
     defaultOptionFg: theme.markdown?.defaultOptionFg ?? '#86efac',
+    bodyTextFg: theme.markdown?.bodyTextFg ?? theme.foreground,
   }
 }
 

@@ -422,6 +422,7 @@ const AgentMessage = memo(
     const agentMarkdownOptions = {
       codeBlockWidth: agentCodeBlockWidth,
       palette: agentPalette,
+      textColor: theme.foreground,
     }
     const displayContent = useMemo(() => {
       if (!hasMarkdown(rawDisplayContent)) {
