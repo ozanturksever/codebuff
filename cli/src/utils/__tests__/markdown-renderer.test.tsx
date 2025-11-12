@@ -4,7 +4,9 @@ import React from 'react'
 
 import {
   renderMarkdown,
+  renderLetteredItemsWithBoxes,
   renderStreamingMarkdown,
+  hasLetteredItems,
 } from '../markdown-renderer'
 
 const flattenNodes = (input: React.ReactNode): React.ReactNode[] => {
@@ -664,6 +666,295 @@ b) Short option`
 
       // Note: Wrapped lines will return to column 0 due to OpenTUI constraints
       // This is a known limitation documented in knowledge.md
+    })
+  })
+})
+
+describe('renderLetteredItemsWithBoxes', () => {
+  describe('hasLetteredItems helper', () => {
+    test('detects lettered items', () => {
+      expect(hasLetteredItems('a) Option')).toBe(true)
+      expect(hasLetteredItems('1. Question?\na) Option')).toBe(true)
+      expect(hasLetteredItems('Some text\nb) Another option')).toBe(true)
+    })
+
+    test('detects indented lettered items', () => {
+      // Real-world case: lettered items with leading whitespace
+      expect(hasLetteredItems('1. Question:\n   a) Option')).toBe(true)
+      expect(hasLetteredItems('   a) Indented option')).toBe(true)
+      expect(hasLetteredItems('Some text\n   b) Another option')).toBe(true)
+
+      // Exact structure from user's screenshot
+      const userContent = `1. Do you want to:
+   a) (DEFAULT) Build this as a new monitoring package with gradual integration
+   b) Extend existing systems in-place without a separate package`;
+      expect(hasLetteredItems(userContent)).toBe(true)
+    })
+
+    test('does not detect non-lettered items', () => {
+      expect(hasLetteredItems('1. Question?')).toBe(false)
+      expect(hasLetteredItems('Regular text')).toBe(false)
+      expect(hasLetteredItems('A) Uppercase')).toBe(false)
+    })
+  })
+
+  describe('basic rendering', () => {
+    test('renders simple lettered items with box structure', () => {
+      const markdown = `1. Question?
+
+a) Option A
+b) Option B`
+
+      const output = renderLetteredItemsWithBoxes(markdown)
+
+      // Should return a box structure (not just text)
+      expect(React.isValidElement(output)).toBe(true)
+      if (React.isValidElement(output)) {
+        expect(output.type).toBe('box')
+      }
+    })
+
+    test('renders lettered items with paddingLeft', () => {
+      const markdown = `1. Question?
+
+a) Option A
+b) Option B`
+
+      const output = renderLetteredItemsWithBoxes(markdown)
+
+      // Find box elements with paddingLeft
+      const boxesWithPadding = findAllElements(
+        output,
+        (el) => el.type === 'box' && el.props.style?.paddingLeft === 3
+      )
+
+      expect(boxesWithPadding.length).toBeGreaterThan(0)
+    })
+
+    test('highlights DEFAULT options in box renderer', () => {
+      const markdown = `1. Question?
+
+a) (DEFAULT) Default option
+b) Regular option`
+
+      const output = renderLetteredItemsWithBoxes(markdown)
+
+      // Find span elements with green background
+      const defaultSpans = findAllElements(
+        output,
+        (el) => el.type === 'span' && el.props.bg === '#86efac'
+      )
+
+      expect(defaultSpans.length).toBeGreaterThan(0)
+      expect(defaultSpans[0].props.fg).toBe('#000000')
+
+      // Check content
+      const textContent = getAllTextContent(output)
+      expect(textContent).toContain('(DEFAULT)')
+    })
+
+    test('renders multiple lettered groups', () => {
+      const markdown = `1. First question?
+
+a) Option A
+b) Option B
+
+2. Second question?
+
+a) Option X
+b) Option Y`
+
+      const output = renderLetteredItemsWithBoxes(markdown)
+
+      // Should have multiple boxes with paddingLeft (one for each lettered group)
+      const boxesWithPadding = findAllElements(
+        output,
+        (el) => el.type === 'box' && el.props.style?.paddingLeft === 3
+      )
+
+      // At least 2 padded boxes (one for each question's lettered items)
+      expect(boxesWithPadding.length).toBeGreaterThanOrEqual(2)
+    })
+  })
+
+  describe('mixed content', () => {
+    test('handles mixed content with paragraphs and lettered items', () => {
+      const markdown = `Regular paragraph text.
+
+1. Question?
+a) Option A
+b) Option B
+
+Another paragraph.`
+
+      const output = renderLetteredItemsWithBoxes(markdown)
+
+      // Should handle all content types
+      const textContent = getAllTextContent(output)
+      expect(textContent).toContain('Regular paragraph')
+      expect(textContent).toContain('a) Option A')
+      expect(textContent).toContain('Another paragraph')
+    })
+
+    test('handles code blocks alongside lettered items', () => {
+      const markdown = `\`\`\`js
+console.log('test')
+\`\`\`
+
+1. Question?
+a) Option A`
+
+      const output = renderLetteredItemsWithBoxes(markdown)
+
+      const textContent = getAllTextContent(output)
+      expect(textContent).toContain('console.log')
+      expect(textContent).toContain('a) Option A')
+    })
+  })
+
+  describe('wrapping behavior', () => {
+    test('provides proper structure for text wrapping', () => {
+      const markdown = `1. What is your priority focus area?
+
+a) (DEFAULT) Build the complete system covering all four areas (distributed tracing, metrics, alerts, audit logs)
+b) Start with distributed tracing only`
+
+      const output = renderLetteredItemsWithBoxes(markdown)
+
+      // Lettered items should be inside a box with paddingLeft
+      // This ensures wrapped text maintains indentation
+      const boxesWithPadding = findAllElements(
+        output,
+        (el) => el.type === 'box' && el.props.style?.paddingLeft === 3
+      )
+
+      expect(boxesWithPadding.length).toBeGreaterThan(0)
+
+      // The text content should be inside these boxes
+      const textContent = getAllTextContent(output)
+      expect(textContent).toContain('Build the complete system')
+      expect(textContent).toContain('distributed tracing, metrics')
+    })
+  })
+
+  describe('standalone lettered items', () => {
+    test('handles lettered items without numbered parent', () => {
+      const markdown = `a) First option
+b) Second option
+c) Third option`
+
+      const output = renderLetteredItemsWithBoxes(markdown)
+
+      // Should group into a padded box
+      const boxesWithPadding = findAllElements(
+        output,
+        (el) => el.type === 'box' && el.props.style?.paddingLeft === 3
+      )
+
+      expect(boxesWithPadding.length).toBeGreaterThan(0)
+
+      const textContent = getAllTextContent(output)
+      expect(textContent).toContain('a) First option')
+      expect(textContent).toContain('b) Second option')
+    })
+  })
+
+  describe('REAL STRUCTURE: nested bullet lists', () => {
+    test('handles actual agent output format with nested bullet lists', () => {
+      // This is the ACTUAL format from agent output (discovered via debug logs)
+      const markdown = `**Questions:**
+
+1. For the metrics dashboard, would you prefer:
+   - a) (DEFAULT) Build on the existing admin traces UI with new monitoring tabs
+   - b) Create a standalone monitoring application
+   - c) Integrate metrics into the main user dashboard for self-service monitoring
+
+2. For alert delivery, should we:
+   - a) (DEFAULT) Start with email notifications and extend later
+   - b) Implement webhook support from the start for Slack/PagerDuty integration
+   - c) Build an in-app notification center first`
+
+      const output = renderMarkdown(markdown)
+      const textContent = getAllTextContent(output)
+
+      // Should contain the questions
+      expect(textContent).toContain('metrics dashboard')
+      expect(textContent).toContain('a) (DEFAULT)')
+      expect(textContent).toContain('b)')
+
+      // DEFAULT should be highlighted
+      const defaultSpans = findAllElements(
+        output,
+        (el) => el.type === 'span' && el.props.bg === '#86efac'
+      )
+      expect(defaultSpans.length).toBeGreaterThan(0)
+    })
+
+    test('nested bullet lists with letters should be detected', () => {
+      const markdown = `1. Question?
+   - a) Option A
+   - b) Option B`
+
+      // This should be detected as having lettered items
+      expect(hasLetteredItems(markdown)).toBe(true)
+    })
+
+    test('renders nested bullet lists with box wrapping', () => {
+      const markdown = `1. For the metrics dashboard, would you prefer:
+   - a) (DEFAULT) Build on the existing admin traces UI with new monitoring tabs
+   - b) Create a standalone monitoring application
+   - c) Integrate metrics into the main user dashboard for self-service monitoring`
+
+      const output = renderLetteredItemsWithBoxes(markdown)
+
+      // Should have box with paddingLeft for the nested lettered list
+      const boxesWithPadding = findAllElements(
+        output,
+        (el) => el.type === 'box' && el.props.style?.paddingLeft === 3
+      )
+
+      expect(boxesWithPadding.length).toBeGreaterThan(0)
+
+      // Should contain the text
+      const textContent = getAllTextContent(output)
+      expect(textContent).toContain('metrics dashboard')
+      expect(textContent).toContain('a) (DEFAULT)')
+
+      // DEFAULT should be highlighted
+      const defaultSpans = findAllElements(
+        output,
+        (el) => el.type === 'span' && el.props.bg === '#86efac'
+      )
+      expect(defaultSpans.length).toBeGreaterThan(0)
+    })
+
+    test('handles multiple questions with nested bullet lists', () => {
+      const markdown = `**Questions:**
+
+1. For the metrics dashboard, would you prefer:
+   - a) (DEFAULT) Build on existing admin UI
+   - b) Create standalone monitoring app
+
+2. For alert delivery, should we:
+   - a) (DEFAULT) Start with email notifications
+   - b) Implement webhook support from the start`
+
+      const output = renderLetteredItemsWithBoxes(markdown)
+
+      // Should have multiple boxes with paddingLeft (one for each question's options)
+      const boxesWithPadding = findAllElements(
+        output,
+        (el) => el.type === 'box' && el.props.style?.paddingLeft === 3
+      )
+
+      expect(boxesWithPadding.length).toBeGreaterThanOrEqual(2)
+
+      // Both DEFAULT options should be highlighted
+      const defaultSpans = findAllElements(
+        output,
+        (el) => el.type === 'span' && el.props.bg === '#86efac'
+      )
+      expect(defaultSpans.length).toBeGreaterThanOrEqual(2)
     })
   })
 })

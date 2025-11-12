@@ -6,7 +6,9 @@ import { MessageBlock } from './message-block'
 import { ModeDivider } from './mode-divider'
 import {
   renderMarkdown,
+  renderLetteredItemsWithBoxes,
   hasMarkdown,
+  hasLetteredItems,
   type MarkdownPalette,
 } from '../utils/markdown-renderer'
 import { getDescendantIds, getAncestorIds } from '../utils/message-tree-utils'
@@ -421,9 +423,18 @@ const AgentMessage = memo(
       codeBlockWidth: agentCodeBlockWidth,
       palette: agentPalette,
     }
-    const displayContent = hasMarkdown(rawDisplayContent)
-      ? renderMarkdown(rawDisplayContent, agentMarkdownOptions)
-      : rawDisplayContent
+    const displayContent = useMemo(() => {
+      if (!hasMarkdown(rawDisplayContent)) {
+        return rawDisplayContent
+      }
+
+      // Use box-based renderer for lettered items to get proper wrapping
+      if (hasLetteredItems(rawDisplayContent)) {
+        return renderLetteredItemsWithBoxes(rawDisplayContent, agentMarkdownOptions)
+      }
+
+      return renderMarkdown(rawDisplayContent, agentMarkdownOptions)
+    }, [rawDisplayContent, agentCodeBlockWidth, agentPalette])
 
     const handleTitleClick = (e: any): void => {
       if (e && e.stopPropagation) {
@@ -543,14 +554,19 @@ const AgentMessage = memo(
                   {finishedPreview}
                 </text>
               )}
-              {!isCollapsed && (
-                <text
-                  key={`agent-content-${message.id}`}
-                  style={{ wrapMode: 'word', fg: theme.foreground }}
-                >
-                  {displayContent}
-                </text>
-              )}
+              {!isCollapsed &&
+                (hasLetteredItems(rawDisplayContent) && hasMarkdown(rawDisplayContent) ? (
+                  // Lettered items use box-based rendering - render directly
+                  <box key={`agent-content-${message.id}`}>{displayContent}</box>
+                ) : (
+                  // Normal content - wrap in text
+                  <text
+                    key={`agent-content-${message.id}`}
+                    style={{ wrapMode: 'word', fg: theme.foreground }}
+                  >
+                    {displayContent}
+                  </text>
+                ))}
             </box>
           </box>
         </box>

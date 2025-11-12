@@ -16,6 +16,7 @@ export interface MarkdownThemeOverrides {
   blockquoteTextFg?: string
   dividerFg?: string
   codeMonochrome?: boolean
+  defaultOptionFg?: string
 }
 
 /**

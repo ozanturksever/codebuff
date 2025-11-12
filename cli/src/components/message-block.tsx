@@ -10,8 +10,10 @@ import { useTheme } from '../hooks/use-theme'
 import { getToolDisplayInfo } from '../utils/codebuff-client'
 import {
   renderMarkdown,
+  renderLetteredItemsWithBoxes,
   renderStreamingMarkdown,
   hasMarkdown,
+  hasLetteredItems,
   type MarkdownPalette,
 } from '../utils/markdown-renderer'
 import { BORDER_CHARS } from '../utils/ui-constants'

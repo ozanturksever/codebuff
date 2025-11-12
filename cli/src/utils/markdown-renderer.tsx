@@ -563,6 +563,47 @@ const renderList = (list: List, state: RenderState): ReactNode[] => {
   const nodes: ReactNode[] = []
   const start = list.start ?? 1
 
+  // Check if this is an unordered list with lettered items (a), b), c))
+  // If so, render without bullet markers but WITH manual indentation spaces
+  if (!list.ordered && list.children.some(item => isLetteredListItem(item as ListItem))) {
+    list.children.forEach((item, idx) => {
+      const listItem = item as ListItem
+
+      // Add manual indentation (3 spaces to align under numbered list)
+      nodes.push('   ')
+
+      const itemNodes = trimTrailingBreaks(
+        renderNodes(listItem.children as MarkdownNode[], state, listItem.type),
+      )
+
+      // Check if this item contains (DEFAULT)
+      const text = getChildrenText(listItem.children as MarkdownNode[])
+      const isDefault = text.includes('(DEFAULT)')
+
+      if (isDefault) {
+        nodes.push(
+          <span key={nextKey()} bg={palette.defaultOptionFg} fg="#000000">
+            {wrapSegmentsInFragments(itemNodes, nextKey())}
+          </span>
+        )
+      } else {
+        nodes.push(
+          <KeyedFragment key={nextKey()}>
+            {wrapSegmentsInFragments(itemNodes, nextKey())}
+          </KeyedFragment>
+        )
+      }
+
+      if (idx < list.children.length - 1) {
+        nodes.push('\n')
+      }
+    })
+
+    nodes.push('\n\n')
+    return nodes
+  }
+
+  // Normal list rendering
   list.children.forEach((item, idx) => {
     const listItem = item as ListItem
     const marker =
@@ -755,7 +796,7 @@ const renderNode = (
             const lines = child.split('\n')
             for (let i = 0; i < lines.length; i++) {
               const line = lines[i]
-              const isLetteredItem = line.match(/^([a-z])\)\s/)
+              const isLetteredItem = line.match(/^\s*([a-z])\)\s/)
 
               if (isLetteredItem) {
                 // Add to the current lettered items group
@@ -939,6 +980,333 @@ const normalizeOutput = (nodes: ReactNode[]): ReactNode => {
   )
 }
 
+/**
+ * Check if a paragraph node contains a lettered item (a), b), c))
+ * Allows optional leading whitespace for indented items
+ */
+const isParagraphWithLetteredItem = (node: MarkdownNode): boolean => {
+  if (node.type !== 'paragraph') return false
+  const para = node as Paragraph
+  const firstChild = para.children[0]
+  if (firstChild?.type !== 'text') return false
+  const text = (firstChild as Text).value
+  return /^\s*[a-z]\)\s/.test(text)
+}
+
+/**
+ * Check if a list item text starts with a letter followed by )
+ */
+const isLetteredListItem = (item: ListItem): boolean => {
+  // Get the first paragraph's text
+  const firstChild = item.children[0]
+  if (firstChild?.type !== 'paragraph') return false
+  const para = firstChild as Paragraph
+  const firstText = para.children[0]
+  if (firstText?.type !== 'text') return false
+  const text = (firstText as Text).value.trim()
+  return /^[a-z]\)\s/.test(text)
+}
+
+/**
+ * Check if a list item contains lettered sub-items in its children
+ * This handles two cases:
+ * 1. Paragraphs starting with "a) Option"
+ * 2. Nested unordered lists where items start with "a) Option"
+ */
+const hasLetteredItemsInListItem = (item: ListItem): boolean => {
+  for (const child of item.children) {
+    // Case 1: Paragraph with lettered item
+    if (isParagraphWithLetteredItem(child)) return true
+
+    // Case 2: Nested list with lettered items
+    if (child.type === 'list') {
+      const nestedList = child as List
+      if (!nestedList.ordered) {  // Only check unordered (bullet) lists
+        // Check if any nested list item starts with a letter
+        for (const nestedItem of nestedList.children) {
+          if (isLetteredListItem(nestedItem as ListItem)) {
+            return true
+          }
+        }
+      }
+    }
+  }
+  return false
+}
+
+/**
+ * Separate a list item's children into main content and lettered sub-items
+ * Handles both paragraph-based and nested-list-based lettered items
+ */
+const separateLetteredItems = (
+  listItem: ListItem,
+  state: RenderState,
+): {
+  mainContent: ReactNode[]
+  letteredItems: { content: ReactNode[]; text: string }[]
+} => {
+  const mainContent: ReactNode[] = []
+  const letteredItems: { content: ReactNode[]; text: string }[] = []
+
+  for (const child of listItem.children) {
+    // Case 1: Direct paragraph with lettered item (e.g., "a) Option")
+    if (isParagraphWithLetteredItem(child)) {
+      const para = child as Paragraph
+      const content = renderNodes(para.children as MarkdownNode[], state, para.type)
+      const text = getChildrenText(para.children as MarkdownNode[])
+      letteredItems.push({ content, text })
+    }
+    // Case 2: Nested unordered list with lettered items (e.g., "- a) Option")
+    else if (child.type === 'list') {
+      const nestedList = child as List
+      if (!nestedList.ordered) {
+        // Check if this is a lettered list
+        const hasLettered = nestedList.children.some((item) =>
+          isLetteredListItem(item as ListItem)
+        )
+
+        if (hasLettered) {
+          // Extract each nested list item as a lettered item
+          for (const nestedItem of nestedList.children) {
+            const nestedListItem = nestedItem as ListItem
+            const content = renderNodes(
+              nestedListItem.children as MarkdownNode[],
+              state,
+              'listItem',
+            )
+            const text = getChildrenText(nestedListItem.children as MarkdownNode[])
+            letteredItems.push({ content, text })
+          }
+        } else {
+          // Regular nested list - add to main content
+          mainContent.push(...renderNode(child, state, 'listItem', undefined))
+        }
+      } else {
+        // Ordered nested list - add to main content
+        mainContent.push(...renderNode(child, state, 'listItem', undefined))
+      }
+    } else {
+      mainContent.push(...renderNode(child, state, 'listItem', undefined))
+    }
+  }
+
+  return { mainContent, letteredItems }
+}
+
+/**
+ * Group consecutive lettered item sections into boxes with padding
+ */
+const groupLetteredSections = (
+  sections: Array<{ type: string; node?: MarkdownNode; content?: ReactNode }>,
+  state: RenderState,
+): ReactNode[] => {
+  const result: ReactNode[] = []
+  let currentGroup: Paragraph[] = []
+
+  const flushGroup = () => {
+    if (currentGroup.length === 0) return
+
+    const items: ReactNode[] = []
+    currentGroup.forEach((para, idx) => {
+      const content = renderNodes(para.children as MarkdownNode[], state, para.type)
+      const text = getChildrenText(para.children as MarkdownNode[])
+      const isDefault = text.includes('(DEFAULT)')
+
+      if (isDefault) {
+        items.push(
+          <span
+            key={state.nextKey()}
+            bg={state.palette.defaultOptionFg}
+            fg="#000000"
+          >
+            {content}
+          </span>,
+        )
+      } else {
+        items.push(<KeyedFragment key={state.nextKey()}>{content}</KeyedFragment>)
+      }
+
+      if (idx < currentGroup.length - 1) {
+        items.push('\n')
+      }
+    })
+
+    result.push(
+      <box key={state.nextKey()} style={{ paddingLeft: 3 }}>
+        <text>{items}</text>
+      </box>,
+    )
+
+    currentGroup = []
+  }
+
+  for (const section of sections) {
+    if (section.type === 'lettered-item' && section.node) {
+      currentGroup.push(section.node as Paragraph)
+    } else {
+      flushGroup()
+      if (section.content !== undefined) {
+        result.push(section.content)
+      }
+    }
+  }
+
+  flushGroup()
+  return result
+}
+
+/**
+ * Render a list that may contain lettered sub-items with proper box-based wrapping
+ */
+const renderListWithLetteredItems = (
+  list: List,
+  state: RenderState,
+): ReactNode => {
+  const { palette, nextKey } = state
+  const start = list.start ?? 1
+
+  return (
+    <box key={nextKey()} style={{ flexDirection: 'column', gap: 0 }}>
+      {list.children.map((item, idx) => {
+        const listItem = item as ListItem
+        const marker =
+          listItem.checked === true
+            ? '[x] '
+            : listItem.checked === false
+              ? '[ ] '
+              : list.ordered
+                ? `${start + idx}. `
+                : '- '
+
+        const { mainContent, letteredItems } = separateLetteredItems(listItem, state)
+
+        return (
+          <box key={nextKey()} style={{ flexDirection: 'column', gap: 0 }}>
+            {/* Main list item */}
+            <text>
+              <span fg={palette.listBulletFg}>{marker}</span>
+              {mainContent.length > 0 ? (
+                <KeyedFragment key={nextKey()}>
+                  {wrapSegmentsInFragments(mainContent, nextKey())}
+                </KeyedFragment>
+              ) : null}
+            </text>
+
+            {/* Lettered sub-items with paddingLeft */}
+            {letteredItems.length > 0 && (
+              <box style={{ paddingLeft: 3 }}>
+                <text>
+                  {letteredItems.map((item, i) => {
+                    const isDefault = item.text.includes('(DEFAULT)')
+                    return (
+                      <KeyedFragment key={nextKey()}>
+                        {isDefault ? (
+                          <span bg={palette.defaultOptionFg} fg="#000000">
+                            {item.content}
+                          </span>
+                        ) : (
+                          item.content
+                        )}
+                        {i < letteredItems.length - 1 && '\n'}
+                      </KeyedFragment>
+                    )
+                  })}
+                </text>
+              </box>
+            )}
+          </box>
+        )
+      })}
+    </box>
+  )
+}
+
+/**
+ * Alternative renderer for content with lettered items.
+ * Uses box-based layout with paddingLeft for proper text wrapping.
+ */
+export function renderLetteredItemsWithBoxes(
+  markdown: string,
+  options: MarkdownRenderOptions = {},
+): ReactNode {
+  try {
+    const palette = resolvePalette(options.palette)
+    const codeBlockWidth = options.codeBlockWidth ?? 80
+    const state = createRenderState(palette, codeBlockWidth)
+    const ast = processor.parse(markdown) as Root
+    applyInlineFallbackFormatting(ast)
+
+    // Walk AST and build sections
+    const sections: Array<{ type: string; node?: MarkdownNode; content?: ReactNode }> = []
+
+    for (const node of ast.children) {
+      if (node.type === 'paragraph') {
+        const para = node as Paragraph
+        if (isParagraphWithLetteredItem(para)) {
+          // Mark as lettered item for grouping
+          sections.push({ type: 'lettered-item', node: para })
+        } else {
+          // Normal paragraph - render as text
+          const content = renderNode(para, state, 'root', undefined)
+          sections.push({
+            type: 'paragraph',
+            content: <text key={state.nextKey()}>{content}</text>,
+          })
+        }
+      } else if (node.type === 'list') {
+        // Check if list has lettered sub-items
+        const list = node as List
+        const hasLettered = list.children.some((item) =>
+          hasLetteredItemsInListItem(item as ListItem),
+        )
+
+        if (hasLettered) {
+          sections.push({
+            type: 'list-with-lettered',
+            content: renderListWithLetteredItems(list, state),
+          })
+        } else {
+          // Normal list - render as text
+          const content = renderList(list, state)
+          sections.push({
+            type: 'list',
+            content: <text key={state.nextKey()}>{content}</text>,
+          })
+        }
+      } else {
+        // Other node types - render normally as text
+        const content = renderNode(node, state, 'root', undefined)
+        sections.push({
+          type: node.type,
+          content: <text key={state.nextKey()}>{content}</text>,
+        })
+      }
+    }
+
+    // Group consecutive lettered items and combine sections
+    const grouped = groupLetteredSections(sections, state)
+
+    if (grouped.length === 0) {
+      return ''
+    }
+
+    if (grouped.length === 1) {
+      return grouped[0]
+    }
+
+    return (
+      <box style={{ flexDirection: 'column', gap: 0 }}>
+        {grouped.map((section, idx) => (
+          <KeyedFragment key={`section-${idx}`}>{section}</KeyedFragment>
+        ))}
+      </box>
+    )
+  } catch (error) {
+    logger.error(error, 'Failed to parse markdown with lettered items')
+    return markdown
+  }
+}
+
 export function renderMarkdown(
   markdown: string,
   options: MarkdownRenderOptions = {},
@@ -971,8 +1339,10 @@ export function hasIncompleteCodeFence(content: string): boolean {
 }
 
 export function hasLetteredItems(content: string): boolean {
-  // Check if content has lines starting with lowercase letter followed by )
-  return /^[a-z]\)\s/m.test(content)
+  // Check if content has lettered items in two formats:
+  // 1. Standalone paragraphs: "a) Option" or "   a) Option"
+  // 2. Nested bullet lists: "   - a) Option" or "- a) Option"
+  return /^\s*[a-z]\)\s/m.test(content) || /^\s*-\s*[a-z]\)\s/m.test(content)
 }
 
 const mergeStreamingSegments = (segments: ReactNode[]): ReactNode => {
