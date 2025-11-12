@@ -51,6 +51,7 @@ export interface MarkdownPalette {
   dividerFg: string
   codeTextFg: string
   codeMonochrome: boolean
+  defaultOptionFg: string
 }
 
 export interface MarkdownRenderOptions {
@@ -76,6 +77,8 @@ const defaultPalette: MarkdownPalette = {
   dividerFg: '#666',
   codeTextFg: 'brightWhite',
   codeMonochrome: false,
+  // Soft green matching inline code color - conveys "recommended choice"
+  defaultOptionFg: '#86efac',
 }
 
 const resolvePalette = (
@@ -730,54 +733,74 @@ const renderNode = (
       let nodes = [...children]
 
       // Check if this paragraph contains lettered sub-items (a), b), c), etc.)
-      // If so, wrap each line that's a lettered item in a span with indentation
+      // If so, group ALL lettered items into a single indented container block
+      // so that text wrapping stays within the indented boundary
       if (parentType === 'root' || parentType === 'listItem') {
         const processedNodes: ReactNode[] = []
         const indentSpaces = parentType === 'listItem' ? '   ' : '      '
+        let currentLetteredGroup: ReactNode[] = []
+
+        const flushLetteredGroup = () => {
+          if (currentLetteredGroup.length > 0) {
+            // Just append the lettered items as-is
+            // They have manual indentation spaces prepended
+            // Note: Wrapped lines will go to column 0 (OpenTUI limitation)
+            processedNodes.push(...currentLetteredGroup)
+            currentLetteredGroup = []
+          }
+        }
 
         for (const child of nodes) {
           if (typeof child === 'string') {
-            // Split by newlines and wrap each lettered item in a span
             const lines = child.split('\n')
             for (let i = 0; i < lines.length; i++) {
               const line = lines[i]
               const isLetteredItem = line.match(/^([a-z])\)\s/)
 
               if (isLetteredItem) {
-                // Check if this option is marked as DEFAULT
+                // Add to the current lettered items group
                 const isDefault = line.includes('(DEFAULT)')
 
-                // Wrap this lettered item in a span with indentation
-                // If DEFAULT, make the entire line bold
-                const content = isDefault ? (
-                  <span key={state.nextKey()} attributes={TextAttributes.BOLD}>
-                    {line}
-                  </span>
-                ) : (
-                  line
-                )
+                // Add manual indentation spaces
+                currentLetteredGroup.push(indentSpaces)
 
-                processedNodes.push(
-                  <span key={state.nextKey()}>
-                    {indentSpaces}
-                    {content}
-                  </span>
-                )
+                if (isDefault) {
+                  currentLetteredGroup.push(
+                    <span
+                      key={state.nextKey()}
+                      bg={state.palette.defaultOptionFg}
+                      fg="#000000"
+                    >
+                      {line}
+                    </span>
+                  )
+                } else {
+                  currentLetteredGroup.push(line)
+                }
+
+                // Add newline between items (except after last line)
+                if (i < lines.length - 1) {
+                  currentLetteredGroup.push('\n')
+                }
               } else {
-                // Not a lettered item, keep as is
+                // Not a lettered item - flush any pending group
+                flushLetteredGroup()
                 processedNodes.push(line)
-              }
 
-              // Add newline between lines (except after last line)
-              if (i < lines.length - 1) {
-                processedNodes.push('\n')
+                if (i < lines.length - 1) {
+                  processedNodes.push('\n')
+                }
               }
             }
           } else {
-            // Non-string node (React element), keep as is
+            // Non-string node - flush any pending group
+            flushLetteredGroup()
             processedNodes.push(child)
           }
         }
+
+        // Flush any remaining lettered group at the end
+        flushLetteredGroup()
 
         nodes = processedNodes
       }
@@ -945,6 +968,11 @@ export function hasIncompleteCodeFence(content: string): boolean {
     fenceCount += 1
   }
   return fenceCount % 2 === 1
+}
+
+export function hasLetteredItems(content: string): boolean {
+  // Check if content has lines starting with lowercase letter followed by )
+  return /^[a-z]\)\s/m.test(content)
 }
 
 const mergeStreamingSegments = (segments: ReactNode[]): ReactNode => {

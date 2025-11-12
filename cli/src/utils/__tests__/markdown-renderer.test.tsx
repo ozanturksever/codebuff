@@ -414,7 +414,7 @@ b) Focus on email/in-app notifications first (simpler to implement)`
       // Convert to text content (recursively extracts all text including from nested spans)
       const textContent = getAllTextContent(output)
 
-      // Lettered items should be indented (3 spaces when under numbered lists)
+      // Lettered items should be indented with manual spaces (3 spaces under numbered lists)
       expect(textContent).toContain('   a) (DEFAULT) PostgreSQL')
       expect(textContent).toContain('   b) Dedicated time-series')
       expect(textContent).toContain('   c) Redis for real-time')
@@ -435,19 +435,10 @@ a) Another option
 b) One more option`
 
       const output = renderMarkdown(markdown)
-      const nodes = flattenNodes(output)
 
-      const textContent = nodes
-        .map((node) => {
-          if (typeof node === 'string') return node
-          if (React.isValidElement(node)) {
-            return flattenChildren(node.props.children).join('')
-          }
-          return ''
-        })
-        .join('')
+      const textContent = getAllTextContent(output)
 
-      // All lettered items should have 3 spaces of indentation (under numbered lists)
+      // All lettered items should be indented with manual spaces (3 spaces)
       expect(textContent).toContain('   a) First option')
       expect(textContent).toContain('   b) Second option')
       expect(textContent).toContain('   c) Third option')
@@ -461,19 +452,10 @@ b) Second standalone option
 c) Third standalone option`
 
       const output = renderMarkdown(markdown)
-      const nodes = flattenNodes(output)
 
-      const textContent = nodes
-        .map((node) => {
-          if (typeof node === 'string') return node
-          if (React.isValidElement(node)) {
-            return flattenChildren(node.props.children).join('')
-          }
-          return ''
-        })
-        .join('')
+      const textContent = getAllTextContent(output)
 
-      // Should still be indented even without numbered parents
+      // Should be indented with manual spaces (6 spaces at root level)
       expect(textContent).toContain('      a) First standalone')
       expect(textContent).toContain('      b) Second standalone')
       expect(textContent).toContain('      c) Third standalone')
@@ -490,7 +472,7 @@ c) Advanced configuration`
       // Convert to text content (recursively extracts all text including from nested spans)
       const textContent = getAllTextContent(output)
 
-      // Should preserve DEFAULT markers and apply indentation (3 spaces under list)
+      // Should preserve DEFAULT markers with indentation (3 spaces)
       expect(textContent).toContain('   a) (DEFAULT) Standard')
       expect(textContent).toContain('   b) Custom')
       expect(textContent).toContain('   c) Advanced')
@@ -503,19 +485,11 @@ b) Short option
 c) Another very detailed option explaining all the trade-offs and considerations you should think about`
 
       const output = renderMarkdown(markdown)
-      const nodes = flattenNodes(output)
 
-      const textContent = nodes
-        .map((node) => {
-          if (typeof node === 'string') return node
-          if (React.isValidElement(node)) {
-            return flattenChildren(node.props.children).join('')
-          }
-          return ''
-        })
-        .join('')
+      const textContent = getAllTextContent(output)
 
-      // Long text should still be indented (3 spaces under list)
+      // Long text should be indented (3 spaces)
+      // Note: Wrapped lines will go to column 0 (OpenTUI limitation)
       expect(textContent).toContain('   a) This is a very long option')
       expect(textContent).toContain('   b) Short option')
       expect(textContent).toContain('   c) Another very detailed')
@@ -531,19 +505,10 @@ e) Option E
 f) Option F`
 
       const output = renderMarkdown(markdown)
-      const nodes = flattenNodes(output)
 
-      const textContent = nodes
-        .map((node) => {
-          if (typeof node === 'string') return node
-          if (React.isValidElement(node)) {
-            return flattenChildren(node.props.children).join('')
-          }
-          return ''
-        })
-        .join('')
+      const textContent = getAllTextContent(output)
 
-      // All lettered items a-f should be indented (3 spaces under list)
+      // All lettered items a-f should be indented (3 spaces)
       expect(textContent).toContain('   a) Option A')
       expect(textContent).toContain('   b) Option B')
       expect(textContent).toContain('   c) Option C')
@@ -592,24 +557,15 @@ b) Final option
 Conclusion text at the end.`
 
       const output = renderMarkdown(markdown)
-      const nodes = flattenNodes(output)
 
-      const textContent = nodes
-        .map((node) => {
-          if (typeof node === 'string') return node
-          if (React.isValidElement(node)) {
-            return flattenChildren(node.props.children).join('')
-          }
-          return ''
-        })
-        .join('')
+      const textContent = getAllTextContent(output)
 
-      // Context and conclusion should not be indented
+      // Context and conclusion should be present
       expect(textContent).toContain('Here\'s some context')
       expect(textContent).toContain('And some text in between')
       expect(textContent).toContain('Conclusion text at the end')
 
-      // Lettered items should be indented (3 spaces under list)
+      // Lettered items should be indented (3 spaces)
       expect(textContent).toContain('   a) Option one')
       expect(textContent).toContain('   b) Option two')
       expect(textContent).toContain('   a) Another option')
@@ -620,24 +576,17 @@ Conclusion text at the end.`
       const markdown = `This is a sentence that mentions a) something in the middle.`
 
       const output = renderMarkdown(markdown)
-      const nodes = flattenNodes(output)
 
-      const textContent = nodes
-        .map((node) => {
-          if (typeof node === 'string') return node
-          if (React.isValidElement(node)) {
-            return flattenChildren(node.props.children).join('')
-          }
-          return ''
-        })
-        .join('')
+      const textContent = getAllTextContent(output)
 
-      // Should not add indentation for a) in the middle of a sentence
-      expect(textContent).not.toContain('      a) something')
+      // Should contain the text normally (no special handling for a) mid-sentence)
       expect(textContent).toContain('a) something in the middle')
+
+      // Should NOT have indentation spaces added
+      expect(textContent).not.toContain('      a) something')
     })
 
-    test('makes DEFAULT options bold', () => {
+    test('highlights DEFAULT options with green background and black text', () => {
       const markdown = `1. Choose your option:
 a) (DEFAULT) Standard configuration
 b) Custom configuration
@@ -645,24 +594,27 @@ c) Advanced configuration`
 
       const output = renderMarkdown(markdown)
 
-      // Find all span elements with BOLD attribute (recursively)
-      const boldSpans = findAllElements(
+      // Find all span elements with green background
+      const defaultSpans = findAllElements(
         output,
-        (el) => el.type === 'span' && el.props.attributes === TextAttributes.BOLD
+        (el) => el.type === 'span' && el.props.bg === '#86efac'
       )
 
-      // Should have at least one bold span
-      expect(boldSpans.length).toBeGreaterThan(0)
+      // Should have at least one DEFAULT span
+      expect(defaultSpans.length).toBeGreaterThan(0)
 
-      // Check that bold span contains DEFAULT text
-      const boldTexts = boldSpans.map((span) =>
+      // Check that it has black text
+      expect(defaultSpans[0].props.fg).toBe('#000000')
+
+      // Check that highlighted span contains DEFAULT text
+      const highlightedTexts = defaultSpans.map((span) =>
         flattenChildren(span.props.children).join('')
       )
-      const hasDEFAULT = boldTexts.some((text) => text.includes('(DEFAULT)'))
+      const hasDEFAULT = highlightedTexts.some((text) => text.includes('(DEFAULT)'))
       expect(hasDEFAULT).toBe(true)
     })
 
-    test('bolds multiple DEFAULT options', () => {
+    test('highlights multiple DEFAULT options', () => {
       const markdown = `1. First question:
 a) (DEFAULT) Option A
 b) Option B
@@ -672,24 +624,46 @@ b) Non-default option`
 
       const output = renderMarkdown(markdown)
 
-      // Find all span elements with BOLD attribute (recursively)
-      const boldSpans = findAllElements(
+      // Find all span elements with green background
+      const defaultSpans = findAllElements(
         output,
-        (el) => el.type === 'span' && el.props.attributes === TextAttributes.BOLD
+        (el) => el.type === 'span' && el.props.bg === '#86efac'
       )
 
-      // Should have at least 2 bold spans
-      expect(boldSpans.length).toBeGreaterThanOrEqual(2)
+      // Should have at least 2 DEFAULT spans
+      expect(defaultSpans.length).toBeGreaterThanOrEqual(2)
 
-      // Both bold spans should contain DEFAULT text
-      const boldTexts = boldSpans.map((span) =>
+      // All should have black text
+      defaultSpans.forEach((span) => {
+        expect(span.props.fg).toBe('#000000')
+      })
+
+      // Both should contain DEFAULT text
+      const highlightedTexts = defaultSpans.map((span) =>
         flattenChildren(span.props.children).join('')
       )
-      const defaultCount = boldTexts.filter((text) =>
+      const defaultCount = highlightedTexts.filter((text) =>
         text.includes('(DEFAULT)')
       ).length
 
       expect(defaultCount).toBeGreaterThanOrEqual(2)
+    })
+
+    test('indents lettered items with manual spaces', () => {
+      const markdown = `1. Question?
+a) (DEFAULT) Very long option text
+b) Short option`
+
+      const output = renderMarkdown(markdown)
+
+      const textContent = getAllTextContent(output)
+
+      // Should have manual indentation spaces (3 spaces under list)
+      expect(textContent).toContain('   a) (DEFAULT) Very long')
+      expect(textContent).toContain('   b) Short option')
+
+      // Note: Wrapped lines will return to column 0 due to OpenTUI constraints
+      // This is a known limitation documented in knowledge.md
     })
   })
 })

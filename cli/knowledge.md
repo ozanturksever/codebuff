@@ -58,7 +58,7 @@ tmux new-session -d -s test-session 'cd /path/to/codebuff && bun --cwd=cli run d
 
 ## Migration from Custom OpenTUI Fork
 
-**October 2024**: Migrated from custom `CodebuffAI/opentui#codebuff/custom` fork to official `@opentui/react@^0.1.27` and `@opentui/core@^0.1.27` packages. Updated to `^0.1.28` in February 2025.
+**October 2024**: Migrated from custom `CodebuffAI/opentui#codebuff/custom` fork to official `@opentui/react@^0.1.27` and `@opentui/core@^0.1.27` packages. Updated to `^0.1.28` in February 2025. **November 2025**: Upgraded to `0.1.41` to test if TextNodeRenderable constraints were relaxed (they weren't - still have same limitations).
 
 **Lost Features from Custom Fork:**
 
@@ -603,6 +603,98 @@ Error: TextNodeRenderable only accepts strings, TextNodeRenderable instances, or
 This prevents invalid children from reaching `TextNodeRenderable` while preserving formatted markdown.
 
 **Related**: `cli/src/hooks/use-message-renderer.tsx` ensures toggle headers render within a single `<text>` block for StyledText compatibility.
+
+### Using `<text>` vs `<box>` for Container Elements
+
+**CRITICAL**: `<text>` elements have strict child requirements and cannot accept arbitrary React elements as direct children.
+
+**The Error:**
+```
+Error: TextNodeRenderable only accepts strings, TextNodeRenderable instances, or StyledText instances
+  at add (/path/to/TextNode.ts:108:15)
+```
+
+**When this occurs:**
+```tsx
+// ❌ WRONG: Passing React fragments/elements directly as children of <text>
+<text style={{ paddingLeft: 3 }}>
+  {wrapSegmentsInFragments(children, 'key-prefix')}  // Returns Fragments containing spans
+</text>
+```
+
+**Why it fails:**
+- `wrapSegmentsInFragments()` returns `KeyedFragment` elements wrapping content
+- `<text>` expects direct text-renderable children (strings, `<span>`, `<strong>`, etc.)
+- React Fragments are not TextNodeRenderable instances
+- OpenTUI's TextNode cannot process the Fragment wrapper
+
+**✅ CORRECT Solution: Use `<box>` for layout, `<text>` for content**
+
+```tsx
+// Use <box> as container with paddingLeft style
+<box style={{ paddingLeft: 3 }}>
+  <text>
+    {wrapSegmentsInFragments(children, 'key-prefix')}
+  </text>
+</box>
+```
+
+**Why this works:**
+- `<box>` accepts any React elements as children (fragments, boxes, text, etc.)
+- `<box>` supports `paddingLeft` style property for indentation
+- The inner `<text>` properly wraps the text-renderable content
+- Wrapping behavior respects the box's paddingLeft on ALL lines
+
+**Key Learnings:**
+
+1. **For indentation with paddingLeft**: Use `<box style={{ paddingLeft: N }}>`, NOT `<text style={{ paddingLeft: N }}>`
+2. **`<text>` is for text rendering**: It should contain text-renderable elements (strings, spans, etc.)
+3. **`<box>` is for layout**: It can contain any React elements and supports layout styles
+4. **Fragments as children**: Only `<box>` can handle Fragment children; `<text>` cannot
+5. **paddingLeft on wrapped text**: Use `<box>` container to ensure wrapped lines maintain indentation
+
+**Pattern for indented text blocks:**
+```tsx
+// ✅ Correct pattern for indented, wrappable text
+<box style={{ paddingLeft: 3 }}>
+  <text>
+    <span>Line one</span>
+    {'\n'}
+    <span>Line two</span>
+  </text>
+</box>
+```
+
+### Markdown Renderer Indentation Limitation
+
+**Problem:** When markdown content is rendered as inline elements (strings, `<span>`, etc.) and wrapped in `<text>` by parent components, there's no way to maintain indentation on wrapped lines.
+
+**Why we can't use `<box>` with `paddingLeft`:**
+- Markdown renderer returns text-renderable inline elements
+- Parent components wrap output in `<text>{markdownOutput}</text>`
+- `<text>` can only contain text-renderable children (strings, `<span>`, etc.)
+- `<box>` is NOT text-renderable, so returning it from markdown renderer causes:
+  ```
+  Error: TextNodeRenderable only accepts strings, TextNodeRenderable instances, or StyledText instances
+  ```
+
+**Current Solution:**
+- Use manual space prepending for lettered sub-items (e.g., `   a) Option`)
+- First line is indented correctly
+- **Known limitation:** Wrapped lines return to column 0 instead of maintaining indentation
+- This is an acceptable trade-off given OpenTUI's architecture
+
+**Example of limitation:**
+```
+   a) This is a very long option that wraps to
+the next line but doesn't stay indented
+   b) Short option
+```
+
+**Why this is acceptable:**
+- The first line indentation still provides visual hierarchy
+- Alternative approaches (returning `<box>` from renderer) violate OpenTUI's rendering constraints
+- Users can still clearly see the structure even with imperfect wrapping
 
 
 
