@@ -2,7 +2,11 @@ import { has, isEqual } from 'lodash'
 import { useCallback, useEffect, useRef } from 'react'
 
 import { getCodebuffClient, formatToolOutput } from '../utils/codebuff-client'
-import { MAIN_AGENT_ID, shouldHideAgent } from '../utils/constants'
+import {
+  MAIN_AGENT_ID,
+  shouldHideAgent,
+  shouldCollapseByDefault,
+} from '../utils/constants'
 import { createValidationErrorBlocks } from '../utils/create-validation-error-blocks'
 import { getErrorObject } from '../utils/error'
 import { formatTimestamp } from '../utils/helpers'
@@ -83,7 +87,7 @@ const scrubPlanTagsInBlocks = (blocks: ContentBlock[]): ContentBlock[] => {
 /**
  * Auto-collapse thinking blocks to reduce UI clutter.
  * Tracks which thinking blocks have been collapsed to avoid duplicate collapses.
- * 
+ *
  * @param messageId - ID of the message containing the thinking block
  * @param agentId - Optional agent ID for nested agent thinking blocks
  * @param autoCollapsedThinkingIdsRef - Ref tracking which thinking IDs have been auto-collapsed
@@ -228,6 +232,7 @@ interface UseSendMessageOptions {
   setHasReceivedPlanResponse: (value: boolean) => void
   lastMessageMode: AgentMode | null
   setLastMessageMode: (mode: AgentMode | null) => void
+  addSessionCredits: (credits: number) => void
 }
 
 export const useSendMessage = ({
@@ -258,6 +263,7 @@ export const useSendMessage = ({
   setHasReceivedPlanResponse,
   lastMessageMode,
   setLastMessageMode,
+  addSessionCredits,
 }: UseSendMessageOptions): {
   sendMessage: SendMessageFn
   clearMessages: () => void
@@ -681,6 +687,16 @@ export const useSendMessage = ({
           return
         }
 
+        // Auto-collapse thinking blocks on first reasoning content
+        if (delta.type === 'reasoning') {
+          autoCollapseThinkingBlock(
+            aiMessageId,
+            undefined,
+            autoCollapsedThinkingIdsRef,
+            setCollapsedAgents,
+          )
+        }
+
         queueMessageUpdate((prev) =>
           prev.map((msg) => {
             if (msg.id !== aiMessageId) {
@@ -854,16 +870,6 @@ export const useSendMessage = ({
                   (rootStreamBufferRef.current ?? '') + eventObj.text
               }
 
-              // Auto-collapse thinking blocks by default (only once per thinking block)
-              if (eventObj.type === 'reasoning') {
-                autoCollapseThinkingBlock(
-                  aiMessageId,
-                  undefined,
-                  autoCollapsedThinkingIdsRef,
-                  setCollapsedAgents,
-                )
-              }
-
               rootStreamSeenRef.current = true
               appendRootChunk(eventObj)
             } else if (event.type === 'subagent_chunk') {
@@ -966,12 +972,12 @@ export const useSendMessage = ({
               return
             }
 
-            if (event.type === 'finish' && event.totalCost !== undefined) {
+            if (
+              event.type === 'finish' &&
+              typeof event.totalCost === 'number'
+            ) {
               actualCredits = event.totalCost
-            }
-
-            if ('totalCost' in event && event.totalCost !== undefined) {
-              actualCredits = event.totalCost
+              addSessionCredits(event.totalCost)
             }
 
             if (event.type === 'subagent_start') {
@@ -1128,10 +1134,13 @@ export const useSendMessage = ({
                     setCollapsedAgents((prev) => {
                       const next = new Set(prev)
                       next.delete(tempId)
-                      // Only collapse if parent is NOT main agent (i.e., it's a nested agent)
+                      // Collapse if:
+                      // 1. Parent is NOT main agent (nested agent), OR
+                      // 2. Agent type is in the collapsed-by-default list
                       if (
-                        event.parentAgentId &&
-                        event.parentAgentId !== MAIN_AGENT_ID
+                        (event.parentAgentId &&
+                          event.parentAgentId !== MAIN_AGENT_ID) ||
+                        shouldCollapseByDefault(event.agentType)
                       ) {
                         next.add(event.agentId)
                       }
@@ -1231,10 +1240,13 @@ export const useSendMessage = ({
                   )
 
                   setStreamingAgents((prev) => new Set(prev).add(event.agentId))
-                  // Only collapse if parent is NOT main agent (i.e., it's a nested agent)
+                  // Collapse if:
+                  // 1. Parent is NOT main agent (nested agent), OR
+                  // 2. Agent type is in the collapsed-by-default list
                   if (
-                    event.parentAgentId &&
-                    event.parentAgentId !== MAIN_AGENT_ID
+                    (event.parentAgentId &&
+                      event.parentAgentId !== MAIN_AGENT_ID) ||
+                    shouldCollapseByDefault(event.agentType)
                   ) {
                     setCollapsedAgents((prev) =>
                       new Set(prev).add(event.agentId),
@@ -1439,6 +1451,12 @@ export const useSendMessage = ({
                             if (typeof result.value === 'string') {
                               content = result.value
                             } else if (
+                              has(result.value, 'errorMessage') &&
+                              result.value.errorMessage
+                            ) {
+                              // Handle error messages from failed agent spawns
+                              content = String(result.value.errorMessage)
+                            } else if (
                               has(result.value, 'value') &&
                               result.value.value &&
                               typeof result.value.value === 'string'
@@ -1467,10 +1485,16 @@ export const useSendMessage = ({
                               type: 'text',
                               content,
                             }
+                            // Determine status based on whether there's an error
+                            const hasError =
+                              has(result.value, 'errorMessage') &&
+                              result.value.errorMessage
                             return {
                               ...block,
                               blocks: [resultTextBlock],
-                              status: 'complete' as const,
+                              status: hasError
+                                ? ('failed' as const)
+                                : ('complete' as const),
                             }
                           }
                         }
@@ -1650,6 +1674,7 @@ export const useSendMessage = ({
       setHasReceivedPlanResponse,
       lastMessageMode,
       setLastMessageMode,
+      addSessionCredits,
     ],
   )
 
