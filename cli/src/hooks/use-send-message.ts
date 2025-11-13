@@ -66,8 +66,15 @@ const updateBlocksRecursively = (
   })
 }
 
-const scrubPlanTags = (s: string) =>
-  s.replace(/<PLAN>[\s\S]*?<\/cb_plan>/g, '').replace(/<PLAN>[\s\S]*$/g, '')
+const scrubPlanTags = (s: string) => {
+  // Remove <PLAN>...</PLAN> tags and their content
+  let result = s.replace(/<PLAN>[\s\S]*?<\/PLAN>/g, '')
+  // Remove unclosed <PLAN> tags
+  result = result.replace(/<PLAN>[\s\S]*$/g, '')
+  // Also remove "Optional follow-up questions" sections that appear after PLAN tags
+  result = result.replace(/##?\s*Optional follow-up questions:[\s\S]*/i, '')
+  return result
+}
 
 const scrubPlanTagsInBlocks = (blocks: ContentBlock[]): ContentBlock[] => {
   return blocks
@@ -706,6 +713,16 @@ export const useSendMessage = ({
             const blocks: ContentBlock[] = msg.blocks ? [...msg.blocks] : []
             const lastBlock = blocks[blocks.length - 1]
 
+            // If plan was already extracted, scrub any new text to prevent questions duplication
+            const textToAdd = planExtractedRef.current && delta.type === 'text'
+              ? scrubPlanTags(delta.text)
+              : delta.text
+
+            // Skip adding empty text after scrubbing
+            if (textToAdd.trim() === '') {
+              return msg
+            }
+
             if (
               lastBlock &&
               lastBlock.type === 'text' &&
@@ -713,7 +730,7 @@ export const useSendMessage = ({
             ) {
               const updatedBlock: ContentBlock = {
                 ...lastBlock,
-                content: lastBlock.content + delta.text,
+                content: lastBlock.content + textToAdd,
               }
               return {
                 ...msg,
@@ -727,7 +744,7 @@ export const useSendMessage = ({
                 ...blocks,
                 {
                   type: 'text',
-                  content: delta.text,
+                  content: textToAdd,
                   textType: delta.type,
                   ...(delta.type === 'reasoning' && { color: 'grey' }),
                 },
@@ -736,41 +753,16 @@ export const useSendMessage = ({
           }),
         )
 
-        // Detect and extract <PLAN>...</PLAN> once available
+        // Just mark that plan tags were detected during streaming
+        // Actual extraction happens after stream completes to ensure all content is available
         if (
           agentMode === 'PLAN' &&
           delta.type === 'text' &&
           !planExtractedRef.current &&
           rootStreamBufferRef.current.includes('</PLAN>')
         ) {
-          const buffer = rootStreamBufferRef.current
-          const openIdx = buffer.indexOf('<PLAN>')
-          const closeIdx = buffer.indexOf('</PLAN>')
-          if (openIdx !== -1 && closeIdx !== -1 && closeIdx > openIdx) {
-            const rawPlan = buffer
-              .slice(openIdx + '<PLAN>'.length, closeIdx)
-              .trim()
-            planExtractedRef.current = true
-            setHasReceivedPlanResponse(true)
-
-            applyMessageUpdate((prev) =>
-              prev.map((msg) => {
-                if (msg.id !== aiMessageId) return msg
-                const cleanedBlocks = scrubPlanTagsInBlocks(msg.blocks || [])
-                const newBlocks = [
-                  ...cleanedBlocks,
-                  {
-                    type: 'plan' as const,
-                    content: rawPlan,
-                  },
-                ]
-                return {
-                  ...msg,
-                  blocks: newBlocks,
-                }
-              }),
-            )
-          }
+          planExtractedRef.current = true
+          setHasReceivedPlanResponse(true)
         }
       }
 
@@ -1593,6 +1585,60 @@ export const useSendMessage = ({
         const elapsedSeconds = Math.floor(elapsedMs / 1000)
         const completionTime =
           elapsedSeconds > 0 ? `${elapsedSeconds}s` : undefined
+
+        // Extract plan content now that stream is complete (all content has arrived)
+        if (agentMode === 'PLAN' && rootStreamBufferRef.current.includes('</PLAN>')) {
+          const buffer = rootStreamBufferRef.current
+          const openIdx = buffer.indexOf('<PLAN>')
+          const closeIdx = buffer.indexOf('</PLAN>')
+
+          if (openIdx !== -1 && closeIdx !== -1 && closeIdx > openIdx) {
+            // Extract plan content between tags
+            let rawPlan = buffer
+              .slice(openIdx + '<PLAN>'.length, closeIdx)
+              .trim()
+
+            // Also extract any "Optional follow-up questions" section after </PLAN>
+            const afterPlanTag = buffer.slice(closeIdx + '</PLAN>'.length)
+            logger.debug({
+              afterPlanTagLength: afterPlanTag.length,
+              afterPlanTagPreview: afterPlanTag.substring(0, 300)
+            }, '[Plan Extraction] Content after </PLAN> tag (stream complete)')
+
+            const questionsMatch = afterPlanTag.match(
+              /^\s*(##?\s*Optional follow-up questions:[\s\S]*)/i
+            )
+            if (questionsMatch) {
+              logger.debug({
+                questionsLength: questionsMatch[1].length
+              }, '[Plan Extraction] ✅ Found questions, appending to plan')
+              // Append the questions section to the plan content with proper spacing
+              const questionsContent = questionsMatch[1].trim()
+              rawPlan = rawPlan.trimEnd() + '\n\n' + questionsContent
+            } else {
+              logger.debug('[Plan Extraction] ❌ No questions found in afterPlanTag')
+            }
+
+            // Extract and create plan block
+            applyMessageUpdate((prev) =>
+              prev.map((msg) => {
+                if (msg.id !== aiMessageId) return msg
+                const cleanedBlocks = scrubPlanTagsInBlocks(msg.blocks || [])
+                const newBlocks = [
+                  ...cleanedBlocks,
+                  {
+                    type: 'plan' as const,
+                    content: rawPlan,
+                  },
+                ]
+                return {
+                  ...msg,
+                  blocks: newBlocks,
+                }
+              }),
+            )
+          }
+        }
 
         applyMessageUpdate((prev) =>
           prev.map((msg) => {

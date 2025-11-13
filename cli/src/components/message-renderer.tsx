@@ -12,6 +12,7 @@ import {
   type MarkdownPalette,
 } from '../utils/markdown-renderer'
 import { getDescendantIds, getAncestorIds } from '../utils/message-tree-utils'
+import type { QuestionAnswers } from './question-selector'
 
 import type { ChatMessage } from '../types/chat'
 import type { ChatTheme } from '../types/theme-system'
@@ -34,6 +35,7 @@ interface MessageRendererProps {
   setUserOpenedAgents: React.Dispatch<React.SetStateAction<Set<string>>>
   onBuildFast: () => void
   onBuildMax: () => void
+  onUpdatePlan?: (answers: QuestionAnswers) => void
 }
 
 export const MessageRenderer = (props: MessageRendererProps): ReactNode => {
@@ -54,6 +56,7 @@ export const MessageRenderer = (props: MessageRendererProps): ReactNode => {
     setUserOpenedAgents,
     onBuildFast,
     onBuildMax,
+    onUpdatePlan,
   } = props
 
   return (
@@ -81,6 +84,7 @@ export const MessageRenderer = (props: MessageRendererProps): ReactNode => {
             onToggleCollapsed={onCollapseToggle}
             onBuildFast={onBuildFast}
             onBuildMax={onBuildMax}
+            onUpdatePlan={onUpdatePlan}
           />
         )
       })}
@@ -107,6 +111,7 @@ interface MessageWithAgentsProps {
   onToggleCollapsed: (id: string) => void
   onBuildFast: () => void
   onBuildMax: () => void
+  onUpdatePlan?: (answers: QuestionAnswers) => void
 }
 
 const MessageWithAgents = memo(
@@ -129,6 +134,7 @@ const MessageWithAgents = memo(
     onToggleCollapsed,
     onBuildFast,
     onBuildMax,
+    onUpdatePlan,
   }: MessageWithAgentsProps): ReactNode => {
     const SIDE_GUTTER = 1
     const isAgent = message.variant === 'agent'
@@ -153,6 +159,7 @@ const MessageWithAgents = memo(
           onToggleCollapsed={onToggleCollapsed}
           onBuildFast={onBuildFast}
           onBuildMax={onBuildMax}
+          onUpdatePlan={onUpdatePlan}
         />
       )
     }
@@ -273,6 +280,7 @@ const MessageWithAgents = memo(
                   onToggleCollapsed={onToggleCollapsed}
                   onBuildFast={onBuildFast}
                   onBuildMax={onBuildMax}
+                  onUpdatePlan={onUpdatePlan}
                 />
               </box>
             </box>
@@ -313,6 +321,7 @@ const MessageWithAgents = memo(
                 onToggleCollapsed={onToggleCollapsed}
                 onBuildFast={onBuildFast}
                 onBuildMax={onBuildMax}
+                onUpdatePlan={onUpdatePlan}
               />
             </box>
           )}
@@ -341,6 +350,7 @@ const MessageWithAgents = memo(
                   onToggleCollapsed={onToggleCollapsed}
                   onBuildFast={onBuildFast}
                   onBuildMax={onBuildMax}
+                  onUpdatePlan={onUpdatePlan}
                 />
               </box>
             ))}
@@ -369,6 +379,7 @@ interface AgentMessageProps {
   onToggleCollapsed: (id: string) => void
   onBuildFast: () => void
   onBuildMax: () => void
+  onUpdatePlan?: (answers: QuestionAnswers) => void
 }
 
 const AgentMessage = memo(
@@ -390,6 +401,7 @@ const AgentMessage = memo(
     onToggleCollapsed,
     onBuildFast,
     onBuildMax,
+    onUpdatePlan,
   }: AgentMessageProps): ReactNode => {
     const agentInfo = message.agent!
     const isCollapsed = collapsedAgents.has(message.id)
@@ -600,6 +612,7 @@ const AgentMessage = memo(
                   onToggleCollapsed={onToggleCollapsed}
                   onBuildFast={onBuildFast}
                   onBuildMax={onBuildMax}
+                  onUpdatePlan={onUpdatePlan}
                 />
               </box>
             ))}

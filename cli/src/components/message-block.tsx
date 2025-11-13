@@ -8,6 +8,7 @@ import { renderToolComponent } from './tools/registry'
 import { ToolCallItem } from './tools/tool-call-item'
 import { useTheme } from '../hooks/use-theme'
 import { getToolDisplayInfo } from '../utils/codebuff-client'
+import { logger } from '../utils/logger'
 import {
   renderMarkdown,
   renderLetteredItemsWithBoxes,
@@ -17,8 +18,9 @@ import {
   type MarkdownPalette,
 } from '../utils/markdown-renderer'
 import { BORDER_CHARS } from '../utils/ui-constants'
-import { BuildModeButtons } from './build-mode-buttons'
 import { Thinking } from './thinking'
+import { QuestionSelector, type QuestionAnswers } from './question-selector'
+import { parsePlanQuestions } from '../utils/plan-questions-parser'
 
 import type { ContentBlock, TextContentBlock, HtmlContentBlock, AgentContentBlock } from '../types/chat'
 import { isTextBlock, isToolBlock, isAgentBlock, isHtmlBlock } from '../types/chat'
@@ -90,6 +92,7 @@ interface MessageBlockProps {
   onToggleCollapsed: (id: string) => void
   onBuildFast: () => void
   onBuildMax: () => void
+  onUpdatePlan?: (answers: QuestionAnswers) => void
 }
 
 interface ContentWithMarkdownProps {
@@ -98,7 +101,7 @@ interface ContentWithMarkdownProps {
   codeBlockWidth: number
   palette: MarkdownPalette
   textColor?: string
-  textAttributes?: TextAttributes
+  textAttributes?: typeof TextAttributes[keyof typeof TextAttributes]
   renderWrapper?: (node: ReactNode, info: { isLettered: boolean }) => ReactNode
 }
 
@@ -158,6 +161,7 @@ interface PlanBoxProps {
   markdownPalette: MarkdownPalette
   onBuildFast: () => void
   onBuildMax: () => void
+  onUpdatePlan?: (answers: QuestionAnswers) => void
 }
 
 const PlanBox = memo(
@@ -167,14 +171,51 @@ const PlanBox = memo(
     markdownPalette,
     onBuildFast,
     onBuildMax,
+    onUpdatePlan,
   }: PlanBoxProps) => {
     const theme = useTheme()
+    const [isContentExpanded, setIsContentExpanded] = React.useState(false)
+    const [areQuestionsExpanded, setAreQuestionsExpanded] = React.useState(false)
+    const [isQuestionsButtonHovered, setIsQuestionsButtonHovered] = React.useState(false)
+
+    // Parse plan content to extract questions
+    const { planContent: contentWithoutQuestions, questions } = useMemo(
+      () => {
+        const parsed = parsePlanQuestions(planContent)
+        // Log for debugging
+        logger.debug({
+          questionCount: parsed.questions.length,
+          planLength: planContent.length
+        }, `[PlanBox] Parsed ${parsed.questions.length} questions from plan`)
+        return parsed
+      },
+      [planContent],
+    )
+
+    // Truncation logic for plan content
+    const PREVIEW_LINES = 8
+    const lines = contentWithoutQuestions.split('\n')
+    const hasMore = lines.length > PREVIEW_LINES
+    const displayLines = isContentExpanded || !hasMore
+      ? lines
+      : lines.slice(0, PREVIEW_LINES)
+    const displayContent = displayLines.join('\n')
+    const hiddenLinesCount = lines.length - PREVIEW_LINES
+
+    const handleUpdatePlan = useCallback(
+      (answers: QuestionAnswers) => {
+        if (onUpdatePlan) {
+          onUpdatePlan(answers)
+        }
+      },
+      [onUpdatePlan],
+    )
 
     return (
       <box
         style={{
           flexDirection: 'column',
-          gap: 1,
+          gap: 0,
           width: '100%',
           borderStyle: 'single',
           borderColor: theme.secondary,
@@ -185,8 +226,9 @@ const PlanBox = memo(
           paddingBottom: 1,
         }}
       >
+        {/* Plan content */}
         <ContentWithMarkdown
-          content={planContent}
+          content={displayContent}
           isStreaming={false}
           codeBlockWidth={Math.max(10, availableWidth - 8)}
           palette={markdownPalette}
@@ -201,11 +243,67 @@ const PlanBox = memo(
             )
           }
         />
-        <BuildModeButtons
-          theme={theme}
-          onBuildFast={onBuildFast}
-          onBuildMax={onBuildMax}
-        />
+
+        {/* Show more/less toggle */}
+        {hasMore && (
+          <box
+            style={{ marginTop: 1 }}
+            onMouseDown={() => setIsContentExpanded(!isContentExpanded)}
+          >
+            <text
+              fg={theme.secondary}
+              style={{ wrapMode: 'none' }}
+              attributes={TextAttributes.UNDERLINE}
+            >
+              {isContentExpanded
+                ? 'Show less'
+                : `Show ${hiddenLinesCount} more ${hiddenLinesCount === 1 ? 'line' : 'lines'}`}
+            </text>
+          </box>
+        )}
+
+        {/* Questions section - accordion style */}
+        {questions.length > 0 && (
+          <box
+            style={{
+              flexDirection: 'column',
+              gap: 0,
+              marginTop: 1,
+              borderStyle: 'single',
+              borderColor: isQuestionsButtonHovered ? theme.foreground : theme.secondary,
+              customBorderChars: BORDER_CHARS,
+              paddingLeft: 1,
+              paddingRight: 1,
+              paddingTop: 0,
+              paddingBottom: areQuestionsExpanded ? 1 : 0,
+              alignSelf: areQuestionsExpanded ? 'stretch' : 'flex-start',
+              width: areQuestionsExpanded ? '100%' : undefined,
+            }}
+            onMouseOver={() => setIsQuestionsButtonHovered(true)}
+            onMouseOut={() => setIsQuestionsButtonHovered(false)}
+          >
+            {/* Questions toggle header */}
+            <box onMouseDown={() => setAreQuestionsExpanded(!areQuestionsExpanded)}>
+              <text
+                fg={theme.foreground}
+                style={{ wrapMode: 'none' }}
+              >
+                {areQuestionsExpanded ? '▾' : '▸'} {questions.length} suggested{' '}
+                {questions.length === 1 ? 'refinement' : 'refinements'}
+              </text>
+            </box>
+
+            {/* Expanded questions content */}
+            {areQuestionsExpanded && (
+              <box style={{ marginTop: 1 }}>
+                <QuestionSelector
+                  questions={questions}
+                  onUpdate={handleUpdatePlan}
+                />
+              </box>
+            )}
+          </box>
+        )}
       </box>
     )
   },
@@ -905,6 +1003,7 @@ interface SingleBlockProps {
   onToggleCollapsed: (id: string) => void
   onBuildFast: () => void
   onBuildMax: () => void
+  onUpdatePlan?: (answers: QuestionAnswers) => void
 }
 
 const SingleBlock = memo(
@@ -924,6 +1023,7 @@ const SingleBlock = memo(
     onToggleCollapsed,
     onBuildFast,
     onBuildMax,
+    onUpdatePlan,
   }: SingleBlockProps): ReactNode => {
     const theme = useTheme()
     const codeBlockWidth = Math.max(10, availableWidth - 8)
@@ -996,6 +1096,7 @@ const SingleBlock = memo(
               markdownPalette={markdownPalette}
               onBuildFast={onBuildFast}
               onBuildMax={onBuildMax}
+              onUpdatePlan={onUpdatePlan}
             />
           </box>
         )
@@ -1075,6 +1176,7 @@ interface BlocksRendererProps {
   onToggleCollapsed: (id: string) => void
   onBuildFast: () => void
   onBuildMax: () => void
+  onUpdatePlan?: (answers: QuestionAnswers) => void
 }
 
 const BlocksRenderer = memo(
@@ -1092,6 +1194,7 @@ const BlocksRenderer = memo(
     onToggleCollapsed,
     onBuildFast,
     onBuildMax,
+    onUpdatePlan,
   }: BlocksRendererProps) => {
     const nodes: React.ReactNode[] = []
     for (let i = 0; i < sourceBlocks.length; ) {
@@ -1195,6 +1298,7 @@ const BlocksRenderer = memo(
           onToggleCollapsed={onToggleCollapsed}
           onBuildFast={onBuildFast}
           onBuildMax={onBuildMax}
+          onUpdatePlan={onUpdatePlan}
         />,
       )
       i++
@@ -1226,6 +1330,7 @@ export const MessageBlock = memo((props: MessageBlockProps): ReactNode => {
     onToggleCollapsed,
     onBuildFast,
     onBuildMax,
+    onUpdatePlan,
   } = props
   useWhyDidYouUpdateById('MessageBlock', messageId, props, {
     logLevel: 'debug',
@@ -1267,6 +1372,7 @@ export const MessageBlock = memo((props: MessageBlockProps): ReactNode => {
             onToggleCollapsed={onToggleCollapsed}
             onBuildFast={onBuildFast}
             onBuildMax={onBuildMax}
+            onUpdatePlan={onUpdatePlan}
           />
         </box>
       ) : (

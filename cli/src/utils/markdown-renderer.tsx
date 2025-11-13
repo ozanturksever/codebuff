@@ -59,7 +59,7 @@ export interface MarkdownRenderOptions {
   palette?: Partial<MarkdownPalette>
   codeBlockWidth?: number
   textColor?: string
-  textAttributes?: TextAttributes
+  textAttributes?: typeof TextAttributes[keyof typeof TextAttributes]
 }
 
 const defaultPalette: MarkdownPalette = {
@@ -124,13 +124,13 @@ interface RenderState {
   codeBlockWidth: number
   nextKey: () => string
   textColor?: string
-  textAttributes?: TextAttributes
+  textAttributes?: typeof TextAttributes[keyof typeof TextAttributes]
 }
 
 const createRenderState = (
   palette: MarkdownPalette,
   codeBlockWidth: number,
-  options: { textColor?: string; textAttributes?: TextAttributes } = {},
+  options: { textColor?: string; textAttributes?: typeof TextAttributes[keyof typeof TextAttributes] } = {},
 ): RenderState => {
   let counter = 0
   return {

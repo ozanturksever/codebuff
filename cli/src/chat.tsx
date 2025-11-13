@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow'
 
 import { routeUserPrompt } from './commands/router'
 import { AgentModeToggle } from './components/agent-mode-toggle'
+import { ModeSelector } from './components/mode-selector'
 import { LoginModal } from './components/login-modal'
 import { MessageRenderer } from './components/message-renderer'
 import {
@@ -45,7 +46,9 @@ import { createMarkdownPalette } from './utils/theme-system'
 import { BORDER_CHARS } from './utils/ui-constants'
 
 import type { ContentBlock } from './types/chat'
+import { isPlanBlock } from './types/chat'
 import type { SendMessageFn } from './types/contracts/send-message'
+import type { QuestionAnswers } from './components/question-selector'
 import type { ScrollBoxRenderable } from '@opentui/core'
 import type { FileTreeNode } from '@codebuff/common/util/file'
 
@@ -91,6 +94,9 @@ export const Chat = ({
   const [userOpenedAgents, setUserOpenedAgents] = useState<Set<string>>(
     new Set(),
   )
+
+  // Track selected build mode for plan mode
+  const [selectedBuildMode, setSelectedBuildMode] = useState<'DEFAULT' | 'MAX'>('DEFAULT')
 
   const {
     inputValue,
@@ -158,6 +164,16 @@ export const Chat = ({
       resetChatStore: store.reset,
     })),
   )
+
+  // Detect if we're in plan mode (last AI message has a plan block)
+  const isPlanMode = useMemo(() => {
+    // Find the last AI message
+    const lastAiMessage = [...messages].reverse().find(m => m.variant === 'ai')
+    if (!lastAiMessage?.blocks) return false
+
+    // Check if it contains a plan block
+    return lastAiMessage.blocks.some(block => isPlanBlock(block))
+  }, [messages])
 
   // Memoize toggle IDs extraction - only recompute when messages change
   const allToggleIds = useMemo(() => {
@@ -427,6 +443,35 @@ export const Chat = ({
     sendMessageRef,
   })
 
+  // Handler for Build button in plan mode
+  const handleBuild = useCallback(() => {
+    if (selectedBuildMode === 'DEFAULT') {
+      handleBuildFast()
+    } else {
+      handleBuildMax()
+    }
+  }, [selectedBuildMode, handleBuildFast, handleBuildMax])
+
+  // Handler for updating plan with question answers
+  const handleUpdatePlan = useCallback((answers: QuestionAnswers) => {
+    // Format answers into a message
+    const answerParts = Object.entries(answers).map(([questionIdx, answer]) => {
+      const questionNum = parseInt(questionIdx) + 1
+      if (answer.type === 'custom') {
+        return `${questionNum}. ${answer.value}`
+      } else {
+        return `${questionNum}. Option ${String.fromCharCode(97 + (answer.value as number))}`
+      }
+    })
+
+    const message = `I'd like to refine the plan:\n${answerParts.join('\n')}`
+
+    // Send the message
+    if (sendMessageRef.current) {
+      sendMessageRef.current({ content: message, agentMode })
+    }
+  }, [agentMode, sendMessageRef])
+
   const handleSubmit = useCallback(
     () =>
       routeUserPrompt({
@@ -656,6 +701,7 @@ export const Chat = ({
           setUserOpenedAgents={setUserOpenedAgents}
           onBuildFast={handleBuildFast}
           onBuildMax={handleBuildMax}
+          onUpdatePlan={handleUpdatePlan}
         />
       </scrollbox>
 
@@ -793,9 +839,11 @@ export const Chat = ({
                   onChange={setInputValue}
                   onSubmit={handleSubmit}
                   placeholder={
-                    terminalWidth < 65
-                      ? 'Enter a coding task'
-                      : 'Enter a coding task or / for commands'
+                    isPlanMode
+                      ? 'Refine this plan...'
+                      : terminalWidth < 65
+                        ? 'Enter a coding task'
+                        : 'Enter a coding task or / for commands'
                   }
                   focused={inputFocused}
                   maxHeight={5}
@@ -806,18 +854,53 @@ export const Chat = ({
                   cursorPosition={cursorPosition}
                 />
               </box>
-              <box
-                style={{
-                  flexShrink: 0,
-                  paddingLeft: 2,
-                }}
-              >
-                <AgentModeToggle
-                  mode={agentMode}
-                  onToggle={toggleAgentMode}
-                  onSelectMode={setAgentMode}
-                />
-              </box>
+              {isPlanMode ? (
+                // Plan mode: Show mode selector + Build button
+                <box
+                  style={{
+                    flexShrink: 0,
+                    paddingLeft: 2,
+                    flexDirection: 'row',
+                    gap: 2,
+                    alignItems: 'center',
+                  }}
+                >
+                  <ModeSelector
+                    selectedMode={selectedBuildMode}
+                    onModeChange={setSelectedBuildMode}
+                  />
+                  <box
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingLeft: 1,
+                      paddingRight: 1,
+                      borderStyle: 'single',
+                      borderColor: theme.secondary,
+                      customBorderChars: BORDER_CHARS,
+                    }}
+                    onMouseDown={handleBuild}
+                  >
+                    <text style={{ wrapMode: 'none', fg: theme.foreground }}>
+                      Build
+                    </text>
+                  </box>
+                </box>
+              ) : (
+                // Normal mode: Show agent mode toggle
+                <box
+                  style={{
+                    flexShrink: 0,
+                    paddingLeft: 2,
+                  }}
+                >
+                  <AgentModeToggle
+                    mode={agentMode}
+                    onToggle={toggleAgentMode}
+                    onSelectMode={setAgentMode}
+                  />
+                </box>
+              )}
             </box>
             {/* Agent status line - right-aligned under toggle */}
             {showAgentStatusLine && (
