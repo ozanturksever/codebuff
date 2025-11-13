@@ -15,12 +15,12 @@ import { getLoadedAgentsData } from '../utils/local-agent-registry'
 import { logger } from '../utils/logger'
 
 import type { ElapsedTimeTracker } from './use-elapsed-time'
+import type { StreamStatus } from './use-message-queue'
 import type { ChatMessage, ContentBlock, ToolContentBlock } from '../types/chat'
 import type { SendMessageFn } from '../types/contracts/send-message'
 import type { ParamsOf } from '../types/function-params'
 import type { SetElement } from '../types/utils'
 import type { AgentMode } from '../utils/constants'
-import type { StreamStatus } from './use-message-queue'
 import type { AgentDefinition, ToolName } from '@codebuff/sdk'
 import type { SetStateAction } from 'react'
 const hiddenToolNames = new Set<ToolName | 'spawn_agent_inline'>([
@@ -240,6 +240,8 @@ interface UseSendMessageOptions {
   lastMessageMode: AgentMode | null
   setLastMessageMode: (mode: AgentMode | null) => void
   addSessionCredits: (credits: number) => void
+  isQueuePausedRef?: React.MutableRefObject<boolean>
+  resumeQueue?: () => void
 }
 
 export const useSendMessage = ({
@@ -271,6 +273,8 @@ export const useSendMessage = ({
   lastMessageMode,
   setLastMessageMode,
   addSessionCredits,
+  isQueuePausedRef,
+  resumeQueue,
 }: UseSendMessageOptions): {
   sendMessage: SendMessageFn
   clearMessages: () => void
@@ -777,7 +781,7 @@ export const useSendMessage = ({
       abortControllerRef.current = abortController
       abortController.signal.addEventListener('abort', () => {
         setStreamStatus('idle')
-        setCanProcessQueue(true)
+        setCanProcessQueue(!isQueuePausedRef?.current)
         updateChainInProgress(false)
         timerController.stop('aborted')
 
@@ -841,7 +845,11 @@ export const useSendMessage = ({
           maxAgentSteps: 40,
 
           handleStreamChunk: (event) => {
-            if (typeof event === 'string' || event.type === 'reasoning_chunk') {
+            if (
+              typeof event === 'string' ||
+              (event.type === 'reasoning_chunk' &&
+                event.ancestorRunIds.length === 0)
+            ) {
               const eventObj:
                 | { type: 'text'; text: string }
                 | { type: 'reasoning'; text: string } =
@@ -864,7 +872,10 @@ export const useSendMessage = ({
 
               rootStreamSeenRef.current = true
               appendRootChunk(eventObj)
-            } else if (event.type === 'subagent_chunk') {
+            } else if (
+              event.type === 'subagent_chunk' ||
+              event.type === 'reasoning_chunk'
+            ) {
               const { agentId, chunk } = event
 
               const previous =
@@ -874,6 +885,7 @@ export const useSendMessage = ({
               }
               agentStreamAccumulatorsRef.current.set(agentId, previous + chunk)
 
+              // TODO: Add reasoning chunks to a separate component
               updateAgentContent(agentId, {
                 type: 'text',
                 content: chunk,
@@ -881,6 +893,7 @@ export const useSendMessage = ({
               return
             } else {
               event satisfies never
+              throw new Error('Unhandled event type')
             }
           },
 
@@ -1573,6 +1586,9 @@ export const useSendMessage = ({
         }
 
         setStreamStatus('idle')
+        if (resumeQueue) {
+          resumeQueue()
+        }
         setCanProcessQueue(true)
         updateChainInProgress(false)
         const timerResult = timerController.stop('success')
@@ -1721,6 +1737,7 @@ export const useSendMessage = ({
       lastMessageMode,
       setLastMessageMode,
       addSessionCredits,
+      resumeQueue,
     ],
   )
 

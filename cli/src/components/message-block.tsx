@@ -22,8 +22,13 @@ import { Thinking } from './thinking'
 import { QuestionSelector, type QuestionAnswers } from './question-selector'
 import { parsePlanQuestions } from '../utils/plan-questions-parser'
 
-import type { ContentBlock, TextContentBlock, HtmlContentBlock, AgentContentBlock } from '../types/chat'
-import { isTextBlock, isToolBlock, isAgentBlock, isHtmlBlock } from '../types/chat'
+import type {
+  ContentBlock,
+  TextContentBlock,
+  HtmlContentBlock,
+  AgentContentBlock,
+} from '../types/chat'
+import { isTextBlock, isToolBlock } from '../types/chat'
 import type { ThemeColor } from '../types/theme-system'
 import { useWhyDidYouUpdateById } from '../hooks/use-why-did-you-update'
 
@@ -34,7 +39,7 @@ const sanitizePreview = (value: string): string =>
   value.replace(/[#*_`~\[\]()]/g, '').trim()
 
 const isReasoningTextBlock = (
-  b: ContentBlock | null | undefined
+  b: ContentBlock | null | undefined,
 ): b is TextContentBlock => {
   if (!b || b.type !== 'text') return false
 
@@ -415,13 +420,12 @@ const ToolBranch = memo(
         ? `$ ${toolBlock.input.command.trim()}`
         : null
 
-    const toolRenderConfig =
-      renderToolComponent(toolBlock, theme, {
-        availableWidth,
-        indentationOffset: 0,
-        previewPrefix: '',
-        labelWidth: 0,
-      }) ?? {}
+    let toolRenderConfig = renderToolComponent(toolBlock, theme, {
+      availableWidth,
+      indentationOffset: 0,
+      previewPrefix: '',
+      labelWidth: 0,
+    })
 
     const streamingPreview = isStreaming
       ? commandPreview ?? `${sanitizePreview(firstLine)}...`
@@ -449,7 +453,7 @@ const ToolBranch = memo(
     )
 
     const finishedPreview = !isStreaming
-      ? toolRenderConfig.collapsedPreview ??
+      ? toolRenderConfig?.collapsedPreview ??
         getToolFinishedPreview(commandPreview, lastLine)
       : ''
 
@@ -499,7 +503,7 @@ const ToolBranch = memo(
 
     return (
       <box key={keyPrefix}>
-        {toolRenderConfig.content ? (
+        {toolRenderConfig ? (
           toolRenderConfig.content
         ) : (
           <ToolCallItem
@@ -510,7 +514,7 @@ const ToolBranch = memo(
             streamingPreview={streamingPreview}
             finishedPreview={finishedPreview}
             onToggle={handleToggle}
-            titleSuffix={toolRenderConfig.path}
+            titleSuffix={undefined}
           />
         )}
       </box>
@@ -778,8 +782,7 @@ const AgentBody = memo(
           ) as React.ReactNode[]
           if (nonNullGroupNodes.length > 0) {
             const hasRenderableBefore =
-              start > 0 &&
-              isRenderableTimelineBlock(nestedBlocks[start - 1])
+              start > 0 && isRenderableTimelineBlock(nestedBlocks[start - 1])
             let hasRenderableAfter = false
             for (let i = nestedIdx; i < nestedBlocks.length; i++) {
               if (isRenderableTimelineBlock(nestedBlocks[i])) {
@@ -891,7 +894,11 @@ const AgentBranchWrapper = memo(
         : isFailed
           ? 'failed'
           : agentBlock.status
-    const statusColor = isActive ? theme.primary : isFailed ? 'red' : theme.muted
+    const statusColor = isActive
+      ? theme.primary
+      : isFailed
+        ? 'red'
+        : theme.muted
     const statusIndicator = isActive ? '●' : isFailed ? '✗' : '✓'
 
     const onToggle = useCallback(() => {
@@ -1253,8 +1260,7 @@ const BlocksRenderer = memo(
         ) as React.ReactNode[]
         if (nonNullGroupNodes.length > 0) {
           const hasRenderableBefore =
-            start > 0 &&
-            isRenderableTimelineBlock(sourceBlocks[start - 1])
+            start > 0 && isRenderableTimelineBlock(sourceBlocks[start - 1])
           // Check for any subsequent renderable blocks without allocating a slice
           let hasRenderableAfter = false
           for (let j = i; j < sourceBlocks.length; j++) {

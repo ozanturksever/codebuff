@@ -786,13 +786,13 @@ const DEFAULT_CHAT_THEMES: Record<ThemeName, ChatTheme> = {
     // Neutral scale
     foreground: '#f1f5f9',
     background: 'transparent',
-    muted: '#9ca3af',
-    border: '#334155',
-    surface: '#000000',
+    muted: '#acb3bf',
+    border: '#536175',
+    surface: '#202327',
     surfaceHover: '#334155',
 
     // Context-specific
-    aiLine: '#34d399',
+    aiLine: '#6b7280',
     userLine: '#38bdf8',
 
     // Agent backgrounds
@@ -800,11 +800,7 @@ const DEFAULT_CHAT_THEMES: Record<ThemeName, ChatTheme> = {
     agentToggleExpandedBg: '#1d4ed8',
     agentFocusedBg: '#334155',
     agentContentBg: '#000000',
-
-    // Input
-    inputBg: '#000000',
     inputFg: '#f5f5f5',
-    inputFocusedBg: '#000000',
     inputFocusedFg: '#ffffff',
 
     // Mode toggles
@@ -856,7 +852,7 @@ const DEFAULT_CHAT_THEMES: Record<ThemeName, ChatTheme> = {
     surfaceHover: '#e5e7eb',
 
     // AI/User context
-    aiLine: '#059669',
+    aiLine: '#6b7280',
     userLine: '#3b82f6',
 
     // Agent context
@@ -864,11 +860,7 @@ const DEFAULT_CHAT_THEMES: Record<ThemeName, ChatTheme> = {
     agentToggleExpandedBg: '#1d4ed8',
     agentFocusedBg: '#f3f4f6',
     agentContentBg: '#ffffff',
-
-    // Input
-    inputBg: '#f9fafb',
     inputFg: '#111827',
-    inputFocusedBg: '#ffffff',
     inputFocusedFg: '#000000',
 
     // Mode toggles
