@@ -5,29 +5,31 @@
  * Validates subagent_start, subagent_finish events and chunk forwarding.
  */
 
-import { describe, test, expect, beforeAll } from 'bun:test'
+import { describe, test, expect, beforeAll, beforeEach } from 'bun:test'
 
 import { CodebuffClient } from '../../src/client'
-import { EventCollector, getApiKey, skipIfNoApiKey, DEFAULT_TIMEOUT } from '../utils'
+import { EventCollector, getApiKey, ensureBackendConnection, DEFAULT_TIMEOUT } from '../utils'
 
 describe('Streaming: Subagent Streaming', () => {
   let client: CodebuffClient
 
   beforeAll(() => {
-    if (skipIfNoApiKey()) return
     client = new CodebuffClient({ apiKey: getApiKey() })
+  })
+
+  beforeEach(async () => {
+    await ensureBackendConnection()
   })
 
   test(
     'subagent_start and subagent_finish events are paired',
     async () => {
-      if (skipIfNoApiKey()) return
 
       const collector = new EventCollector()
 
-      // Use an agent that spawns subagents (like base which can spawn file-picker, etc.)
+      // Use an agent that can spawn subagents
       await client.run({
-        agent: 'codebuff/base@latest',
+        agent: 'base2-max',
         prompt: 'Search for files containing "test" in this project',
         handleEvent: collector.handleEvent,
         handleStreamChunk: collector.handleStreamChunk,
@@ -57,12 +59,11 @@ describe('Streaming: Subagent Streaming', () => {
   test(
     'subagent events have correct structure',
     async () => {
-      if (skipIfNoApiKey()) return
 
       const collector = new EventCollector()
 
       await client.run({
-        agent: 'codebuff/base@latest',
+        agent: 'base2-max',
         prompt: 'List files in the current directory',
         handleEvent: collector.handleEvent,
         handleStreamChunk: collector.handleStreamChunk,
@@ -93,12 +94,11 @@ describe('Streaming: Subagent Streaming', () => {
   test(
     'subagent chunks are forwarded to handleStreamChunk',
     async () => {
-      if (skipIfNoApiKey()) return
 
       const collector = new EventCollector()
 
       await client.run({
-        agent: 'codebuff/base@latest',
+        agent: 'base2-max',
         prompt: 'What files are in the sdk folder?',
         handleEvent: collector.handleEvent,
         handleStreamChunk: collector.handleStreamChunk,
@@ -128,12 +128,11 @@ describe('Streaming: Subagent Streaming', () => {
   test(
     'no duplicate subagent_start events for same agent',
     async () => {
-      if (skipIfNoApiKey()) return
 
       const collector = new EventCollector()
 
       await client.run({
-        agent: 'codebuff/base@latest',
+        agent: 'base2-max',
         prompt: 'Find TypeScript files',
         handleEvent: collector.handleEvent,
         cwd: process.cwd(),

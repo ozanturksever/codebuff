@@ -248,14 +248,11 @@ describe('DynamicAgentDefinitionSchema', () => {
       })
     })
 
-    // Note: The validation that required set_output tool for structured_output mode was
-    // intentionally disabled to allow handleSteps to use set_output while the LLM does not
-    // have access to the set_output tool.
-    it('should allow template with outputMode structured_output without set_output tool', () => {
+    it('allows structured_output without set_output tool (LLM handles output)', () => {
       const template = {
         ...validBaseTemplate,
         outputMode: 'structured_output' as const,
-        toolNames: ['end_turn', 'read_files'], // Missing set_output - now allowed
+        toolNames: ['end_turn', 'read_files'], // Missing set_output
       }
 
       const result = DynamicAgentTemplateSchema.safeParse(template)
