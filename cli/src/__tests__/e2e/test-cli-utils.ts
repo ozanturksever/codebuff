@@ -181,8 +181,17 @@ export interface E2ETestContext {
  * Create a full e2e test context with database, server, and CLI utilities
  */
 export async function createE2ETestContext(describeId: string): Promise<E2ETestContext> {
-  const { createE2EDatabase, destroyE2EDatabase, E2E_TEST_USERS } = await import('./test-db-utils')
-  const { startE2EServer, stopE2EServer } = await import('./test-server-utils')
+  const {
+    createE2EDatabase,
+    destroyE2EDatabase,
+    cleanupOrphanedContainers,
+    E2E_TEST_USERS,
+  } = await import('./test-db-utils')
+  const { startE2EServer, stopE2EServer, cleanupOrphanedServers } = await import('./test-server-utils')
+
+  // Clean up any leftovers from previous runs (important on CI retries)
+  cleanupOrphanedContainers()
+  cleanupOrphanedServers()
 
   // Start database
   const db = await createE2EDatabase(describeId)

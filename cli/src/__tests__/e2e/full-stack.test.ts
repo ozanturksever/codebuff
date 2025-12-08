@@ -56,13 +56,13 @@ describe('E2E: Chat Interaction', () => {
     console.log('\n🚀 Starting E2E test context for Chat Interaction...')
     ctx = await createE2ETestContext('chat-interaction')
     console.log('✅ E2E test context ready\n')
-  })
+  }, TIMEOUT_MS)
 
   afterAll(async () => {
     console.log('\n🧹 Cleaning up E2E test context...')
     await ctx?.cleanup()
     console.log('✅ Cleanup complete\n')
-  })
+  }, TIMEOUT_MS)
 
   test(
     'can start CLI and see welcome message',
@@ -122,13 +122,13 @@ describe('E2E: Slash Commands', () => {
     console.log('\n🚀 Starting E2E test context for Slash Commands...')
     ctx = await createE2ETestContext('slash-commands')
     console.log('✅ E2E test context ready\n')
-  })
+  }, TIMEOUT_MS)
 
   afterAll(async () => {
     console.log('\n🧹 Cleaning up E2E test context...')
     await ctx?.cleanup()
     console.log('✅ Cleanup complete\n')
-  })
+  }, TIMEOUT_MS)
 
   test(
     '/new command clears conversation',
@@ -194,13 +194,13 @@ describe('E2E: User Authentication', () => {
     console.log('\n🚀 Starting E2E test context for User Authentication...')
     ctx = await createE2ETestContext('user-auth')
     console.log('✅ E2E test context ready\n')
-  })
+  }, TIMEOUT_MS)
 
   afterAll(async () => {
     console.log('\n🧹 Cleaning up E2E test context...')
     await ctx?.cleanup()
     console.log('✅ Cleanup complete\n')
-  })
+  }, TIMEOUT_MS)
 
   test(
     'authenticated user can access CLI',
@@ -257,13 +257,13 @@ describe('E2E: Agent Modes', () => {
     console.log('\n🚀 Starting E2E test context for Agent Modes...')
     ctx = await createE2ETestContext('agent-modes')
     console.log('✅ E2E test context ready\n')
-  })
+  }, TIMEOUT_MS)
 
   afterAll(async () => {
     console.log('\n🧹 Cleaning up E2E test context...')
     await ctx?.cleanup()
     console.log('✅ Cleanup complete\n')
-  })
+  }, TIMEOUT_MS)
 
   test(
     'can switch to lite mode',
@@ -332,13 +332,13 @@ describe('E2E: Additional Slash Commands', () => {
     )
     ctx = await createE2ETestContext('additional-slash-commands')
     console.log('✅ E2E test context ready\n')
-  })
+  }, TIMEOUT_MS)
 
   afterAll(async () => {
     console.log('\n🧹 Cleaning up E2E test context...')
     await ctx?.cleanup()
     console.log('✅ Cleanup complete\n')
-  })
+  }, TIMEOUT_MS)
 
   test(
     '/init command shows project configuration prompt',
@@ -516,13 +516,13 @@ describe('E2E: CLI Flags', () => {
     console.log('\n🚀 Starting E2E test context for CLI Flags...')
     ctx = await createE2ETestContext('cli-flags')
     console.log('✅ E2E test context ready\n')
-  })
+  }, TIMEOUT_MS)
 
   afterAll(async () => {
     console.log('\n🧹 Cleaning up E2E test context...')
     await ctx?.cleanup()
     console.log('✅ Cleanup complete\n')
-  })
+  }, TIMEOUT_MS)
 
   test(
     '--help flag shows usage information',
@@ -618,13 +618,13 @@ describe('E2E: Keyboard Interactions', () => {
     console.log('\n🚀 Starting E2E test context for Keyboard Interactions...')
     ctx = await createE2ETestContext('keyboard-interactions')
     console.log('✅ E2E test context ready\n')
-  })
+  }, TIMEOUT_MS)
 
   afterAll(async () => {
     console.log('\n🧹 Cleaning up E2E test context...')
     await ctx?.cleanup()
     console.log('✅ Cleanup complete\n')
-  })
+  }, TIMEOUT_MS)
 
   test(
     'Ctrl+C once shows exit warning',
@@ -760,13 +760,13 @@ describe('E2E: Error Scenarios', () => {
     console.log('\n🚀 Starting E2E test context for Error Scenarios...')
     ctx = await createE2ETestContext('error-scenarios')
     console.log('✅ E2E test context ready\n')
-  })
+  }, TIMEOUT_MS)
 
   afterAll(async () => {
     console.log('\n🧹 Cleaning up E2E test context...')
     await ctx?.cleanup()
     console.log('✅ Cleanup complete\n')
-  })
+  }, TIMEOUT_MS)
 
   test(
     'low credits user sees warning or credit info',
