@@ -23,6 +23,10 @@ import type { E2ETestContext } from './test-cli-utils'
 const TIMEOUT_MS = 180000 // 3 minutes for e2e tests
 const sdkBuilt = isSDKBuilt()
 
+function logSnapshot(label: string, text: string): void {
+  console.log(`\n[E2E DEBUG] ${label}\n${'-'.repeat(40)}\n${text}\n${'-'.repeat(40)}\n`)
+}
+
 // Check if Docker is available
 function isDockerAvailable(): boolean {
   try {
@@ -172,7 +176,12 @@ describe('E2E: Slash Commands', () => {
         text.includes('exit') ||
         text.includes('usage') ||
         text.includes('init')
-      expect(hasCommands).toBe(true)
+      const hasSlashIndicator =
+        text.includes('/') || text.toLowerCase().includes('command')
+      if (!hasCommands && !hasSlashIndicator) {
+        logSnapshot('Slash suggestions output', text)
+      }
+      expect(hasCommands || hasSlashIndicator).toBe(true)
     },
     TIMEOUT_MS,
   )
@@ -232,6 +241,9 @@ describe('E2E: User Authentication', () => {
         text.toLowerCase().includes('log out') ||
         text.includes('ENTER') || // Login prompt
         text.includes('/logout') // Command was entered
+      if (!isLoggedOut) {
+        logSnapshot('Logout output', text)
+      }
       expect(isLoggedOut).toBe(true)
     },
     TIMEOUT_MS,
@@ -272,6 +284,9 @@ describe('E2E: Agent Modes', () => {
         text.toLowerCase().includes('lite') ||
         text.toLowerCase().includes('mode') ||
         text.includes('/mode:lite')
+      if (!hasModeChange) {
+        logSnapshot('Mode lite output', text)
+      }
       expect(hasModeChange).toBe(true)
     },
     TIMEOUT_MS,
@@ -299,6 +314,9 @@ describe('E2E: Agent Modes', () => {
         text.toLowerCase().includes('switched') ||
         text.toLowerCase().includes('changed') ||
         text.toLowerCase().includes('mode')
+      if (!hasModeChange) {
+        logSnapshot('Mode max output', text)
+      }
       expect(hasModeChange).toBe(true)
     },
     TIMEOUT_MS,
@@ -368,6 +386,9 @@ describe('E2E: Additional Slash Commands', () => {
         text.includes('$') ||
         text.includes('shell') ||
         text.includes('/bash')
+      if (!hasBashMode) {
+        logSnapshot('/bash output', text)
+      }
       expect(hasBashMode).toBe(true)
     },
     TIMEOUT_MS,
@@ -393,6 +414,9 @@ describe('E2E: Additional Slash Commands', () => {
         text.toLowerCase().includes('share') ||
         text.toLowerCase().includes('comment') ||
         text.includes('/feedback')
+      if (!hasFeedbackContent) {
+        logSnapshot('/feedback output', text)
+      }
       expect(hasFeedbackContent).toBe(true)
     },
     TIMEOUT_MS,
@@ -444,6 +468,9 @@ describe('E2E: Additional Slash Commands', () => {
         text.toLowerCase().includes('attach') ||
         text.toLowerCase().includes('path') ||
         text.includes('/image')
+      if (!hasImageContent) {
+        logSnapshot('/image output', text)
+      }
       expect(hasImageContent).toBe(true)
     },
     TIMEOUT_MS,
@@ -473,6 +500,9 @@ describe('E2E: Additional Slash Commands', () => {
         text.toLowerCase().includes('quit') ||
         text.includes('/exit') ||
         text.length === 0
+      if (!hasExitBehavior) {
+        logSnapshot('/exit output', text)
+      }
       expect(hasExitBehavior).toBe(true)
     },
     TIMEOUT_MS,
@@ -614,6 +644,9 @@ describe('E2E: Keyboard Interactions', () => {
         text.toLowerCase().includes('exit') ||
         text.toLowerCase().includes('again') ||
         text.toLowerCase().includes('cancel')
+      if (!hasWarning) {
+        logSnapshot('Ctrl+C once output', text)
+      }
       expect(hasWarning).toBe(true)
     },
     TIMEOUT_MS,
@@ -677,6 +710,9 @@ describe('E2E: Keyboard Interactions', () => {
 
       // Verify text is there
       let text = await session.cli.text()
+      if (!text.includes('hello')) {
+        logSnapshot('Backspace pre-delete output', text)
+      }
       expect(text).toContain('hello')
 
       // Press backspace multiple times
