@@ -86,7 +86,6 @@ jobs:
           [
             .agents,
             backend,
-            cli,
             common,
             npm-app,
             packages/agent-runtime,
@@ -98,7 +97,6 @@ jobs:
         include:
           - package: .agents
           - package: backend
-          - package: cli
           - package: common
           - package: npm-app
           - package: packages/agent-runtime
@@ -258,8 +256,6 @@ jobs:
               else
                 echo "No integration tests found in .agents"
               fi
-            elif [ "${{ matrix.package }}" = "cli" ]; then
-              find src -name '*.integration.test.ts' | sort | xargs -I {} bun test --timeout=180000 {}
             else
               find src -name '*.integration.test.ts' | sort | xargs -I {} bun test --timeout=60000 {}
             fi

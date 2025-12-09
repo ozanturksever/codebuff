@@ -28,7 +28,43 @@ on:
         default: '{}'
 
 jobs:
+  cli-integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout-ref || github.sha }}
+
+      - uses: ./.github/actions/setup-project
+
+      - name: Set environment variables
+        env:
+          SECRETS_CONTEXT: ${{ toJSON(secrets) }}
+          ENV_OVERRIDES: ${{ inputs.env-overrides }}
+        shell: bash
+        run: |
+          VAR_NAMES=$(bun scripts/generate-ci-env.ts --scope client)
+
+          echo "$SECRETS_CONTEXT" | jq -r --argjson vars "$VAR_NAMES" '
+            to_entries | .[] | select(.key as $k | $vars | index($k)) | .key + "=" + .value
+          ' >> $GITHUB_ENV
+          echo "CODEBUFF_GITHUB_ACTIONS=true" >> $GITHUB_ENV
+          echo "NEXT_PUBLIC_CB_ENVIRONMENT=test" >> $GITHUB_ENV
+          echo "CODEBUFF_GITHUB_TOKEN=${{ secrets.CODEBUFF_GITHUB_TOKEN }}" >> $GITHUB_ENV
+          if [ "$ENV_OVERRIDES" != "{}" ]; then
+            echo "$ENV_OVERRIDES" | jq -r 'to_entries | .[] | .key + "=" + .value' >> $GITHUB_ENV
+          fi
+
+      - name: Build SDK before CLI integration tests
+        run: cd sdk && bun run build
+
+      - name: Run CLI integration tests
+        run: |
+          cd cli
+          find src -name '*.integration.test.ts' | sort | xargs -I {} bun test --timeout=180000 {}
+
   build-binaries:
+    needs: cli-integration-tests
     strategy:
       matrix:
         include:
@@ -197,6 +233,7 @@ jobs:
           path: ${{ inputs.binary-name }}-${{ matrix.target }}.tar.gz
 
   build-windows-binary:
+    needs: cli-integration-tests
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
