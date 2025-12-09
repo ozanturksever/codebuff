@@ -40,12 +40,18 @@ export const useExitHandler = ({
   const exitWarningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   )
+  const exitScheduledRef = useRef(false)
 
   useEffect(() => {
     setupExitMessageHandler()
   }, [])
 
   const exitNow = useCallback(() => {
+    if (exitScheduledRef.current) {
+      return
+    }
+    exitScheduledRef.current = true
+
     if (exitWarningTimeoutRef.current) {
       clearTimeout(exitWarningTimeoutRef.current)
       exitWarningTimeoutRef.current = null
@@ -56,7 +62,11 @@ export const useExitHandler = ({
     } catch {
       // Ignore stdout write errors during shutdown
     }
-    process.exit(0)
+
+    // Give the terminal a moment to render the exit message before terminating
+    setTimeout(() => {
+      process.exit(0)
+    }, 25)
   }, [])
 
   const flushAnalyticsWithTimeout = useCallback(async (timeoutMs = 1000) => {
