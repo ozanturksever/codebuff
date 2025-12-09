@@ -249,7 +249,7 @@ describe('resolveChatKeyboardAction', () => {
 
     test('enter submits (no menu intercept)', () => {
       expect(resolveChatKeyboardAction(enterKey, slashMenuState)).toEqual({
-        type: 'none',
+        type: 'slash-menu-select',
       })
     })
 
