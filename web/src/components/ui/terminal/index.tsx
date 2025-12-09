@@ -165,9 +165,10 @@ const Terminal = ({
       'react-terminal-wrapper',
     )) {
       const listener = () => {
-        ;(
-          terminalEl?.querySelector('.terminal-hidden-input') as HTMLElement
-        )?.focus()
+        const hiddenInput = terminalEl?.querySelector(
+          '.terminal-hidden-input',
+        ) as HTMLElement | null
+        hiddenInput?.focus()
         terminalEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }
       terminalEl?.addEventListener('click', listener)

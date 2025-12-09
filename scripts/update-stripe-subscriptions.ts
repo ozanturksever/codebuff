@@ -101,7 +101,7 @@ async function processCustomer(entry: MigrationEntry) {
   console.log(`Processed customer ${entry.stripeCustomerId}`)
 }
 
-;(async () => {
+(async () => {
   console.log(`Processing ${migrationData.length} migrated users...`)
   for (const entry of migrationData) {
     await processCustomer(entry)

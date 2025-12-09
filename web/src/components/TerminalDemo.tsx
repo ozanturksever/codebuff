@@ -1007,10 +1007,8 @@ const TerminalDemo = () => {
           }
 
           // Add characters one by one
-          ;(inputEl as HTMLElement).innerText = commandToType.substring(
-            0,
-            i + 1,
-          )
+          const inputElement = inputEl as HTMLElement
+          inputElement.innerText = commandToType.substring(0, i + 1)
           i++
         }, 150)
 

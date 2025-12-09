@@ -9,7 +9,8 @@ import {
   getCustomToolDefinition,
 } from '@codebuff/sdk'
 import * as FullSDK from '@codebuff/sdk'
-;(async () => {
+
+(async () => {
   // Test 1: Type imports work correctly
   const testClient: CodebuffClient = {} as any
   const testTool: CustomToolDefinition = {} as any

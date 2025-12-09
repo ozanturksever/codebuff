@@ -256,8 +256,9 @@ describe('Organization Billing', () => {
           insert: () => ({
             values: () => {
               const error = new Error('Duplicate key')
-              ;(error as any).code = '23505'
-              ;(error as any).constraint = 'credit_ledger_pkey'
+              const errWithProps = error as any
+              errWithProps.code = '23505'
+              errWithProps.constraint = 'credit_ledger_pkey'
               throw error
             },
           }),

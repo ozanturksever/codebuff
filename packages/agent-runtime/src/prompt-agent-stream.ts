@@ -98,9 +98,10 @@ export const getAgentStreamFromTemplate = (params: {
     if (!aiSdkStreamParams.providerOptions[provider]) {
       aiSdkStreamParams.providerOptions[provider] = {}
     }
-    ;(
-      aiSdkStreamParams.providerOptions[provider] as OpenRouterProviderOptions
-    ).reasoning = template.reasoningOptions
+    const providerOptions = aiSdkStreamParams.providerOptions[
+      provider
+    ] as OpenRouterProviderOptions
+    providerOptions.reasoning = template.reasoningOptions
   }
 
   // Pass agent's provider routing options to SDK
