@@ -87,6 +87,12 @@ type ParsedArgs = {
 function parseArgs(): ParsedArgs {
   const program = new Command()
 
+  // Send all commander output (including errors) to stdout so it shows up in the TUI buffer
+  program.configureOutput({
+    writeOut: (str: string) => process.stdout.write(str),
+    writeErr: (str: string) => process.stdout.write(str),
+  })
+
   program
     .name('codebuff')
     .description('Codebuff CLI - AI-powered coding assistant')
