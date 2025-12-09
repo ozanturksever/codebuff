@@ -295,15 +295,10 @@ describe('CLI UI Tests', () => {
           const text = await session.text()
           // The typed text should appear in the terminal
           const lower = text.toLowerCase()
-          const hasInput =
-            lower.includes('hello world') ||
-            lower.includes('hello') ||
-            lower.includes('world') ||
-            lower.includes('hlloworld')
-          if (!hasInput) {
+          if (!lower.includes('hello world')) {
             logSnapshot('Typed text output', text)
           }
-          expect(hasInput).toBe(true)
+          expect(lower).toContain('hello world')
         } finally {
           await session.press(['ctrl', 'c'])
           session.close()
