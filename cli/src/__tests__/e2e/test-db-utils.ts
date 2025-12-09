@@ -27,8 +27,7 @@ export function generateContainerName(describeId: string): string {
  * Find an available port starting from the given base port
  */
 export function findAvailablePort(basePort: number = 5433): number {
-  // Try ports starting from basePort
-  for (let port = basePort; port < basePort + 100; port++) {
+  for (let port = basePort; port < basePort + 200; port++) {
     try {
       execSync(`lsof -i:${port}`, { stdio: 'pipe' })
       // Port is in use, try next
@@ -60,8 +59,11 @@ export async function createE2EDatabase(describeId: string): Promise<E2EDatabase
       }
     )
   } catch (error) {
+    const logs = safeContainerLogs(containerName)
     const errorMessage = error instanceof Error ? error.message : String(error)
-    throw new Error(`Failed to start e2e database container: ${errorMessage}`)
+    throw new Error(
+      `Failed to start e2e database container: ${errorMessage}${logs ? `\n\nContainer logs:\n${logs}` : ''}`,
+    )
   }
 
   // Wait for the database to be ready
@@ -120,7 +122,12 @@ async function waitForDatabase(port: number, timeoutMs: number = 30000): Promise
     }
   }
 
-  throw new Error(`Database did not become ready within ${timeoutMs}ms`)
+  const logs = safeContainerLogsByPort(port)
+  throw new Error(
+    `Database did not become ready within ${timeoutMs}ms on port ${port}${
+      logs ? `\n\nContainer logs:\n${logs}` : ''
+    }`,
+  )
 }
 
 /**
@@ -258,6 +265,28 @@ export function cleanupOrphanedContainers(): void {
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function safeContainerLogs(containerName: string): string | null {
+  try {
+    return execSync(`docker logs ${containerName}`, { encoding: 'utf8', stdio: 'pipe' })
+  } catch {
+    return null
+  }
+}
+
+function safeContainerLogsByPort(port: number): string | null {
+  try {
+    const name = execSync(
+      `docker ps --format '{{.Names}}' --filter "publish=${port}" --filter "name=manicode-e2e-"`,
+      { encoding: 'utf8', stdio: 'pipe' },
+    )
+    const containerName = name.trim().split('\n').filter(Boolean)[0]
+    if (!containerName) return null
+    return safeContainerLogs(containerName)
+  } catch {
+    return null
+  }
 }
 
 /**
