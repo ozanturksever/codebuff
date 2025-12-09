@@ -161,6 +161,8 @@ jobs:
               else
                 echo "No regular tests found in .agents"
               fi
+            elif [ "${{ matrix.package }}" = "cli" ]; then
+              find src -name '*.test.ts' ! -name '*.integration.test.ts' | sort | xargs -I {} bun test --timeout=180000 {}
             elif [ "${{ matrix.package }}" = "web" ]; then
               bun run test --runInBand
             else
@@ -256,6 +258,8 @@ jobs:
               else
                 echo "No integration tests found in .agents"
               fi
+            elif [ "${{ matrix.package }}" = "cli" ]; then
+              find src -name '*.integration.test.ts' | sort | xargs -I {} bun test --timeout=180000 {}
             else
               find src -name '*.integration.test.ts' | sort | xargs -I {} bun test --timeout=60000 {}
             fi
