@@ -205,7 +205,8 @@ export const MultilineInput = forwardRef<
       focus: () => {
         const node = scrollBoxRef.current
         if (node && typeof (node as any).focus === 'function') {
-          ;(node as any).focus()
+          const focusable = node as any
+          focusable.focus()
         }
       },
     }),
@@ -255,7 +256,8 @@ export const MultilineInput = forwardRef<
   // Helper to clear the current selection
   const clearSelection = useCallback(() => {
     // Use renderer's clearSelection for proper visual clearing
-    ;(renderer as any)?.clearSelection?.()
+    const rendererWithSelection = renderer as any
+    rendererWithSelection?.clearSelection?.()
   }, [renderer])
 
   // Helper to delete selected text and return new value and cursor position

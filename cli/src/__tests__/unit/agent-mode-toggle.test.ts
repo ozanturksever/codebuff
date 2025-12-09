@@ -48,6 +48,7 @@ describe('useHoverToggle timing (controller)', () => {
   let originalSetTimeout: typeof setTimeout
   let originalClearTimeout: typeof clearTimeout
   let originalNow: typeof Date.now
+  let setNow: (ms: number) => void
 
   let timers: { id: number; ms: number; fn: Function; active: boolean }[]
   let nextId: number
@@ -67,10 +68,13 @@ describe('useHoverToggle timing (controller)', () => {
     originalNow = Date.now
 
     let now = 1_000
-    Date.now = () => now
-    ;(Date.now as any).set = (v: number) => {
-      now = v
-    }
+    const nowFn = Object.assign(() => now, {
+      set(v: number) {
+        now = v
+      },
+    })
+    Date.now = nowFn as any
+    setNow = nowFn.set
 
     globalThis.setTimeout = ((fn: Function, ms?: number) => {
       const id = nextId++
@@ -116,7 +120,7 @@ describe('useHoverToggle timing (controller)', () => {
     ctl.closeNow(true)
     ctl.scheduleOpen()
     expect(timers.length).toBe(0)
-    ;(Date.now as any).set(1_000 + REOPEN_SUPPRESS_MS + 1)
+    setNow(1_000 + REOPEN_SUPPRESS_MS + 1)
     ctl.scheduleOpen()
     expect(timers.length).toBe(1)
     expect(timers[0].ms).toBe(OPEN_DELAY_MS)

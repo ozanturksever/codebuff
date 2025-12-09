@@ -152,9 +152,8 @@ export async function handlePublish(agentIds: string[]): Promise<PublishResult> 
 
       // Convert handleSteps function to string if present
       if (typeof (matchingTemplate as any).handleSteps === 'function') {
-        ;(processedTemplate as any).handleSteps = (
-          matchingTemplate as any
-        ).handleSteps.toString()
+        const handleSteps = (matchingTemplate as any).handleSteps.toString()
+        (processedTemplate as any).handleSteps = handleSteps
       }
 
       matchingTemplates[matchingTemplate.id] = processedTemplate
