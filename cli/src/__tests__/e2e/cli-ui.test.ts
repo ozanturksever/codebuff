@@ -12,6 +12,8 @@ import {
 
 const CLI_PATH = path.join(__dirname, '../../index.tsx')
 const TIMEOUT_MS = 25000
+const RENDER_WAIT_MS = 3000
+const SHORT_WAIT_MS = 500
 const sdkBuilt = isSDKBuilt()
 type TerminalSession = Awaited<ReturnType<typeof launchTerminal>>
 
@@ -30,7 +32,7 @@ beforeAll(() => {
 
 function attachReliableTyping(session: TerminalSession, keyDelayMs = 40): TerminalSession {
   const originalPress = session.press.bind(session)
-  session.type = async (text: string) => {
+  const reliableType = async (text: string) => {
     for (const char of text) {
       if (char === ' ') {
         await originalPress('space')
@@ -41,7 +43,11 @@ function attachReliableTyping(session: TerminalSession, keyDelayMs = 40): Termin
       await sleep(keyDelayMs)
     }
   }
-  return session
+
+  // Avoid mutating the original session; return a thin wrapper
+  return Object.assign(Object.create(session), {
+    type: reliableType,
+  })
 }
 
 function logSnapshot(label: string, text: string): void {
@@ -78,9 +84,10 @@ async function launchCLIWithoutAuth(options: {
 }): Promise<Awaited<ReturnType<typeof launchTerminal>>> {
   const { args = [], cols = 120, rows = 30 } = options
   // Remove authentication-related env vars to trigger login flow
-  const envWithoutAuth = { ...process.env, ...cliEnv }
-  delete envWithoutAuth.CODEBUFF_API_KEY
-  delete envWithoutAuth.CODEBUFF_TOKEN
+  const { CODEBUFF_API_KEY, CODEBUFF_TOKEN, ...envWithoutAuth } = {
+    ...process.env,
+    ...cliEnv,
+  }
 
   const session = await launchTerminal({
     command: 'bun',
@@ -286,11 +293,11 @@ describe('CLI UI Tests', () => {
 
         try {
           // Wait for CLI to render
-          await sleep(3000)
+          await sleep(RENDER_WAIT_MS)
 
           // Type some text
           await session.type('hello world')
-          await sleep(500)
+          await sleep(SHORT_WAIT_MS)
 
           const text = await session.text()
           // The typed text should appear in the terminal
@@ -314,7 +321,7 @@ describe('CLI UI Tests', () => {
 
         try {
           // Wait for CLI to render
-          await sleep(3000)
+          await sleep(RENDER_WAIT_MS)
 
           // Type a message and press enter
           await session.type('test message')
@@ -348,7 +355,7 @@ describe('CLI UI Tests', () => {
 
         try {
           // Wait for CLI to render
-          await sleep(3000)
+          await sleep(RENDER_WAIT_MS)
 
           // Press Ctrl+C once
           await session.press(['ctrl', 'c'])
