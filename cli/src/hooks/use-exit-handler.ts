@@ -45,6 +45,20 @@ export const useExitHandler = ({
     setupExitMessageHandler()
   }, [])
 
+  const exitNow = useCallback(() => {
+    if (exitWarningTimeoutRef.current) {
+      clearTimeout(exitWarningTimeoutRef.current)
+      exitWarningTimeoutRef.current = null
+    }
+
+    try {
+      process.stdout.write('\nGoodbye! Exiting...\n')
+    } catch {
+      // Ignore stdout write errors during shutdown
+    }
+    process.exit(0)
+  }, [])
+
   const handleCtrlC = useCallback(() => {
     if (inputValue) {
       setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
@@ -60,20 +74,6 @@ export const useExitHandler = ({
       return true
     }
 
-    const exitNow = () => {
-      try {
-        process.stdout.write('\nGoodbye! Exiting...\n')
-      } catch {
-        // Ignore stdout write errors during shutdown
-      }
-      process.exit(0)
-    }
-
-    if (exitWarningTimeoutRef.current) {
-      clearTimeout(exitWarningTimeoutRef.current)
-      exitWarningTimeoutRef.current = null
-    }
-
     const flushed = flushAnalytics()
     if (flushed && typeof (flushed as Promise<void>).finally === 'function') {
       ;(flushed as Promise<void>).finally(exitNow)
@@ -81,20 +81,15 @@ export const useExitHandler = ({
       exitNow()
     }
     return true
-  }, [inputValue, setInputValue, nextCtrlCWillExit])
+  }, [exitNow, inputValue, setInputValue, nextCtrlCWillExit])
 
   useEffect(() => {
     const handleSigint = () => {
-      if (exitWarningTimeoutRef.current) {
-        clearTimeout(exitWarningTimeoutRef.current)
-        exitWarningTimeoutRef.current = null
-      }
-
       const flushed = flushAnalytics()
       if (flushed && typeof (flushed as Promise<void>).finally === 'function') {
-        ;(flushed as Promise<void>).finally(() => process.exit(0))
+        ;(flushed as Promise<void>).finally(exitNow)
       } else {
-        process.exit(0)
+        exitNow()
       }
     }
 
