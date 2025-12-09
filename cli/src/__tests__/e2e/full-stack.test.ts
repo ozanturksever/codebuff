@@ -12,7 +12,7 @@
  * Run with: bun test e2e/full-stack.test.ts
  */
 
-import { describe, test, expect, beforeAll, afterAll, setTestTimeout } from 'bun:test'
+import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
 
 import { isSDKBuilt } from '../test-utils'
 import { createE2ETestContext, sleep } from './test-cli-utils'
@@ -22,9 +22,6 @@ import type { E2ETestContext } from './test-cli-utils'
 
 const TIMEOUT_MS = 180000 // 3 minutes for e2e tests
 const sdkBuilt = isSDKBuilt()
-
-// Allow long-running hooks and tests for full E2E flows
-setTestTimeout(TIMEOUT_MS)
 
 function logSnapshot(label: string, text: string): void {
   console.log(`\n[E2E DEBUG] ${label}\n${'-'.repeat(40)}\n${text}\n${'-'.repeat(40)}\n`)
