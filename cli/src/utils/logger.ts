@@ -9,7 +9,6 @@ import { pino } from 'pino'
 import {
   flushAnalytics,
   logError,
-  setAnalyticsErrorLogger,
   trackEvent,
 } from './analytics'
 import { getCurrentChatDir, getProjectRoot } from '../project-files'
@@ -193,21 +192,3 @@ export const logger: Record<LogLevel, pino.LogFn> = Object.fromEntries(
     ]
   }),
 ) as Record<LogLevel, pino.LogFn>
-
-setAnalyticsErrorLogger((error, context) => {
-  const err =
-    error instanceof Error ? error : new Error(typeof error === 'string' ? error : 'Unknown analytics error')
-
-  logger.warn(
-    {
-      analyticsError: true,
-      error: {
-        name: err.name,
-        message: err.message,
-        stack: err.stack,
-      },
-      context,
-    },
-    '[analytics] error',
-  )
-})
