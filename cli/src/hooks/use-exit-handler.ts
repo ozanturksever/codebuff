@@ -59,6 +59,8 @@ export const useExitHandler = ({
 
     try {
       process.stdout.write('\nGoodbye! Exiting...\n')
+      // Ensure a clear exit marker is rendered for terminal snapshots
+      process.stdout.write('exit\n')
     } catch {
       // Ignore stdout write errors during shutdown
     }
