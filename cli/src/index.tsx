@@ -29,6 +29,19 @@ import { setOscDetectedTheme } from './utils/theme-system'
 
 import type { FileTreeNode } from '@codebuff/common/util/file'
 
+// Ensure SIGINT always produces a clean, visible exit even if the UI misses the key event.
+let globalSigintHandled = false
+process.on('SIGINT', () => {
+  if (globalSigintHandled) return
+  globalSigintHandled = true
+  try {
+    process.stdout.write('\nGoodbye! Exiting (SIGINT)...\nexit\n')
+  } catch {
+    // Ignore write errors during shutdown
+  }
+  process.exit(0)
+})
+
 const require = createRequire(import.meta.url)
 
 function loadPackageVersion(): string {
