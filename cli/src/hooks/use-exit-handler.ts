@@ -76,7 +76,8 @@ export const useExitHandler = ({
 
     const flushed = flushAnalytics()
     if (flushed && typeof (flushed as Promise<void>).finally === 'function') {
-      ;(flushed as Promise<void>).finally(exitNow)
+      const flushPromise = flushed as Promise<void>
+      flushPromise.finally(exitNow)
     } else {
       exitNow()
     }
@@ -87,7 +88,8 @@ export const useExitHandler = ({
     const handleSigint = () => {
       const flushed = flushAnalytics()
       if (flushed && typeof (flushed as Promise<void>).finally === 'function') {
-        ;(flushed as Promise<void>).finally(exitNow)
+        const flushPromise = flushed as Promise<void>
+        flushPromise.finally(exitNow)
       } else {
         exitNow()
       }
