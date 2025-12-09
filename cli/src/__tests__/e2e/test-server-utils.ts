@@ -1,8 +1,10 @@
 import { spawn, execSync } from 'child_process'
+import { createServer } from 'net'
 import path from 'path'
 import http from 'http'
 
 import type { ChildProcess } from 'child_process'
+import type { AddressInfo } from 'net'
 
 const WEB_DIR = path.join(__dirname, '../../../../web')
 
@@ -14,26 +16,41 @@ export interface E2EServer {
 }
 
 /**
- * Find an available port for the web server
+ * Find an available port for the web server.
+ * Uses an ephemeral OS-assigned port to avoid EADDRINUSE races between parallel tests.
  */
-export function findAvailableServerPort(basePort: number = 3100): number {
-  for (let port = basePort; port < basePort + 100; port++) {
-    try {
-      execSync(`lsof -i:${port}`, { stdio: 'pipe' })
-      // Port is in use, try next
-    } catch {
-      // Port is available
-      return port
-    }
-  }
-  throw new Error(`Could not find available port starting from ${basePort}`)
+export async function findAvailableServerPort(_basePort: number = 3100): Promise<number> {
+  return await new Promise((resolve, reject) => {
+    const server = createServer()
+    server.unref()
+
+    server.on('error', (error) => {
+      server.close()
+      reject(error)
+    })
+
+    server.listen(0, () => {
+      const address = server.address()
+      server.close((closeErr) => {
+        if (closeErr) {
+          reject(closeErr)
+          return
+        }
+        if (address && typeof address === 'object') {
+          resolve((address as AddressInfo).port)
+          return
+        }
+        reject(new Error('Could not determine an available port'))
+      })
+    })
+  })
 }
 
 /**
  * Start the web server for e2e tests
  */
 export async function startE2EServer(databaseUrl: string): Promise<E2EServer> {
-  const port = findAvailableServerPort(3100)
+  const port = await findAvailableServerPort(3100)
   const url = `http://localhost:${port}`
   const backendUrl = url
 

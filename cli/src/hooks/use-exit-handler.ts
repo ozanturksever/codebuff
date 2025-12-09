@@ -53,10 +53,20 @@ export const useExitHandler = ({
 
     if (!nextCtrlCWillExit) {
       setNextCtrlCWillExit(true)
-      setTimeout(() => {
+      exitWarningTimeoutRef.current = setTimeout(() => {
         setNextCtrlCWillExit(false)
+        exitWarningTimeoutRef.current = null
       }, 2000)
       return true
+    }
+
+    const exitNow = () => {
+      try {
+        process.stdout.write('\nGoodbye! Exiting...\n')
+      } catch {
+        // Ignore stdout write errors during shutdown
+      }
+      process.exit(0)
     }
 
     if (exitWarningTimeoutRef.current) {
@@ -64,7 +74,12 @@ export const useExitHandler = ({
       exitWarningTimeoutRef.current = null
     }
 
-    flushAnalytics().then(() => process.exit(0))
+    const flushed = flushAnalytics()
+    if (flushed && typeof (flushed as Promise<void>).finally === 'function') {
+      ;(flushed as Promise<void>).finally(exitNow)
+    } else {
+      exitNow()
+    }
     return true
   }, [inputValue, setInputValue, nextCtrlCWillExit])
 
