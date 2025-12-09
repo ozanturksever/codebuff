@@ -40,6 +40,9 @@ export const useExitHandler = ({
   const exitWarningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   )
+  const exitFallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
   const exitScheduledRef = useRef(false)
 
   useEffect(() => {
@@ -55,6 +58,10 @@ export const useExitHandler = ({
     if (exitWarningTimeoutRef.current) {
       clearTimeout(exitWarningTimeoutRef.current)
       exitWarningTimeoutRef.current = null
+    }
+    if (exitFallbackTimeoutRef.current) {
+      clearTimeout(exitFallbackTimeoutRef.current)
+      exitFallbackTimeoutRef.current = null
     }
 
     try {
@@ -99,6 +106,10 @@ export const useExitHandler = ({
         setNextCtrlCWillExit(false)
         exitWarningTimeoutRef.current = null
       }, 2000)
+      // Fallback: if a second Ctrl+C is not detected, exit after a short grace period
+      exitFallbackTimeoutRef.current = setTimeout(() => {
+        exitNow()
+      }, 1200)
       return true
     }
 
