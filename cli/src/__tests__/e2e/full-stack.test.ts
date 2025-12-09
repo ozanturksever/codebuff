@@ -668,9 +668,17 @@ describe('E2E: Keyboard Interactions', () => {
       await session.cli.press(['ctrl', 'c'])
       await sleep(1500)
 
-      // CLI should have exited or show exit state
-      // Test passes if we got here without hanging
-      expect(true).toBe(true)
+      // Either the CLI exits or remains responsive to further input
+      await session.cli.type('ping')
+      await sleep(500)
+      const text = await session.cli.text()
+      const exited =
+        text.toLowerCase().includes('exit') ||
+        text.toLowerCase().includes('goodbye') ||
+        text.toLowerCase().includes('quit') ||
+        text.trim().length === 0
+      const responsive = text.toLowerCase().includes('ping')
+      expect(exited || responsive).toBe(true)
     },
     TIMEOUT_MS,
   )
@@ -725,9 +733,8 @@ describe('E2E: Keyboard Interactions', () => {
 
       // Text should be modified ("hel" instead of "hello")
       text = await session.cli.text()
-      const hasModifiedText =
-        text.includes('hel') || !text.includes('hello') || text.length > 0
-      expect(hasModifiedText).toBe(true)
+      expect(text.includes('hel')).toBe(true)
+      expect(text.includes('hello')).toBe(false)
     },
     TIMEOUT_MS,
   )
@@ -747,10 +754,11 @@ describe('E2E: Keyboard Interactions', () => {
       await session.cli.press('escape')
       await sleep(500)
 
-      // Input should be cleared or escape should have an effect
+      // Ensure input remains responsive after escape
+      await session.cli.type('x')
+      await sleep(300)
       const text = await session.cli.text()
-      // The behavior depends on implementation - test passes if CLI is responsive
-      expect(text.length).toBeGreaterThanOrEqual(0)
+      expect(text).toContain('x')
     },
     TIMEOUT_MS,
   )
@@ -811,15 +819,13 @@ describe('E2E: Error Scenarios', () => {
       await sleep(1500)
 
       const text = await session.cli.text()
-      // Should show error, unknown command message, or suggestions
       const hasErrorOrSuggestion =
         text.toLowerCase().includes('unknown') ||
         text.toLowerCase().includes('invalid') ||
         text.toLowerCase().includes('error') ||
         text.toLowerCase().includes('not found') ||
         text.toLowerCase().includes('did you mean') ||
-        text.includes('/invalidcommandxyz') ||
-        text.length > 0 // At minimum, CLI should still be running
+        text.includes('/invalidcommandxyz')
       expect(hasErrorOrSuggestion).toBe(true)
     },
     TIMEOUT_MS,
@@ -864,9 +870,7 @@ describe('E2E: Error Scenarios', () => {
 
       const text = await session.cli.text()
       // CLI should handle long input without crashing
-      // May truncate or wrap, but should contain some of the message
-      const hasLongInput = text.includes('a') || text.length > 0
-      expect(hasLongInput).toBe(true)
+      expect(text).toContain('a')
     },
     TIMEOUT_MS,
   )
@@ -883,12 +887,8 @@ describe('E2E: Error Scenarios', () => {
       await sleep(500)
 
       const text = await session.cli.text()
-      // Should contain at least part of the message
       const hasSpecialChars =
-        text.includes('Hello') ||
-        text.includes('world') ||
-        text.includes('test') ||
-        text.length > 0
+        text.includes('Hello') || text.includes('world') || text.includes('test')
       expect(hasSpecialChars).toBe(true)
     },
     TIMEOUT_MS,

@@ -21,6 +21,7 @@ if (!sdkBuilt) {
   describe.skip('CLI UI Tests', () => {
     test('skipped because SDK is not built', () => {})
   })
+  throw new Error('Skipping CLI UI E2E: SDK not built')
 }
 
 let cliEnv: Record<string, string> = {}
@@ -274,8 +275,13 @@ describe('CLI UI Tests', () => {
           // Give time for process to exit
           await sleep(1000)
 
-          // Session should have terminated or show exit message
-          // The test passes if we got here without hanging
+          const text = await session.text()
+          const exited =
+            text.toLowerCase().includes('exit') ||
+            text.toLowerCase().includes('goodbye') ||
+            text.toLowerCase().includes('quit') ||
+            text.trim().length === 0
+          expect(exited).toBe(true)
         } finally {
           session.close()
         }
