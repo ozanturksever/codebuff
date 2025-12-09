@@ -148,12 +148,15 @@ export async function handlePublish(agentIds: string[]): Promise<PublishResult> 
       }
 
       // Process the template for publishing
-      const processedTemplate = { ...matchingTemplate }
+      const processedTemplate = { ...matchingTemplate };
 
       // Convert handleSteps function to string if present
       if (typeof (matchingTemplate as any).handleSteps === 'function') {
-        const handleSteps = (matchingTemplate as any).handleSteps.toString()
-        (processedTemplate as any).handleSteps = handleSteps
+        const handleStepsValue = (matchingTemplate as any).handleSteps as (
+          ...args: any[]
+        ) => unknown;
+        const handleStepsString = handleStepsValue.toString();
+        (processedTemplate as any).handleSteps = handleStepsString;
       }
 
       matchingTemplates[matchingTemplate.id] = processedTemplate
