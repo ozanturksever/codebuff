@@ -19,31 +19,49 @@ export interface E2EServer {
  * Find an available port for the web server.
  * Uses an ephemeral OS-assigned port to avoid EADDRINUSE races between parallel tests.
  */
-export async function findAvailableServerPort(_basePort: number = 3100): Promise<number> {
-  return await new Promise((resolve, reject) => {
-    const server = createServer()
-    server.unref()
+export async function findAvailableServerPort(basePort: number = 3100): Promise<number> {
+  const preferredPort = Number(
+    process.env.NEXT_PUBLIC_WEB_PORT ||
+      process.env.PORT ||
+      basePort,
+  )
 
-    server.on('error', (error) => {
-      server.close()
-      reject(error)
-    })
+  const reservePort = (port: number): Promise<number> =>
+    new Promise((resolve, reject) => {
+      const server = createServer()
+      server.unref()
 
-    server.listen(0, () => {
-      const address = server.address()
-      server.close((closeErr) => {
-        if (closeErr) {
-          reject(closeErr)
-          return
-        }
-        if (address && typeof address === 'object') {
-          resolve((address as AddressInfo).port)
-          return
-        }
-        reject(new Error('Could not determine an available port'))
+      server.on('error', (error) => {
+        server.close()
+        reject(error)
+      })
+
+      server.listen(port, () => {
+        const address = server.address()
+        server.close((closeErr) => {
+          if (closeErr) {
+            reject(closeErr)
+            return
+          }
+          if (address && typeof address === 'object') {
+            resolve((address as AddressInfo).port)
+            return
+          }
+          reject(new Error('Could not determine an available port'))
+        })
       })
     })
-  })
+
+  // Try the env-configured port first; fall back to an ephemeral port.
+  if (!Number.isNaN(preferredPort)) {
+    try {
+      return await reservePort(preferredPort)
+    } catch {
+      // Fall through to ephemeral assignment
+    }
+  }
+
+  return await reservePort(0)
 }
 
 /**
