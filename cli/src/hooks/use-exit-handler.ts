@@ -55,6 +55,8 @@ export const useExitHandler = ({
     }
     exitScheduledRef.current = true
 
+    console.log('[exit-handler] exitNow invoked')
+
     if (exitWarningTimeoutRef.current) {
       clearTimeout(exitWarningTimeoutRef.current)
       exitWarningTimeoutRef.current = null
@@ -101,6 +103,7 @@ export const useExitHandler = ({
     }
 
     if (!nextCtrlCWillExit) {
+      console.log('[exit-handler] first Ctrl+C detected; showing warning')
       setNextCtrlCWillExit(true)
       exitWarningTimeoutRef.current = setTimeout(() => {
         setNextCtrlCWillExit(false)
@@ -108,11 +111,13 @@ export const useExitHandler = ({
       }, 2000)
       // Fallback: if a second Ctrl+C is not detected, exit after a short grace period
       exitFallbackTimeoutRef.current = setTimeout(() => {
+        console.log('[exit-handler] fallback exit triggered after warning window')
         exitNow()
       }, 1200)
       return true
     }
 
+    console.log('[exit-handler] second Ctrl+C detected; exiting')
     // Fire-and-forget analytics flush so exit is not blocked
     void flushAnalyticsWithTimeout()
     exitNow()
@@ -121,6 +126,7 @@ export const useExitHandler = ({
 
   useEffect(() => {
     const handleSigint = () => {
+      console.log('[exit-handler] SIGINT received; exiting')
       void flushAnalyticsWithTimeout()
       exitNow()
     }
