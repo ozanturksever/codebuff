@@ -150,8 +150,8 @@ jobs:
       - name: Run ${{ matrix.package }} tests
         uses: nick-fields/retry@v3
         with:
-          timeout_minutes: 10
-          max_attempts: 5
+          timeout_minutes: ${{ matrix.package == 'cli' && 30 || 10 }}
+          max_attempts: ${{ matrix.package == 'cli' && 2 || 5 }}
           command: |
             cd ${{ matrix.package }}
             if [ "${{ matrix.package }}" = ".agents" ]; then
