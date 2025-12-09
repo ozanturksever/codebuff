@@ -84,10 +84,9 @@ async function launchCLIWithoutAuth(options: {
 }): Promise<Awaited<ReturnType<typeof launchTerminal>>> {
   const { args = [], cols = 120, rows = 30 } = options
   // Remove authentication-related env vars to trigger login flow
-  const { CODEBUFF_API_KEY, CODEBUFF_TOKEN, ...envWithoutAuth } = {
-    ...process.env,
-    ...cliEnv,
-  }
+  const envWithoutAuth = { ...process.env, ...cliEnv }
+  delete (envWithoutAuth as Record<string, unknown>).CODEBUFF_API_KEY
+  delete (envWithoutAuth as Record<string, unknown>).CODEBUFF_TOKEN
 
   const session = await launchTerminal({
     command: 'bun',
