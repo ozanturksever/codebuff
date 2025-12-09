@@ -80,3 +80,12 @@ export function isNetworkError(output: {
   const msg = output.message?.toLowerCase() ?? ''
   return output.errorCode === 'NETWORK_ERROR' || msg.includes('network error')
 }
+
+/**
+ * Throw when an auth error is encountered so tests fail loudly.
+ */
+export function assertNoAuthError(output: { type: string; message?: string }): void {
+  if (isAuthError(output)) {
+    throw new Error(`Unexpected auth error during e2e: ${output.message || 'unknown error'}`)
+  }
+}

@@ -122,7 +122,7 @@ describe('E2E: My Test', () => {
       handleEvent: collector.handleEvent,
     })
 
-    if (isAuthError(result.output)) return
+    assertNoAuthError(result.output)
     
     expect(result.output.type).not.toBe('error')
   }, DEFAULT_TIMEOUT)
