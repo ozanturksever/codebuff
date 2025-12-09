@@ -75,13 +75,6 @@ export const useExitHandler = ({
     }
   }, [])
 
-  const exitAfterFlush = useCallback(() => {
-    void (async () => {
-      await flushAnalyticsWithTimeout()
-      exitNow()
-    })()
-  }, [exitNow, flushAnalyticsWithTimeout])
-
   const handleCtrlC = useCallback(() => {
     if (inputValue) {
       setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
@@ -97,20 +90,23 @@ export const useExitHandler = ({
       return true
     }
 
-    exitAfterFlush()
+    // Fire-and-forget analytics flush so exit is not blocked
+    void flushAnalyticsWithTimeout()
+    exitNow()
     return true
-  }, [exitAfterFlush, inputValue, setInputValue, nextCtrlCWillExit])
+  }, [flushAnalyticsWithTimeout, exitNow, inputValue, setInputValue, nextCtrlCWillExit])
 
   useEffect(() => {
     const handleSigint = () => {
-      exitAfterFlush()
+      void flushAnalyticsWithTimeout()
+      exitNow()
     }
 
     process.on('SIGINT', handleSigint)
     return () => {
       process.off('SIGINT', handleSigint)
     }
-  }, [exitAfterFlush])
+  }, [exitNow, flushAnalyticsWithTimeout])
 
   return { handleCtrlC, nextCtrlCWillExit }
 }
