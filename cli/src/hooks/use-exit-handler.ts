@@ -59,6 +59,29 @@ export const useExitHandler = ({
     process.exit(0)
   }, [])
 
+  const flushAnalyticsWithTimeout = useCallback(async (timeoutMs = 1000) => {
+    try {
+      const flushPromise = flushAnalytics()
+      if (!flushPromise || typeof (flushPromise as Promise<unknown>).finally !== 'function') {
+        return
+      }
+
+      await Promise.race([
+        flushPromise as Promise<unknown>,
+        new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+      ])
+    } catch {
+      // Ignore flush failures and proceed with exit
+    }
+  }, [])
+
+  const exitAfterFlush = useCallback(() => {
+    void (async () => {
+      await flushAnalyticsWithTimeout()
+      exitNow()
+    })()
+  }, [exitNow, flushAnalyticsWithTimeout])
+
   const handleCtrlC = useCallback(() => {
     if (inputValue) {
       setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
@@ -74,32 +97,20 @@ export const useExitHandler = ({
       return true
     }
 
-    const flushed = flushAnalytics()
-    if (flushed && typeof (flushed as Promise<void>).finally === 'function') {
-      const flushPromise = flushed as Promise<void>
-      flushPromise.finally(exitNow)
-    } else {
-      exitNow()
-    }
+    exitAfterFlush()
     return true
-  }, [exitNow, inputValue, setInputValue, nextCtrlCWillExit])
+  }, [exitAfterFlush, inputValue, setInputValue, nextCtrlCWillExit])
 
   useEffect(() => {
     const handleSigint = () => {
-      const flushed = flushAnalytics()
-      if (flushed && typeof (flushed as Promise<void>).finally === 'function') {
-        const flushPromise = flushed as Promise<void>
-        flushPromise.finally(exitNow)
-      } else {
-        exitNow()
-      }
+      exitAfterFlush()
     }
 
     process.on('SIGINT', handleSigint)
     return () => {
       process.off('SIGINT', handleSigint)
     }
-  }, [])
+  }, [exitAfterFlush])
 
   return { handleCtrlC, nextCtrlCWillExit }
 }
