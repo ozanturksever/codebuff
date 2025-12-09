@@ -47,6 +47,9 @@ if (!sdkBuilt || !dockerAvailable) {
   describe.skip(`E2E skipped: ${reason}`, () => {
     test('skipped', () => {})
   })
+  // Prevent the rest of the suite from registering
+  // eslint-disable-next-line no-process-exit
+  throw new Error(`Skipping CLI E2E: ${reason}`)
 }
 
 describe('E2E: Chat Interaction', () => {
