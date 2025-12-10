@@ -1,0 +1,77 @@
+name: CLI E2E Scheduled
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 5am PT (13:00 UTC standard time)
+    - cron: '0 13 * * *'
+
+jobs:
+  cli-e2e:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.0'
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            */node_modules
+            packages/*/node_modules
+          key: ${{ runner.os }}-deps-${{ hashFiles('**/bun.lock*') }}
+          restore-keys: |
+            ${{ runner.os }}-deps-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Set environment variables
+        env:
+          SECRETS_CONTEXT: ${{ toJSON(secrets) }}
+        run: |
+          VAR_NAMES=$(bun scripts/generate-ci-env.ts)
+          echo "$SECRETS_CONTEXT" | jq -r --argjson vars "$VAR_NAMES" '
+            to_entries | .[] | select(.key as $k | $vars | index($k)) | .key + "=" + .value
+          ' >> $GITHUB_ENV
+          echo "CODEBUFF_GITHUB_ACTIONS=true" >> $GITHUB_ENV
+          echo "NEXT_PUBLIC_CB_ENVIRONMENT=test" >> $GITHUB_ENV
+          echo "NEXT_PUBLIC_INFISICAL_UP=true" >> $GITHUB_ENV
+          echo "CODEBUFF_GITHUB_TOKEN=${{ secrets.CODEBUFF_GITHUB_TOKEN }}" >> $GITHUB_ENV
+
+      - name: Build SDK before tests
+        run: cd sdk && bun run build
+
+      - name: Run CLI E2E tests
+        run: |
+          cd cli
+          find src -name '*.test.ts' ! -name '*.integration.test.ts' | sort | xargs -I {} bun test --timeout=180000 {}
+
+      - name: Email support on failure (requires SMTP secrets)
+        if: failure() && secrets.SMTP_SERVER != '' && secrets.SMTP_USERNAME != '' && secrets.SMTP_PASSWORD != ''
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT || '587' }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "CLI E2E scheduled run failed on ${{ github.ref }}"
+          to: support@codebuff.com
+          from: "GitHub Actions <actions@github.com>"
+          secure: true
+          body: |
+            Scheduled CLI E2E run failed.
+            Repo: ${{ github.repository }}
+            Run: ${{ github.run_id }}
+            Workflow: ${{ github.workflow }}
+
+      - name: Log missing email configuration
+        if: failure() && !(secrets.SMTP_SERVER != '' && secrets.SMTP_USERNAME != '' && secrets.SMTP_PASSWORD != '')
+        run: echo "Email notification skipped: SMTP secrets not configured."
