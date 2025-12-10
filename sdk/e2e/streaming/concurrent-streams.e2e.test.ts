@@ -32,7 +32,7 @@ describe('Streaming: Concurrent Streams', () => {
       const collector1 = new EventCollector()
       const collector2 = new EventCollector()
 
-      // Run two prompts concurrently
+      // Run two prompts concurrently with distinctive keywords
       const [result1, result2] = await Promise.all([
         client.run({
           agent: DEFAULT_AGENT,
@@ -58,9 +58,17 @@ describe('Streaming: Concurrent Streams', () => {
       expect(collector2.hasEventType('start')).toBe(true)
       expect(collector2.hasEventType('finish')).toBe(true)
 
-      // Event counts should be independent
-      expect(collector1.events.length).toBeGreaterThan(0)
-      expect(collector2.events.length).toBeGreaterThan(0)
+      // Verify streams contain expected content and aren't mixed
+      const text1 = collector1.getFullStreamText().toUpperCase()
+      const text2 = collector2.getFullStreamText().toUpperCase()
+
+      // Each stream should contain its expected keyword
+      expect(text1).toContain('ALPHA')
+      expect(text2).toContain('BETA')
+
+      // Streams should NOT contain the other stream's keyword (no mixing)
+      expect(text1).not.toContain('BETA')
+      expect(text2).not.toContain('ALPHA')
     },
     DEFAULT_TIMEOUT * 2,
   )
@@ -123,10 +131,26 @@ describe('Streaming: Concurrent Streams', () => {
         }),
       ])
 
-      // Each collector should have independent chunks
-      // The chunks shouldn't be identical (different prompts)
-      // Note: We can't guarantee exact output, but they should be independent
-      expect(collector1.streamChunks).not.toBe(collector2.streamChunks)
+      // Each collector should have independent chunks with different content
+      // Verify both collectors received content
+      expect(collector1.streamChunks.length).toBeGreaterThan(0)
+      expect(collector2.streamChunks.length).toBeGreaterThan(0)
+
+      // Get the full text from each stream
+      const text1 = collector1.getFullStreamText().toUpperCase()
+      const text2 = collector2.getFullStreamText().toUpperCase()
+
+      // Both should have content
+      expect(text1.length).toBeGreaterThan(0)
+      expect(text2.length).toBeGreaterThan(0)
+
+      // Verify each stream contains its expected keyword
+      expect(text1).toContain('FIRST')
+      expect(text2).toContain('SECOND')
+
+      // Verify streams are NOT mixed - each should only have its own content
+      expect(text1).not.toContain('SECOND')
+      expect(text2).not.toContain('FIRST')
     },
     DEFAULT_TIMEOUT * 2,
   )

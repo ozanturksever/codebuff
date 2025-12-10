@@ -39,18 +39,20 @@ describe('Streaming: Subagent Streaming', () => {
       const subagentStarts = collector.getEventsByType('subagent_start')
       const subagentFinishes = collector.getEventsByType('subagent_finish')
 
-      // If subagents were spawned, starts and finishes should match
-      if (subagentStarts.length > 0) {
-        // Each started subagent should have a finish
-        for (const start of subagentStarts) {
-          const matchingFinish = subagentFinishes.find(
-            (f) => f.agentId === start.agentId,
-          )
-          // Subagent should eventually finish (or the run ends)
-          expect(start.agentId).toBeDefined()
-          expect(start.agentType).toBeDefined()
-          expect(start.displayName).toBeDefined()
-        }
+      // The prompt should trigger file search which spawns a subagent
+      // If no subagents were spawned, the test isn't validating what we intend
+      expect(subagentStarts.length).toBeGreaterThan(0)
+
+      // Each started subagent should have a finish
+      for (const start of subagentStarts) {
+        const matchingFinish = subagentFinishes.find(
+          (f) => f.agentId === start.agentId,
+        )
+        // Subagent should eventually finish
+        expect(matchingFinish).toBeDefined()
+        expect(start.agentId).toBeDefined()
+        expect(start.agentType).toBeDefined()
+        expect(start.displayName).toBeDefined()
       }
     },
     DEFAULT_TIMEOUT * 2,
@@ -71,6 +73,9 @@ describe('Streaming: Subagent Streaming', () => {
       })
 
       const subagentStarts = collector.getEventsByType('subagent_start')
+
+      // Ensure we actually got subagent events to validate
+      expect(subagentStarts.length).toBeGreaterThan(0)
 
       for (const event of subagentStarts) {
         // Required fields
@@ -105,22 +110,26 @@ describe('Streaming: Subagent Streaming', () => {
         cwd: process.cwd(),
       })
 
+      // Verify we got subagent events (prompt should trigger file exploration)
+      const subagentStarts = collector.getEventsByType('subagent_start')
+      expect(subagentStarts.length).toBeGreaterThan(0)
+
       // Check for subagent chunks in stream
       const subagentChunks = collector.streamChunks.filter(
         (c): c is Extract<typeof c, { type: 'subagent_chunk' }> =>
           typeof c !== 'string' && c.type === 'subagent_chunk',
       )
 
-      // If there are subagent events, there might be subagent chunks
-      const subagentStarts = collector.getEventsByType('subagent_start')
-      if (subagentStarts.length > 0 && subagentChunks.length > 0) {
-        // Verify chunk structure
+      // If there are subagent chunks, verify their structure
+      if (subagentChunks.length > 0) {
         for (const chunk of subagentChunks) {
           expect(chunk.agentId).toBeDefined()
           expect(chunk.agentType).toBeDefined()
           expect(typeof chunk.chunk).toBe('string')
         }
       }
+      // Note: Subagent chunks may not always be present even with subagent events
+      // (e.g., if the subagent completes very quickly without streaming)
     },
     DEFAULT_TIMEOUT * 2,
   )
@@ -139,6 +148,9 @@ describe('Streaming: Subagent Streaming', () => {
       })
 
       const subagentStarts = collector.getEventsByType('subagent_start')
+
+      // Ensure we got subagent events to validate uniqueness
+      expect(subagentStarts.length).toBeGreaterThan(0)
 
       // Check for duplicates by agentId
       const agentIds = subagentStarts.map((s) => s.agentId)
