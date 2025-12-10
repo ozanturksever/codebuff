@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { getCurrentChatId } from '../project-files'
 import { flushAnalytics } from '../utils/analytics'
+import { scheduleGracefulExit } from '../utils/graceful-exit'
 
 import type { InputValue } from '../state/chat-store'
 
@@ -66,18 +67,7 @@ export const useExitHandler = ({
       exitFallbackTimeoutRef.current = null
     }
 
-    try {
-      process.stdout.write('\nGoodbye! Exiting...\n')
-      // Ensure a clear exit marker is rendered for terminal snapshots
-      process.stdout.write('exit\n')
-    } catch {
-      // Ignore stdout write errors during shutdown
-    }
-
-    // Give the terminal a moment to render the exit message before terminating
-    setTimeout(() => {
-      process.exit(0)
-    }, 25)
+    scheduleGracefulExit()
   }, [])
 
   const flushAnalyticsWithTimeout = useCallback(async (timeoutMs = 1000) => {
