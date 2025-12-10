@@ -69,6 +69,21 @@ export const useExitHandler = ({
     }
 
     scheduleGracefulExit()
+    // Belt-and-suspenders: if graceful exit stalls, force a SIGINT/exit shortly after.
+    setTimeout(() => {
+      try {
+        process.kill(process.pid, 'SIGINT')
+      } catch {
+        // ignore
+      }
+    }, 80)
+    setTimeout(() => {
+      try {
+        process.exit(0)
+      } catch {
+        // ignore
+      }
+    }, 400)
   }, [])
 
   const flushAnalyticsWithTimeout = useCallback(async (timeoutMs = 1000) => {
