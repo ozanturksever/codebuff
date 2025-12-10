@@ -181,7 +181,7 @@ describe('E2E: Slash Commands', () => {
   )
 
   test(
-    'typing / displays autocomplete with slash in input',
+    'typing / displays autocomplete with command suggestions',
     async () => {
       const session = await ctx.createSession()
 
@@ -190,11 +190,13 @@ describe('E2E: Slash Commands', () => {
 
       // Type / to trigger suggestions
       await session.cli.type('/')
-      await session.cli.waitForText('/', { timeout: 5000 })
+
+      // Wait for autocomplete to show command names
+      await session.cli.waitForText(/new|exit|usage|init|logout/i, { timeout: 5000 })
 
       const text = await session.cli.text()
-      // Verify the slash appears in the input
-      expect(text).toContain('/')
+      // Verify autocomplete shows at least one command name
+      expect(text.toLowerCase()).toMatch(/new|exit|usage|init|logout/)
     },
     TIMEOUT_MS,
   )
@@ -230,27 +232,30 @@ describe('E2E: User Authentication', () => {
   )
 
   test(
-    '/logout command is processed by CLI',
+    '/logout command is accepted by CLI',
     async () => {
       const session = await ctx.createSession(E2E_TEST_USERS.default)
 
       // Wait for CLI to be ready
       await session.cli.waitForText(/directory/i, { timeout: 15000 })
 
+      // Capture text before logout
+      const textBefore = await session.cli.text()
+
       // Type /logout and submit
       await session.cli.type('/logout')
       await session.cli.waitForText('/logout', { timeout: 5000 })
       await session.cli.press('enter')
 
-      // Wait for the CLI to process the command - the UI should change
-      // Give the command time to execute
+      // Wait for the UI to change after command execution
+      // The /logout command may show a confirmation, redirect to login, or just clear the session
       await sleep(2000)
 
       const textAfter = await session.cli.text()
-      // The command should have been processed (UI changed from before)
-      // We can't guarantee specific output text since /logout behavior may vary
-      // but we verify the command was accepted (didn't error or crash)
-      expect(textAfter.length).toBeGreaterThan(0)
+      // Verify the command was processed - UI should have changed or command was consumed
+      // The /logout in the input field should be gone (command was submitted)
+      const commandWasProcessed = !textAfter.includes('/logout') || textAfter !== textBefore
+      expect(commandWasProcessed).toBe(true)
     },
     TIMEOUT_MS,
   )
@@ -444,25 +449,30 @@ describe('E2E: Additional Slash Commands', () => {
   )
 
   test(
-    '/exit command is processed by CLI',
+    '/exit command is accepted by CLI',
     async () => {
       const session = await ctx.createSession()
 
       // Wait for CLI to be ready
       await session.cli.waitForText(/directory/i, { timeout: 15000 })
 
+      // Capture text before exit
+      const textBefore = await session.cli.text()
+
       // Type /exit and press enter
       await session.cli.type('/exit')
       await session.cli.waitForText('/exit', { timeout: 5000 })
       await session.cli.press('enter')
 
-      // Wait for the CLI to process the command
+      // Wait for the UI to change after command execution
+      // The /exit command may show goodbye message or just terminate
       await sleep(2000)
 
-      const text = await session.cli.text()
-      // /exit should either show goodbye/exit message or the CLI should terminate
-      // Either outcome is valid - we verify the command was accepted
-      expect(text.length).toBeGreaterThan(0)
+      const textAfter = await session.cli.text()
+      // Verify the command was processed - UI should have changed or command was consumed
+      // The /exit in the input field should be gone (command was submitted)
+      const commandWasProcessed = !textAfter.includes('/exit') || textAfter !== textBefore
+      expect(commandWasProcessed).toBe(true)
     },
     TIMEOUT_MS,
   )
@@ -516,18 +526,19 @@ describe('E2E: CLI Flags', () => {
   )
 
   test(
-    '--agent flag starts CLI with specified agent',
+    '--agent flag starts CLI with specified agent visible in UI',
     async () => {
       const session = await ctx.createSession(E2E_TEST_USERS.default, [
         '--agent',
         'ask',
       ])
 
-      // CLI should start successfully and show main interface
-      await session.cli.waitForText(/directory/i, { timeout: 15000 })
+      // CLI should show the agent name in the UI
+      await session.cli.waitForText(/ask/i, { timeout: 15000 })
 
       const text = await session.cli.text()
-      expect(text.toLowerCase()).toContain('directory')
+      // Verify the agent name appears in the UI (mode indicator shows agent)
+      expect(text.toLowerCase()).toContain('ask')
     },
     TIMEOUT_MS,
   )

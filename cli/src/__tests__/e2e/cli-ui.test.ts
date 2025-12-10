@@ -189,14 +189,17 @@ describe('CLI UI Tests', () => {
     )
 
     test(
-      'accepts --agent flag without crashing',
+      '--agent flag sets the specified agent',
       async () => {
         const session = await launchCLI({ args: ['--agent', 'ask'] })
 
         try {
-          await session.waitForText(/ask|codebuff|login/i, { timeout: 15000 })
+          // Wait for the CLI to load and show the agent indicator
+          await session.waitForText(/ask/i, { timeout: 15000 })
 
           const text = await session.text()
+          // Verify the agent name appears in the UI (mode indicator shows agent)
+          expect(text.toLowerCase()).toContain('ask')
           expect(text.toLowerCase()).not.toContain('unknown option')
         } finally {
           await session.press(['ctrl', 'c'])
@@ -253,10 +256,9 @@ describe('CLI UI Tests', () => {
             // Process may have exited before message was captured - that's OK
           }
 
-          // Verify CLI responded to Ctrl+C
-          // If we get here without error, the test passed - the process either:
-          // 1. Showed the goodbye message (caught above)
-          // 2. Exited cleanly before we could capture the message
+          // Verify CLI showed the goodbye message (graceful exit indicator)
+          const text = await session.text()
+          expect(text.toLowerCase()).toMatch(/goodbye|exiting|continue this session/)
         } finally {
           session.close()
         }
@@ -349,7 +351,7 @@ describe('CLI UI Tests', () => {
 
   describe('slash commands', () => {
     test(
-      'typing / triggers autocomplete menu',
+      'typing / triggers autocomplete menu with command suggestions',
       async () => {
         const session = await launchCLI({ args: [] })
 
@@ -360,14 +362,13 @@ describe('CLI UI Tests', () => {
           // Type a slash to trigger command suggestions
           await session.type('/')
 
-          // Wait for autocomplete to show - it should display a list with "/" prefix
-          // The autocomplete shows command names, so we look for the slash in input
-          // plus any command-like pattern in the suggestions
-          await session.waitForText('/', { timeout: 5000 })
+          // Wait for autocomplete to show command suggestions
+          // The autocomplete should display actual command names like new, exit, usage
+          await session.waitForText(/new|exit|usage|init|logout/i, { timeout: 5000 })
 
           const text = await session.text()
-          // Verify the slash was typed and CLI is responsive
-          expect(text).toContain('/')
+          // Verify autocomplete shows at least one command name
+          expect(text.toLowerCase()).toMatch(/new|exit|usage|init|logout/)
         } finally {
           await session.press(['ctrl', 'c'])
           session.close()

@@ -177,6 +177,9 @@ export interface E2ETestContext {
   cleanup: () => Promise<void>
 }
 
+// Track if global cleanup has already run in this process
+let globalCleanupRan = false
+
 /**
  * Create a full e2e test context with database, server, and CLI utilities
  */
@@ -189,9 +192,14 @@ export async function createE2ETestContext(describeId: string): Promise<E2ETestC
   } = await import('./test-db-utils')
   const { startE2EServer, stopE2EServer, cleanupOrphanedServers } = await import('./test-server-utils')
 
-  // Clean up any leftovers from previous runs (important on CI retries)
-  cleanupOrphanedContainers()
-  cleanupOrphanedServers()
+  // Only run global cleanup once per process to avoid killing sibling test contexts
+  // This cleanup is for leftover containers/servers from crashed previous runs,
+  // not for cleaning up between parallel describe blocks in the same run
+  if (!globalCleanupRan) {
+    globalCleanupRan = true
+    cleanupOrphanedContainers()
+    cleanupOrphanedServers()
+  }
 
   // Start database
   const db = await createE2EDatabase(describeId)
