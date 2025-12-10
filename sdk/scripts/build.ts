@@ -6,6 +6,10 @@ import Module from 'module'
 import { delimiter, join } from 'path'
 
 import { generateDtsBundle } from 'dts-bundle-generator'
+import { exec as execCb } from 'child_process'
+import { promisify } from 'util'
+
+const exec = promisify(execCb)
 
 const workspaceNodeModules = join(import.meta.dir, '..', 'node_modules')
 const existingNodePath = process.env.NODE_PATH ?? ''
@@ -92,7 +96,11 @@ async function build() {
 
   console.log('📝 Generating and bundling TypeScript declarations...')
   let dtsBundlingFailed = false
+  let cleanupCommonDts: () => Promise<void> = async () => {}
   try {
+    // Emit declarations for @codebuff/common so the SDK bundle can resolve its types
+    cleanupCommonDts = await emitCommonDeclarations()
+
     const [bundle] = generateDtsBundle(
       [
         {
@@ -113,6 +121,10 @@ async function build() {
   } catch (error) {
     dtsBundlingFailed = true
     console.error('❌ TypeScript declaration bundling failed:', error.message)
+  } finally {
+    await cleanupCommonDts().catch((err) =>
+      console.warn('⚠ Failed to clean generated common declarations:', err),
+    )
   }
 
   console.log('📂 Copying WASM files for tree-sitter...')
@@ -128,6 +140,62 @@ async function build() {
 
   if (dtsBundlingFailed) {
     throw new Error('TypeScript declaration bundling failed')
+  }
+}
+
+async function emitCommonDeclarations(): Promise<() => Promise<void>> {
+  const repoRoot = join(import.meta.dir, '..', '..')
+  const commonSrcDir = join(repoRoot, 'node_modules', '@codebuff', 'common', 'src')
+
+  // Gather all common source files excluding tests to avoid noisy type errors
+  const { stdout: fileList } = await exec(
+    `cd ${repoRoot} && find common/src -name '*.ts' ! -path '*__tests__*'`,
+  )
+  const files = fileList
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(' ')
+
+  const cmd = [
+    'bun x tsc',
+    '--emitDeclarationOnly',
+    '--declaration',
+    '--noEmit false',
+    '--moduleResolution bundler',
+    '--module ESNext',
+    '--target ES2023',
+    "--lib 'ES2023,DOM'",
+    '--types bun,node',
+    '--allowImportingTsExtensions true',
+    '--skipLibCheck',
+    '--strict',
+    `--rootDir common/src`,
+    `--declarationDir ${commonSrcDir}`,
+    files,
+  ].join(' ')
+
+  const { stdout, stderr } = await exec(cmd, { cwd: repoRoot })
+  if (stdout) console.log(stdout.trim())
+  if (stderr) console.error(stderr.trim())
+
+  return async () => {
+    const { stdout } = await exec(
+      `cd ${repoRoot} && git ls-files --others --exclude-standard common/src`,
+    )
+    const files = stdout
+      .split('\n')
+      .map((s) => s.trim())
+      .filter((s) => s.endsWith('.d.ts'))
+
+    if (files.length === 0) return
+
+    const chunkSize = 50
+    for (let i = 0; i < files.length; i += chunkSize) {
+      const chunk = files.slice(i, i + chunkSize)
+      const quoted = chunk.map((f) => `"${f}"`).join(' ')
+      await exec(`cd ${repoRoot} && rm -f ${quoted}`)
+    }
   }
 }
 
