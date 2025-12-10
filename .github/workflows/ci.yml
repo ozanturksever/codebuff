@@ -86,6 +86,7 @@ jobs:
           [
             .agents,
             backend,
+            cli,
             common,
             npm-app,
             packages/agent-runtime,
@@ -97,6 +98,7 @@ jobs:
         include:
           - package: .agents
           - package: backend
+          - package: cli
           - package: common
           - package: npm-app
           - package: packages/agent-runtime
