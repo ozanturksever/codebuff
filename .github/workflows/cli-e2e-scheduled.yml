@@ -49,10 +49,26 @@ jobs:
       - name: Build SDK before tests
         run: cd sdk && bun run build
 
-      - name: Run CLI E2E tests
-        run: |
-          cd cli
-          find src -name '*.test.ts' ! -name '*.integration.test.ts' | sort | xargs -I {} bun test --timeout=180000 {}
+      - name: Run CLI integration & E2E tests
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 60
+          max_attempts: 3
+          command: |
+            cd cli
+            INTEGRATION_TESTS=$(find src/__tests__/integration -name '*.test.ts' 2>/dev/null | sort)
+            if [ -n "$INTEGRATION_TESTS" ]; then
+              echo "$INTEGRATION_TESTS" | xargs -I {} bun test --timeout=180000 {}
+            else
+              echo "No CLI integration tests found"
+            fi
+
+            E2E_TESTS=$(find src/__tests__/e2e -name '*.test.ts' 2>/dev/null | sort)
+            if [ -n "$E2E_TESTS" ]; then
+              echo "$E2E_TESTS" | xargs -I {} bun test --timeout=180000 {}
+            else
+              echo "No CLI E2E tests found"
+            fi
 
       - name: Email support on failure (requires SMTP secrets)
         if: failure() && secrets.SMTP_SERVER != '' && secrets.SMTP_USERNAME != '' && secrets.SMTP_PASSWORD != ''

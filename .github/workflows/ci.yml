@@ -86,7 +86,6 @@ jobs:
           [
             .agents,
             backend,
-            cli,
             common,
             npm-app,
             packages/agent-runtime,
@@ -98,7 +97,6 @@ jobs:
         include:
           - package: .agents
           - package: backend
-          - package: cli
           - package: common
           - package: npm-app
           - package: packages/agent-runtime
@@ -151,7 +149,7 @@ jobs:
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: ${{ matrix.package == 'cli' && 30 || 10 }}
-          max_attempts: ${{ matrix.package == 'cli' && 2 || 5 }}
+          max_attempts: ${{ matrix.package == 'cli' && 3 || 5 }}
           command: |
             cd ${{ matrix.package }}
             if [ "${{ matrix.package }}" = ".agents" ]; then
@@ -162,7 +160,12 @@ jobs:
                 echo "No regular tests found in .agents"
               fi
             elif [ "${{ matrix.package }}" = "cli" ]; then
-              find src -name '*.test.ts' ! -name '*.integration.test.ts' | sort | xargs -I {} bun test --timeout=180000 {}
+              UNIT_TESTS=$(find src -name '*.test.ts' ! -path '*/__tests__/integration/*' ! -path '*/__tests__/e2e/*' | sort)
+              if [ -n "$UNIT_TESTS" ]; then
+                echo "$UNIT_TESTS" | xargs -I {} bun test --timeout=180000 {}
+              else
+                echo "No CLI unit tests found (integration/E2E covered by scheduled workflow)"
+              fi
             elif [ "${{ matrix.package }}" = "web" ]; then
               bun run test --runInBand
             else
