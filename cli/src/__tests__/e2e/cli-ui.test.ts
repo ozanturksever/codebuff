@@ -267,20 +267,34 @@ describe('CLI UI Tests', () => {
           // Wait for initial render
           await sleep(2000)
 
-          // Press Ctrl+C twice to exit (first shows warning, second exits)
+          // Press Ctrl+C once - this should show the exit warning
           await session.press(['ctrl', 'c'])
-          await sleep(500)
-          await session.press(['ctrl', 'c'])
-
-          // Give time for process to exit
           await sleep(1000)
 
-          const text = await session.text()
-          const exited =
-            text.toLowerCase().includes('exit') ||
-            text.toLowerCase().includes('goodbye') ||
-            text.toLowerCase().includes('quit') ||
-            text.trim().length === 0
+          // Capture text after first Ctrl+C (should show warning)
+          const textAfterFirstCtrlC = await session.text()
+
+          // Press Ctrl+C again - this should trigger exit
+          await session.press(['ctrl', 'c'])
+
+          // Wait for exit message to appear (gracefulExit prints "Goodbye! Exiting...")
+          try {
+            await session.waitForText(/goodbye|exiting/i, { timeout: 5000 })
+          } catch {
+            // If waitForText times out, the process may have exited without printing
+          }
+
+          const textAfterSecondCtrlC = await session.text()
+
+          // The CLI should either:
+          // 1. Show goodbye/exiting message (graceful exit message was captured)
+          // 2. Have changed from the first Ctrl+C state (something happened after second Ctrl+C)
+          const hasExitMessage =
+            textAfterSecondCtrlC.toLowerCase().includes('goodbye') ||
+            textAfterSecondCtrlC.toLowerCase().includes('exiting')
+          const textChanged = textAfterSecondCtrlC !== textAfterFirstCtrlC
+
+          const exited = hasExitMessage || textChanged
           expect(exited).toBe(true)
         } finally {
           session.close()

@@ -534,7 +534,12 @@ describe('E2E: CLI Flags', () => {
         '--help',
       ])
 
-      await sleep(3000)
+      // Wait for help content to appear
+      try {
+        await session.cli.waitForText(/usage|options|help|command|--/i, { timeout: 10000 })
+      } catch {
+        // If timeout, continue and check what we have
+      }
 
       const text = await session.cli.text()
       // Should show help content
@@ -662,23 +667,37 @@ describe('E2E: Keyboard Interactions', () => {
 
       await sleep(5000)
 
-      // Press Ctrl+C twice
+      // Press Ctrl+C once - this should show the exit warning
       await session.cli.press(['ctrl', 'c'])
-      await sleep(500)
-      await session.cli.press(['ctrl', 'c'])
-      await sleep(1500)
+      await sleep(1000)
 
-      // Either the CLI exits or remains responsive to further input
-      await session.cli.type('ping')
-      await sleep(500)
-      const text = await session.cli.text()
-      const exited =
-        text.toLowerCase().includes('exit') ||
-        text.toLowerCase().includes('goodbye') ||
-        text.toLowerCase().includes('quit') ||
-        text.trim().length === 0
-      const responsive = text.toLowerCase().includes('ping')
-      expect(exited || responsive).toBe(true)
+      // Capture text after first Ctrl+C (should show warning)
+      const textAfterFirstCtrlC = await session.cli.text()
+
+      // Press Ctrl+C again - this should trigger exit
+      await session.cli.press(['ctrl', 'c'])
+
+      // Wait for exit message to appear (gracefulExit prints "Goodbye! Exiting...")
+      // Use waitForText which polls the terminal output until the text appears or timeout
+      try {
+        await session.cli.waitForText(/goodbye|exiting/i, { timeout: 5000 })
+      } catch {
+        // If waitForText times out, the process may have exited without printing
+        // (e.g., if stdout was closed before the message could be written)
+      }
+
+      const textAfterSecondCtrlC = await session.cli.text()
+
+      // The CLI should either:
+      // 1. Show goodbye/exiting message (graceful exit message was captured)
+      // 2. Have changed from the first Ctrl+C state (something happened after second Ctrl+C)
+      const hasExitMessage =
+        textAfterSecondCtrlC.toLowerCase().includes('goodbye') ||
+        textAfterSecondCtrlC.toLowerCase().includes('exiting')
+      const textChanged = textAfterSecondCtrlC !== textAfterFirstCtrlC
+
+      const exited = hasExitMessage || textChanged
+      expect(exited).toBe(true)
     },
     TIMEOUT_MS,
   )
