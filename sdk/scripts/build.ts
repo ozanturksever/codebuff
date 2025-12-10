@@ -91,6 +91,7 @@ async function build() {
   })
 
   console.log('📝 Generating and bundling TypeScript declarations...')
+  let dtsBundlingFailed = false
   try {
     const [bundle] = generateDtsBundle(
       [
@@ -110,7 +111,8 @@ async function build() {
     await fixDuplicateImports()
     console.log('  ✓ Created bundled type definitions')
   } catch (error) {
-    console.warn('⚠ TypeScript declaration bundling failed:', error.message)
+    dtsBundlingFailed = true
+    console.error('❌ TypeScript declaration bundling failed:', error.message)
   }
 
   console.log('📂 Copying WASM files for tree-sitter...')
@@ -123,6 +125,10 @@ async function build() {
   console.log('  📄 dist/index.mjs (ESM)')
   console.log('  📄 dist/index.cjs (CJS)')
   console.log('  📄 dist/index.d.ts (Types)')
+
+  if (dtsBundlingFailed) {
+    throw new Error('TypeScript declaration bundling failed')
+  }
 }
 
 /**
@@ -203,5 +209,8 @@ async function copyRipgrepVendor() {
 }
 
 if (import.meta.main) {
-  build().catch(console.error)
+  build().catch((error) => {
+    console.error(error)
+    process.exit(1)
+  })
 }
