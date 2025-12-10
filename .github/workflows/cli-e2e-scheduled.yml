@@ -3,7 +3,9 @@ name: CLI E2E Scheduled
 on:
   workflow_dispatch:
   push:
-    branches: ['**']
+    branches:
+      - '*'
+      - '*/*'
     paths:
       - 'cli/**'
       - 'common/**'
