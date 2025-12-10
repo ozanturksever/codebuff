@@ -45,6 +45,7 @@ export const useExitHandler = ({
     null,
   )
   const exitScheduledRef = useRef(false)
+  const lastCtrlCHandledAtRef = useRef<number>(0)
 
   useEffect(() => {
     setupExitMessageHandler()
@@ -87,6 +88,12 @@ export const useExitHandler = ({
   }, [])
 
   const handleCtrlC = useCallback(() => {
+    const now = Date.now()
+    if (now - lastCtrlCHandledAtRef.current < 50) {
+      return true
+    }
+    lastCtrlCHandledAtRef.current = now
+
     if (inputValue) {
       setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
       return true
@@ -113,6 +120,35 @@ export const useExitHandler = ({
     exitNow()
     return true
   }, [flushAnalyticsWithTimeout, exitNow, inputValue, setInputValue, nextCtrlCWillExit])
+
+  useEffect(() => {
+    if (!process.stdin || typeof process.stdin.on !== 'function') return
+
+    const handleRawCtrlC = (chunk: Buffer | string) => {
+      const data = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+      if (!data.includes('\u0003')) {
+        return
+      }
+
+      const now = Date.now()
+      // Avoid double-handling the same Ctrl+C event from both keypress and raw listeners
+      if (now - lastCtrlCHandledAtRef.current < 50) {
+        return
+      }
+
+      handleCtrlC()
+    }
+
+    process.stdin.on('data', handleRawCtrlC)
+
+    return () => {
+      if (typeof process.stdin.off === 'function') {
+        process.stdin.off('data', handleRawCtrlC)
+      } else {
+        process.stdin.removeListener('data', handleRawCtrlC as any)
+      }
+    }
+  }, [handleCtrlC])
 
   useEffect(() => {
     const handleSigint = () => {
