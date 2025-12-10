@@ -162,6 +162,14 @@ jobs:
                 echo "No regular tests found in .agents"
               fi
             elif [ "${{ matrix.package }}" = "cli" ]; then
+              export NEXT_PUBLIC_CB_ENVIRONMENT=${NEXT_PUBLIC_CB_ENVIRONMENT:-test}
+              export NEXT_PUBLIC_CODEBUFF_APP_URL=${NEXT_PUBLIC_CODEBUFF_APP_URL:-https://example.com}
+              export NEXT_PUBLIC_SUPPORT_EMAIL=${NEXT_PUBLIC_SUPPORT_EMAIL:-support@example.com}
+              export NEXT_PUBLIC_POSTHOG_API_KEY=${NEXT_PUBLIC_POSTHOG_API_KEY:-test}
+              export NEXT_PUBLIC_POSTHOG_HOST_URL=${NEXT_PUBLIC_POSTHOG_HOST_URL:-https://app.posthog.com}
+              export NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-pk_test_dummy}
+              export NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL=${NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL:-https://example.com/portal}
+              export NEXT_PUBLIC_WEB_PORT=${NEXT_PUBLIC_WEB_PORT:-3000}
               UNIT_TESTS=$(find src -name '*.test.ts' ! -path '*/__tests__/integration/*' ! -path '*/__tests__/e2e/*' | sort)
               if [ -n "$UNIT_TESTS" ]; then
                 echo "$UNIT_TESTS" | xargs -I {} bun test --timeout=180000 {}

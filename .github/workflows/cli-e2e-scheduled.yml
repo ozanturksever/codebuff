@@ -2,13 +2,21 @@ name: CLI E2E Scheduled
 
 on:
   workflow_dispatch:
+  push:
+    branches: ['**']
+    paths:
+      - 'cli/**'
+      - 'common/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'bun.lock'
+      - '.github/workflows/cli-e2e-scheduled.yml'
   schedule:
     # 5am PT (13:00 UTC standard time)
     - cron: '0 13 * * *'
 
 jobs:
   cli-e2e:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
