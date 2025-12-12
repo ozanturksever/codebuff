@@ -1,0 +1,112 @@
+name: E2E Login Flow Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run nightly at 6am PT (14:00 UTC) to avoid OAuth rate limits
+    - cron: '0 14 * * *'
+
+jobs:
+  e2e-login-flow:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check for required secrets
+        id: check-secrets
+        run: |
+          if [ -z "${{ secrets.GH_TEST_EMAIL }}" ] || [ -z "${{ secrets.GH_TEST_PASSWORD }}" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "⚠️ GitHub test credentials not configured - skipping tests"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repository
+        if: steps.check-secrets.outputs.skip != 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        if: steps.check-secrets.outputs.skip != 'true'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.0'
+
+      - name: Cache dependencies
+        if: steps.check-secrets.outputs.skip != 'true'
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            */node_modules
+            packages/*/node_modules
+          key: ${{ runner.os }}-deps-${{ hashFiles('**/bun.lock*') }}
+          restore-keys: |
+            ${{ runner.os }}-deps-
+
+      - name: Install system dependencies
+        if: steps.check-secrets.outputs.skip != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client lsof
+
+      - name: Install dependencies
+        if: steps.check-secrets.outputs.skip != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        if: steps.check-secrets.outputs.skip != 'true'
+        run: cd e2e && bunx playwright install chromium --with-deps
+
+      - name: Set environment variables
+        if: steps.check-secrets.outputs.skip != 'true'
+        env:
+          SECRETS_CONTEXT: ${{ toJSON(secrets) }}
+        run: |
+          VAR_NAMES=$(bun scripts/generate-ci-env.ts)
+          echo "$SECRETS_CONTEXT" | jq -r --argjson vars "$VAR_NAMES" '
+            to_entries | .[] | select(.key as $k | $vars | index($k)) | .key + "=" + .value
+          ' >> $GITHUB_ENV
+          echo "CODEBUFF_GITHUB_ACTIONS=true" >> $GITHUB_ENV
+          echo "NEXT_PUBLIC_CB_ENVIRONMENT=test" >> $GITHUB_ENV
+          echo "NEXT_PUBLIC_INFISICAL_UP=true" >> $GITHUB_ENV
+          # GitHub test account credentials
+          echo "GH_TEST_EMAIL=${{ secrets.GH_TEST_EMAIL }}" >> $GITHUB_ENV
+          echo "GH_TEST_PASSWORD=${{ secrets.GH_TEST_PASSWORD }}" >> $GITHUB_ENV
+          echo "GH_TEST_TOTP_SECRET=${{ secrets.GH_TEST_TOTP_SECRET }}" >> $GITHUB_ENV
+
+      - name: Build SDK
+        if: steps.check-secrets.outputs.skip != 'true'
+        run: cd sdk && bun run build
+
+      - name: Run E2E Login Flow Tests
+        if: steps.check-secrets.outputs.skip != 'true'
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 30
+          max_attempts: 3
+          command: cd e2e && bun run test
+
+      - name: Upload Playwright Report
+        uses: actions/upload-artifact@v4
+        if: always() && steps.check-secrets.outputs.skip != 'true'
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7
+
+      - name: Upload Test Screenshots
+        uses: actions/upload-artifact@v4
+        if: failure() && steps.check-secrets.outputs.skip != 'true'
+        with:
+          name: test-screenshots
+          path: e2e/test-results/
+          retention-days: 7
+
+      - name: Log skip reason
+        if: steps.check-secrets.outputs.skip == 'true'
+        run: |
+          echo "E2E Login Flow tests skipped: GitHub test account credentials not configured."
+          echo "To enable these tests, add the following secrets:"
+          echo "  - GH_TEST_EMAIL"
+          echo "  - GH_TEST_PASSWORD"
+          echo "  - GH_TEST_TOTP_SECRET (if 2FA is enabled on the test account)"
