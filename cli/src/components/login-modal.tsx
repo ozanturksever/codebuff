@@ -198,6 +198,29 @@ export const LoginModal = ({
     }
   }, [hasOpenedBrowser, loginUrl, copyToClipboard])
 
+  // E2E auto-login: automatically trigger login URL fetch without waiting for Enter key
+  // This is needed because OpenTUI keyboard events don't work reliably in PTY testing
+  // The auto-login only activates when CODEBUFF_E2E_NO_BROWSER=true
+  const hasTriggeredAutoLogin = useRef(false)
+  
+  useEffect(() => {
+    const isE2EMode = process.env.CODEBUFF_E2E_NO_BROWSER === 'true'
+    
+    if (!isE2EMode) return
+    if (hasTriggeredAutoLogin.current) return
+    if (hasOpenedBrowser || loading) return
+    
+    // Mark as triggered immediately to prevent double-triggering
+    hasTriggeredAutoLogin.current = true
+    
+    // Small delay to ensure component is fully mounted
+    const timer = setTimeout(() => {
+      fetchLoginUrlAndOpenBrowser()
+    }, 1000)
+    
+    return () => clearTimeout(timer)
+  }, [hasOpenedBrowser, loading, fetchLoginUrlAndOpenBrowser])
+
   // Calculate terminal width and height for responsive display
   const terminalWidth = renderer?.width || 80
   const terminalHeight = renderer?.height || 24

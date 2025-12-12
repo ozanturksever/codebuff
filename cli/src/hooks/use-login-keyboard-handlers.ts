@@ -27,6 +27,11 @@ export function useLoginKeyboardHandlers({
   useKeyboard(
     useCallback(
       (key: KeyEvent) => {
+        // Debug: log ALL key events in e2e mode
+        if (process.env.CODEBUFF_E2E_NO_BROWSER === 'true') {
+          process.stderr.write(`[E2E_KEY] Received key: ${key.name}, loading=${loading}, hasOpenedBrowser=${hasOpenedBrowser}\n`)
+        }
+        
         const isEnter =
           (key.name === 'return' || key.name === 'enter') &&
           !key.ctrl &&

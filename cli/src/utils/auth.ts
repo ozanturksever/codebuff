@@ -30,13 +30,17 @@ const credentialsSchema = z
 
 // Get the config directory path
 export const getConfigDir = (): string => {
+  // Use process.env directly for e2e tests where environment is set per-process
+  // Fall back to parsed env for normal operation
+  const cbEnvironment = process.env.NEXT_PUBLIC_CB_ENVIRONMENT || env.NEXT_PUBLIC_CB_ENVIRONMENT
+  
   return path.join(
     os.homedir(),
     '.config',
     'manicode' +
       // on a development stack?
-      (env.NEXT_PUBLIC_CB_ENVIRONMENT !== 'prod'
-        ? `-${env.NEXT_PUBLIC_CB_ENVIRONMENT}`
+      (cbEnvironment !== 'prod'
+        ? `-${cbEnvironment}`
         : ''),
   )
 }

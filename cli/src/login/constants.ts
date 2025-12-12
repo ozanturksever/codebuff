@@ -1,7 +1,22 @@
 import { env } from '@codebuff/common/env'
 
 // Get the website URL from environment or use default
+// This is the static version - prefer getWebsiteUrl() for dynamic access
 export const WEBSITE_URL = env.NEXT_PUBLIC_CODEBUFF_APP_URL
+
+/**
+ * Get website URL dynamically from process.env.
+ * This is needed for e2e tests where the URL is set per-process
+ * and the static WEBSITE_URL constant is evaluated at module load time.
+ */
+export function getWebsiteUrl(): string {
+  // Check process.env first (for e2e tests with custom server)
+  if (process.env.NEXT_PUBLIC_CODEBUFF_APP_URL) {
+    return process.env.NEXT_PUBLIC_CODEBUFF_APP_URL
+  }
+  // Fall back to the statically parsed env
+  return WEBSITE_URL
+}
 
 // Codebuff ASCII Logo - compact version for 80-width terminals
 export const LOGO = `
