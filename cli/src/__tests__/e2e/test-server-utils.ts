@@ -2,9 +2,14 @@ import { spawn, execSync } from 'child_process'
 import { createServer } from 'net'
 import path from 'path'
 import http from 'http'
+import { fileURLToPath } from 'url'
 
 import type { ChildProcess } from 'child_process'
 import type { AddressInfo } from 'net'
+
+// ESM-compatible __dirname
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const WEB_DIR = path.join(__dirname, '../../../../web')
 
@@ -64,11 +69,19 @@ export async function findAvailableServerPort(basePort: number = 3100): Promise<
   return await reservePort(0)
 }
 
+export interface StartE2EServerOptions {
+  /** Specific port to use. If not provided, finds an available port starting from 3100 */
+  port?: number
+}
+
 /**
  * Start the web server for e2e tests
  */
-export async function startE2EServer(databaseUrl: string): Promise<E2EServer> {
-  const port = await findAvailableServerPort(3100)
+export async function startE2EServer(
+  databaseUrl: string,
+  options: StartE2EServerOptions = {},
+): Promise<E2EServer> {
+  const port = options.port ?? await findAvailableServerPort(3100)
   const url = `http://localhost:${port}`
   const backendUrl = url
 

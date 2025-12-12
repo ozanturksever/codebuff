@@ -12,7 +12,8 @@
     "evals",
     "sdk",
     ".agents",
-    "cli"
+    "cli",
+    "e2e"
   ],
   "scripts": {
     "dev": "bash scripts/dev.sh",

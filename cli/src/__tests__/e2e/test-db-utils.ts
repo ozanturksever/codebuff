@@ -1,6 +1,11 @@
 import { execSync } from 'child_process'
 import path from 'path'
 import fs from 'fs'
+import { fileURLToPath } from 'url'
+
+// ESM-compatible __dirname
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const INTERNAL_PKG_DIR = path.join(__dirname, '../../../../packages/internal')
 const DOCKER_COMPOSE_E2E = path.join(INTERNAL_PKG_DIR, 'src/db/docker-compose.e2e.yml')

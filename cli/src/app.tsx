@@ -168,6 +168,20 @@ export const App = ({
 
   // Render login modal when not authenticated AND auth service is reachable
   // Don't show login modal during network outages OR while retrying
+  // Also show login modal when requireAuth is explicitly true (no credentials at all)
+  if (
+    requireAuth === true &&
+    (isAuthenticated === false || isAuthenticated === null)
+  ) {
+    return (
+      <LoginModal
+        onLoginSuccess={handleLoginSuccess}
+        hasInvalidCredentials={hasInvalidCredentials}
+      />
+    )
+  }
+  
+  // Also show login for the case where we have credentials but they're invalid
   if (
     requireAuth !== null &&
     isAuthenticated === false &&
