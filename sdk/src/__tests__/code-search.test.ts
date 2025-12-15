@@ -1,24 +1,49 @@
 import { EventEmitter } from 'events'
 
-import {
-  clearMockedModules,
-  mockModule,
-} from '@codebuff/common/testing/mock-modules'
-import { describe, expect, it, mock, beforeEach, afterEach } from 'bun:test'
+import { describe, expect, it, beforeEach, afterEach, spyOn } from 'bun:test'
 
-import { codeSearch } from '../tools/code-search'
+import { codeSearchWithSpawn, type SpawnFn } from '../tools/code-search'
 
 import type { ChildProcess } from 'child_process'
 
-// Helper to create a mock child process
-function createMockChildProcess() {
-  const mockProcess = new EventEmitter() as ChildProcess & {
-    stdout: EventEmitter
-    stderr: EventEmitter
+// Helper to create a mock child process with proper ChildProcess shape
+function createMockChildProcess(): ChildProcess {
+  const proc = new EventEmitter() as ChildProcess
+  const stdout = new EventEmitter()
+  const stderr = new EventEmitter()
+  
+  Object.defineProperty(proc, 'stdout', { value: stdout, writable: false })
+  Object.defineProperty(proc, 'stderr', { value: stderr, writable: false })
+  Object.defineProperty(proc, 'stdin', { value: null, writable: false })
+  Object.defineProperty(proc, 'stdio', { value: [null, stdout, stderr], writable: false })
+  Object.defineProperty(proc, 'pid', { value: 12345, writable: false })
+  Object.defineProperty(proc, 'killed', { value: false, writable: true })
+  Object.defineProperty(proc, 'connected', { value: false, writable: false })
+  ;(proc as any).kill = () => true
+  ;(proc as any).disconnect = () => {}
+  ;(proc as any).unref = () => proc
+  ;(proc as any).ref = () => proc
+  
+  return proc
+}
+
+/** Creates a typed mock spawn function that captures calls and returns controlled processes */
+function createMockSpawn() {
+  let currentProcess: ChildProcess = createMockChildProcess()
+  const calls: Array<{ command: string; args: string[]; options: any }> = []
+  
+  const spawn: SpawnFn = (command, args, options) => {
+    calls.push({ command, args: [...args], options })
+    currentProcess = createMockChildProcess()
+    return currentProcess
   }
-  mockProcess.stdout = new EventEmitter() as any
-  mockProcess.stderr = new EventEmitter() as any
-  return mockProcess
+  
+  return {
+    spawn,
+    get process() { return currentProcess },
+    get calls() { return calls },
+    get lastCall() { return calls[calls.length - 1] },
+  }
 }
 
 // Helper to create ripgrep JSON match output
@@ -54,25 +79,17 @@ function createRgJsonContext(
 }
 
 describe('codeSearch', () => {
-  let mockSpawn: ReturnType<typeof mock>
-  let mockProcess: ReturnType<typeof createMockChildProcess>
+  let mockSpawn: ReturnType<typeof createMockSpawn>
 
-  beforeEach(async () => {
-    mockProcess = createMockChildProcess()
-    mockSpawn = mock(() => mockProcess)
-    await mockModule('child_process', () => ({
-      spawn: mockSpawn,
-    }))
+  beforeEach(() => {
+    mockSpawn = createMockSpawn()
   })
 
-  afterEach(() => {
-    mock.restore()
-    clearMockedModules()
-  })
+  afterEach(() => {})
 
   describe('basic search', () => {
     it('should parse standard ripgrep output without context flags', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'import',
       })
@@ -84,8 +101,8 @@ describe('codeSearch', () => {
         createRgJsonMatch('file2.ts', 10, 'import React from "react"'),
       ].join('\n')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       expect(result[0].type).toBe('json')
@@ -97,7 +114,7 @@ describe('codeSearch', () => {
 
   describe('context flags handling', () => {
     it('should correctly parse output with -A flag (after context)', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'import.*env',
         flags: '-A 2',
@@ -113,8 +130,8 @@ describe('codeSearch', () => {
         createRgJsonContext('other.ts', 7, 'const port = env.PORT'),
       ].join('\n')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       expect(result[0].type).toBe('json')
@@ -124,7 +141,7 @@ describe('codeSearch', () => {
       expect(value.stdout).toContain('import { env } from "./config"')
       expect(value.stdout).toContain('import env from "process"')
 
-      // Should contain context lines (this is the bug - they're currently missing)
+      // Should contain context lines
       expect(value.stdout).toContain('const apiUrl = env.API_URL')
       expect(value.stdout).toContain('const apiKey = env.API_KEY')
       expect(value.stdout).toContain('const nodeEnv = env.NODE_ENV')
@@ -132,7 +149,7 @@ describe('codeSearch', () => {
     })
 
     it('should correctly parse output with -B flag (before context)', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'export',
         flags: '-B 2',
@@ -148,8 +165,8 @@ describe('codeSearch', () => {
         createRgJsonMatch('utils.ts', 10, 'export function helper() {}'),
       ].join('\n')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -165,7 +182,7 @@ describe('codeSearch', () => {
     })
 
     it('should correctly parse output with -C flag (context before and after)', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'TODO',
         flags: '-C 1',
@@ -178,8 +195,8 @@ describe('codeSearch', () => {
         createRgJsonContext('code.ts', 7, '  return null'),
       ].join('\n')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -193,7 +210,7 @@ describe('codeSearch', () => {
     })
 
     it('should handle -A flag with multiple matches in same file', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'import',
         flags: '-A 1',
@@ -206,8 +223,8 @@ describe('codeSearch', () => {
         createRgJsonContext('file.ts', 4, ''),
       ].join('\n')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -221,7 +238,7 @@ describe('codeSearch', () => {
     })
 
     it('should handle -B flag at start of file', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'import',
         flags: '-B 2',
@@ -230,8 +247,8 @@ describe('codeSearch', () => {
       // First line match has no before context
       const output = createRgJsonMatch('file.ts', 1, 'import foo from "foo"')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -241,7 +258,7 @@ describe('codeSearch', () => {
     })
 
     it('should skip separator lines between result groups', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'test',
         flags: '-A 1',
@@ -252,8 +269,8 @@ describe('codeSearch', () => {
         createRgJsonMatch('file2.ts', 5, 'another test'),
       ].join('\n')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -265,7 +282,7 @@ describe('codeSearch', () => {
 
   describe('edge cases with context lines', () => {
     it('should handle filenames with hyphens correctly', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'import',
         flags: '-A 1',
@@ -276,8 +293,8 @@ describe('codeSearch', () => {
         createRgJsonMatch('other-file.ts', 5, 'import bar'),
       ].join('\n')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -290,7 +307,7 @@ describe('codeSearch', () => {
     })
 
     it('should handle filenames with multiple hyphens and underscores', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'test',
         flags: '-A 1',
@@ -302,8 +319,8 @@ describe('codeSearch', () => {
         'test content',
       )
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -314,7 +331,7 @@ describe('codeSearch', () => {
     })
 
     it('should not accumulate entire file content (regression test)', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'import.*env',
         flags: '-A 2',
@@ -326,8 +343,8 @@ describe('codeSearch', () => {
         createRgJsonMatch('other.ts', 1, 'import env'),
       ].join('\n')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -343,7 +360,7 @@ describe('codeSearch', () => {
 
   describe('result limiting with context lines', () => {
     it('should respect maxResults per file with context lines', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'test',
         flags: '-A 1',
@@ -361,8 +378,8 @@ describe('codeSearch', () => {
         createRgJsonContext('file.ts', 16, 'context 4'),
       ].join('\n')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -383,7 +400,7 @@ describe('codeSearch', () => {
     })
 
     it('should respect globalMaxResults with context lines', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'test',
         flags: '-A 1',
@@ -401,8 +418,8 @@ describe('codeSearch', () => {
         createRgJsonContext('file2.ts', 6, 'context 4'),
       ].join('\n')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -418,7 +435,7 @@ describe('codeSearch', () => {
     })
 
     it('should not count context lines toward maxResults limit', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'match',
         flags: '-A 2 -B 2',
@@ -433,8 +450,8 @@ describe('codeSearch', () => {
         createRgJsonContext('file.ts', 5, 'context after 2'),
       ].join('\n')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -452,7 +469,7 @@ describe('codeSearch', () => {
 
   describe('malformed output handling', () => {
     it('should skip lines without separator', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'test',
       })
@@ -463,8 +480,8 @@ describe('codeSearch', () => {
         createRgJsonMatch('file.ts', 2, 'another valid line'),
       ].join('\n')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -475,13 +492,13 @@ describe('codeSearch', () => {
     })
 
     it('should handle empty output', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'nonexistent',
       })
 
-      mockProcess.stdout.emit('data', Buffer.from(''))
-      mockProcess.emit('close', 1)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(''))
+      mockSpawn.process.emit('close', 1)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -495,15 +512,15 @@ describe('codeSearch', () => {
     it('should handle patterns starting with hyphen (regression test)', async () => {
       // Bug: Patterns starting with '-' were misparsed as flags
       // Fix: Added '--' separator before pattern in args
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: '-foo',
       })
 
       const output = createRgJsonMatch('file.ts', 1, 'const x = -foo')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -515,7 +532,7 @@ describe('codeSearch', () => {
     it('should strip trailing newlines from line text (regression test)', async () => {
       // Bug: JSON lineText includes trailing \n, causing blank lines
       // Fix: Strip \r?\n from lineText
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'import',
       })
@@ -530,8 +547,8 @@ describe('codeSearch', () => {
         },
       })
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -544,7 +561,7 @@ describe('codeSearch', () => {
     it('should process multiple JSON objects in remainder at close (regression test)', async () => {
       // Bug: Only processed one JSON object in remainder
       // Fix: Loop through all complete lines in remainder
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'test',
       })
@@ -557,8 +574,8 @@ describe('codeSearch', () => {
       // Send as one chunk without trailing newline to simulate remainder scenario
       const output = `${match1}\n${match2}\n${match3}`
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -572,7 +589,7 @@ describe('codeSearch', () => {
     it('should enforce output size limit during streaming (regression test)', async () => {
       // Bug: Output size only checked at end, could exceed limit
       // Fix: Check estimatedOutputLen during streaming and stop early
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'test',
         maxOutputStringLength: 500, // Small limit
@@ -581,13 +598,15 @@ describe('codeSearch', () => {
       // Generate many matches that would exceed the limit
       const matches: string[] = []
       for (let i = 0; i < 50; i++) {
-        matches.push(createRgJsonMatch('file.ts', i, `test line ${i} with some content`))
+        matches.push(
+          createRgJsonMatch('file.ts', i, `test line ${i} with some content`),
+        )
       }
       const output = matches.join('\n')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
       // Process won't get to close because it should kill early
-      mockProcess.emit('close', 0)
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -600,7 +619,7 @@ describe('codeSearch', () => {
     it('should handle non-UTF8 paths using path.bytes (regression test)', async () => {
       // Bug: Only handled path.text, not path.bytes for non-UTF8 paths
       // Fix: Check both path.text and path.bytes
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'test',
       })
@@ -615,8 +634,8 @@ describe('codeSearch', () => {
         },
       })
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -629,7 +648,7 @@ describe('codeSearch', () => {
 
   describe('glob pattern handling', () => {
     it('should handle -g flag with glob patterns like *.ts', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'import',
         flags: '-g *.ts',
@@ -640,23 +659,23 @@ describe('codeSearch', () => {
         createRgJsonMatch('file.ts', 5, 'import { baz } from "qux"'),
       ].join('\n')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       expect(result[0].type).toBe('json')
       const value = result[0].value as any
       expect(value.stdout).toContain('file.ts:')
-      
+
       // Verify the args passed to spawn include the glob flag correctly
-      expect(mockSpawn).toHaveBeenCalled()
-      const spawnArgs = mockSpawn.mock.calls[0][1] as string[]
+      expect(mockSpawn.calls.length).toBeGreaterThan(0)
+      const spawnArgs = mockSpawn.lastCall.args
       expect(spawnArgs).toContain('-g')
       expect(spawnArgs).toContain('*.ts')
     })
 
     it('should handle -g flag with multiple glob patterns', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'import',
         flags: '-g *.ts -g *.tsx',
@@ -664,25 +683,27 @@ describe('codeSearch', () => {
 
       const output = createRgJsonMatch('file.tsx', 1, 'import React from "react"')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       expect(result[0].type).toBe('json')
       const value = result[0].value as any
       expect(value.stdout).toContain('file.tsx:')
-      
+
       // Verify both glob patterns are passed correctly
-      const spawnArgs = mockSpawn.mock.calls[0][1] as string[]
+      const spawnArgs = mockSpawn.lastCall.args
       // Should have two -g flags, each followed by its pattern
-      const gFlagIndices = spawnArgs.map((arg, i) => arg === '-g' ? i : -1).filter(i => i !== -1)
+      const gFlagIndices = spawnArgs
+        .map((arg, i) => (arg === '-g' ? i : -1))
+        .filter((i) => i !== -1)
       expect(gFlagIndices.length).toBe(2)
       expect(spawnArgs[gFlagIndices[0] + 1]).toBe('*.ts')
       expect(spawnArgs[gFlagIndices[1] + 1]).toBe('*.tsx')
     })
 
     it('should not deduplicate flag-argument pairs', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'import',
         flags: '-g *.ts -i -g *.tsx',
@@ -690,28 +711,28 @@ describe('codeSearch', () => {
 
       const output = createRgJsonMatch('file.tsx', 1, 'import React from "react"')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
-      const result = await searchPromise
-      
+      await searchPromise
+
       // Verify flags are preserved in order without deduplication
-      const spawnArgs = mockSpawn.mock.calls[0][1] as string[]
+      const spawnArgs = mockSpawn.lastCall.args
       const flagsSection = spawnArgs.slice(0, spawnArgs.indexOf('--'))
       expect(flagsSection).toContain('-g')
       expect(flagsSection).toContain('*.ts')
       expect(flagsSection).toContain('-i')
       expect(flagsSection).toContain('*.tsx')
-      
+
       // Count -g flags - should be 2, not deduplicated to 1
-      const gCount = flagsSection.filter(arg => arg === '-g').length
+      const gCount = flagsSection.filter((arg) => arg === '-g').length
       expect(gCount).toBe(2)
     })
   })
 
   describe('timeout handling', () => {
     it('should timeout after specified seconds', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'test',
         timeoutSeconds: 1,
@@ -722,7 +743,7 @@ describe('codeSearch', () => {
       await new Promise((resolve) => setTimeout(resolve, 1100))
 
       // Manually trigger the timeout by emitting close
-      mockProcess.emit('close', null)
+      mockSpawn.process.emit('close', null)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -733,7 +754,7 @@ describe('codeSearch', () => {
 
   describe('cwd parameter handling', () => {
     it('should handle cwd: "." correctly', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'test',
         cwd: '.',
@@ -741,8 +762,8 @@ describe('codeSearch', () => {
 
       const output = createRgJsonMatch('file.ts', 1, 'test content')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -753,14 +774,14 @@ describe('codeSearch', () => {
       expect(value.stdout).toContain('test content')
 
       // Verify spawn was called with correct cwd
-      expect(mockSpawn).toHaveBeenCalled()
-      const spawnOptions = mockSpawn.mock.calls[0][2] as any
+      expect(mockSpawn.calls.length).toBeGreaterThan(0)
+      const spawnOptions = mockSpawn.lastCall.options
       // When cwd is '.', it should resolve to the project root
       expect(spawnOptions.cwd).toBe('/test/project')
     })
 
     it('should handle cwd: "subdir" correctly', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'test',
         cwd: 'subdir',
@@ -768,8 +789,8 @@ describe('codeSearch', () => {
 
       const output = createRgJsonMatch('file.ts', 1, 'test content')
 
-      mockProcess.stdout.emit('data', Buffer.from(output))
-      mockProcess.emit('close', 0)
+      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       const value = result[0].value as any
@@ -778,13 +799,13 @@ describe('codeSearch', () => {
       expect(value.stdout).toContain('file.ts:')
 
       // Verify spawn was called with correct cwd
-      expect(mockSpawn).toHaveBeenCalled()
-      const spawnOptions = mockSpawn.mock.calls[0][2] as any
+      expect(mockSpawn.calls.length).toBeGreaterThan(0)
+      const spawnOptions = mockSpawn.lastCall.options
       expect(spawnOptions.cwd).toBe('/test/project/subdir')
     })
 
     it('should reject cwd outside project directory', async () => {
-      const searchPromise = codeSearch({
+      const searchPromise = codeSearchWithSpawn(mockSpawn.spawn, {
         projectPath: '/test/project',
         pattern: 'test',
         cwd: '../outside',

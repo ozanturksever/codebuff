@@ -1,6 +1,10 @@
 import * as bigquery from '@codebuff/bigquery'
 import * as analytics from '@codebuff/common/analytics'
 import { TEST_USER_ID } from '@codebuff/common/old-constants'
+import {
+  mockAnalytics,
+  mockBigQuery,
+} from '@codebuff/common/testing/fixtures/agent-runtime'
 import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
 import {
   AgentTemplateTypes,
@@ -101,12 +105,9 @@ describe('mainPrompt', () => {
     }
 
     // Mock analytics and tracing
-    spyOn(analytics, 'initAnalytics').mockImplementation(() => {})
-    analytics.initAnalytics(mainPromptBaseParams) // Initialize the mock
-    spyOn(analytics, 'trackEvent').mockImplementation(() => {})
-    spyOn(bigquery, 'insertTrace').mockImplementation(() =>
-      Promise.resolve(true),
-    ) // Return Promise<boolean>
+    mockAnalytics(analytics)
+    mockBigQuery(bigquery)
+    analytics.initAnalytics(mainPromptBaseParams)
 
     // Mock processFileBlock
     spyOn(processFileBlockModule, 'processFileBlock').mockImplementation(

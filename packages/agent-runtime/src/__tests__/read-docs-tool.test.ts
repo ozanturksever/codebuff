@@ -1,6 +1,10 @@
 import * as bigquery from '@codebuff/bigquery'
 import * as analytics from '@codebuff/common/analytics'
 import { TEST_USER_ID } from '@codebuff/common/old-constants'
+import {
+  mockAnalytics,
+  mockBigQuery,
+} from '@codebuff/common/testing/fixtures/agent-runtime'
 import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
 import { getInitialSessionState } from '@codebuff/common/types/session-state'
 import {
@@ -54,15 +58,9 @@ describe('read_docs tool with researcher agent (via web API facade)', () => {
   beforeEach(() => {
     agentRuntimeImpl = { ...TEST_AGENT_RUNTIME_IMPL, sendAction: () => {} }
 
-    spyOn(analytics, 'initAnalytics').mockImplementation(() => {})
+    mockAnalytics(analytics)
+    mockBigQuery(bigquery)
     analytics.initAnalytics(agentRuntimeImpl)
-    spyOn(analytics, 'trackEvent').mockImplementation(() => {})
-    spyOn(analytics, 'flushAnalytics').mockImplementation(() =>
-      Promise.resolve(),
-    )
-    spyOn(bigquery, 'insertTrace').mockImplementation(() =>
-      Promise.resolve(true),
-    )
 
     agentRuntimeImpl.requestFiles = async () => ({})
     agentRuntimeImpl.requestOptionalFile = async () => null

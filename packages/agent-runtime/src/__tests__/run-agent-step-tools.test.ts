@@ -1,6 +1,10 @@
 import * as bigquery from '@codebuff/bigquery'
 import * as analytics from '@codebuff/common/analytics'
 import { TEST_USER_ID } from '@codebuff/common/old-constants'
+import {
+  mockAnalytics,
+  mockBigQuery,
+} from '@codebuff/common/testing/fixtures/agent-runtime'
 import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
 import { getInitialSessionState } from '@codebuff/common/types/session-state'
 import { assistantMessage, userMessage } from '@codebuff/common/util/messages'
@@ -76,12 +80,9 @@ describe('runAgentStep - set_output tool', () => {
     } as any)
 
     // Mock analytics and tracing
-    spyOn(analytics, 'initAnalytics').mockImplementation(() => {})
+    mockAnalytics(analytics)
+    mockBigQuery(bigquery)
     analytics.initAnalytics(agentRuntimeImpl)
-    spyOn(analytics, 'trackEvent').mockImplementation(() => {})
-    spyOn(bigquery, 'insertTrace').mockImplementation(() =>
-      Promise.resolve(true),
-    )
 
     agentRuntimeImpl.requestFiles = async ({ filePaths }) => {
       const results: Record<string, string | null> = {}

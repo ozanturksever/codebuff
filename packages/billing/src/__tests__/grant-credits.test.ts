@@ -1,95 +1,36 @@
+import { afterEach, describe, expect, it, mock } from 'bun:test'
+
 import {
-  clearMockedModules,
-  mockModule,
-} from '@codebuff/common/testing/mock-modules'
-import { afterEach, describe, expect, it } from 'bun:test'
+  createGrantCreditsDbMock,
+  testLogger,
+} from '@codebuff/common/testing/fixtures'
 
 import { triggerMonthlyResetAndGrant } from '../grant-credits'
 
-import type { Logger } from '@codebuff/common/types/contracts/logger'
-
-const logger: Logger = {
-  debug: () => {},
-  error: () => {},
-  info: () => {},
-  warn: () => {},
-}
+const logger = testLogger
 
 const futureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days from now
-const pastDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // 30 days ago
-
-const createDbMock = (options: {
-  user: {
-    next_quota_reset: Date | null
-    auto_topup_enabled: boolean | null
-  } | null
-}) => {
-  const { user } = options
-
-  return {
-    transaction: async (callback: (tx: any) => Promise<any>) => {
-      const tx = {
-        query: {
-          user: {
-            findFirst: async () => user,
-          },
-        },
-        update: () => ({
-          set: () => ({
-            where: () => Promise.resolve(),
-          }),
-        }),
-        insert: () => ({
-          values: () => Promise.resolve(),
-        }),
-        select: () => ({
-          from: () => ({
-            where: () => ({
-              orderBy: () => ({
-                limit: () => [],
-              }),
-            }),
-            then: (cb: any) => cb([]),
-          }),
-        }),
-      }
-      return callback(tx)
-    },
-    select: () => ({
-      from: () => ({
-        where: () => ({
-          orderBy: () => ({
-            limit: () => [],
-          }),
-        }),
-      }),
-    }),
-  }
-}
+// pastDate removed - unused
 
 describe('grant-credits', () => {
   afterEach(() => {
-    clearMockedModules()
+    mock.restore()
   })
 
   describe('triggerMonthlyResetAndGrant', () => {
     describe('autoTopupEnabled return value', () => {
       it('should return autoTopupEnabled: true when user has auto_topup_enabled: true', async () => {
-        await mockModule('@codebuff/internal/db', () => ({
-          default: createDbMock({
-            user: {
-              next_quota_reset: futureDate,
-              auto_topup_enabled: true,
-            },
-          }),
-        }))
+        const mockDb = createGrantCreditsDbMock({
+          user: {
+            next_quota_reset: futureDate,
+            auto_topup_enabled: true,
+          },
+        })
 
-        // Need to re-import after mocking
-        const { triggerMonthlyResetAndGrant: fn } = await import('../grant-credits')
-
-        const result = await fn({
+        const result = await triggerMonthlyResetAndGrant({
           userId: 'user-123',
           logger,
+          conn: mockDb,
         })
 
         expect(result.autoTopupEnabled).toBe(true)
@@ -97,58 +38,49 @@ describe('grant-credits', () => {
       })
 
       it('should return autoTopupEnabled: false when user has auto_topup_enabled: false', async () => {
-        await mockModule('@codebuff/internal/db', () => ({
-          default: createDbMock({
-            user: {
-              next_quota_reset: futureDate,
-              auto_topup_enabled: false,
-            },
-          }),
-        }))
+        const mockDb = createGrantCreditsDbMock({
+          user: {
+            next_quota_reset: futureDate,
+            auto_topup_enabled: false,
+          },
+        })
 
-        const { triggerMonthlyResetAndGrant: fn } = await import('../grant-credits')
-
-        const result = await fn({
+        const result = await triggerMonthlyResetAndGrant({
           userId: 'user-123',
           logger,
+          conn: mockDb,
         })
 
         expect(result.autoTopupEnabled).toBe(false)
       })
 
       it('should default autoTopupEnabled to false when user has auto_topup_enabled: null', async () => {
-        await mockModule('@codebuff/internal/db', () => ({
-          default: createDbMock({
-            user: {
-              next_quota_reset: futureDate,
-              auto_topup_enabled: null,
-            },
-          }),
-        }))
+        const mockDb = createGrantCreditsDbMock({
+          user: {
+            next_quota_reset: futureDate,
+            auto_topup_enabled: null,
+          },
+        })
 
-        const { triggerMonthlyResetAndGrant: fn } = await import('../grant-credits')
-
-        const result = await fn({
+        const result = await triggerMonthlyResetAndGrant({
           userId: 'user-123',
           logger,
+          conn: mockDb,
         })
 
         expect(result.autoTopupEnabled).toBe(false)
       })
 
       it('should throw error when user is not found', async () => {
-        await mockModule('@codebuff/internal/db', () => ({
-          default: createDbMock({
-            user: null,
-          }),
-        }))
-
-        const { triggerMonthlyResetAndGrant: fn } = await import('../grant-credits')
+        const mockDb = createGrantCreditsDbMock({
+          user: null,
+        })
 
         await expect(
-          fn({
+          triggerMonthlyResetAndGrant({
             userId: 'nonexistent-user',
             logger,
+            conn: mockDb,
           }),
         ).rejects.toThrow('User nonexistent-user not found')
       })
@@ -156,20 +88,17 @@ describe('grant-credits', () => {
 
     describe('quota reset behavior', () => {
       it('should return existing reset date when it is in the future', async () => {
-        await mockModule('@codebuff/internal/db', () => ({
-          default: createDbMock({
-            user: {
-              next_quota_reset: futureDate,
-              auto_topup_enabled: false,
-            },
-          }),
-        }))
+        const mockDb = createGrantCreditsDbMock({
+          user: {
+            next_quota_reset: futureDate,
+            auto_topup_enabled: false,
+          },
+        })
 
-        const { triggerMonthlyResetAndGrant: fn } = await import('../grant-credits')
-
-        const result = await fn({
+        const result = await triggerMonthlyResetAndGrant({
           userId: 'user-123',
           logger,
+          conn: mockDb,
         })
 
         expect(result.quotaResetDate).toEqual(futureDate)

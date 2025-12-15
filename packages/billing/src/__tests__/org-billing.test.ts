@@ -1,8 +1,11 @@
+import { afterEach, describe, expect, it, mock } from 'bun:test'
+
 import {
-  clearMockedModules,
-  mockModule,
-} from '@codebuff/common/testing/mock-modules'
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+  createOrgBillingDbMock,
+  createOrgBillingTransactionMock,
+  testLogger,
+  type OrgBillingGrant,
+} from '@codebuff/common/testing/fixtures'
 
 import {
   calculateOrganizationUsageAndBalance,
@@ -12,17 +15,15 @@ import {
   validateAndNormalizeRepositoryUrl,
 } from '../org-billing'
 
-import type { Logger } from '@codebuff/common/types/contracts/logger'
-
 // Mock the database
-const mockGrants = [
+const mockGrants: OrgBillingGrant[] = [
   {
     operation_id: 'org-grant-1',
     user_id: '',
     organization_id: 'org-123',
     principal: 1000,
     balance: 800,
-    type: 'organization' as const,
+    type: 'organization',
     description: 'Organization credits',
     priority: 60,
     expires_at: new Date('2024-12-31'),
@@ -34,7 +35,7 @@ const mockGrants = [
     organization_id: 'org-123',
     principal: 500,
     balance: -100, // Debt
-    type: 'organization' as const,
+    type: 'organization',
     description: 'Organization credits with debt',
     priority: 60,
     expires_at: new Date('2024-11-30'),
@@ -42,63 +43,16 @@ const mockGrants = [
   },
 ]
 
-const logger: Logger = {
-  debug: () => {},
-  error: () => {},
-  info: () => {},
-  warn: () => {},
-}
-
-const createDbMock = (options?: {
-  grants?: typeof mockGrants | any[]
-  insert?: () => { values: () => Promise<unknown> }
-  update?: () => { set: () => { where: () => Promise<unknown> } }
-}) => {
-  const { grants = mockGrants, insert, update } = options ?? {}
-
-  return {
-    select: () => ({
-      from: () => ({
-        where: () => ({
-          orderBy: () => grants,
-        }),
-      }),
-    }),
-    insert:
-      insert ??
-      (() => ({
-        values: () => Promise.resolve(),
-      })),
-    update:
-      update ??
-      (() => ({
-        set: () => ({
-          where: () => Promise.resolve(),
-        }),
-      })),
-  }
-}
+const logger = testLogger
 
 describe('Organization Billing', () => {
-  beforeEach(async () => {
-    await mockModule('@codebuff/internal/db', () => ({
-      default: createDbMock(),
-    }))
-    await mockModule('@codebuff/internal/db/transaction', () => ({
-      withSerializableTransaction: async ({
-        callback,
-      }: {
-        callback: (tx: any) => Promise<unknown> | unknown
-      }) => await callback(createDbMock()),
-    }))
-  })
-
   afterEach(() => {
-    clearMockedModules()
+    mock.restore()
   })
 
   describe('calculateOrganizationUsageAndBalance', () => {
     it('should calculate balance correctly with positive and negative balances', async () => {
+      const mockDb = createOrgBillingDbMock({ grants: mockGrants })
       const organizationId = 'org-123'
       const quotaResetDate = new Date('2024-01-01')
       const now = new Date('2024-06-01')
@@ -108,6 +62,7 @@ describe('Organization Billing', () => {
         quotaResetDate,
         now,
         logger,
+        conn: mockDb,
       })
 
       // Total positive balance: 800
@@ -123,9 +78,7 @@ describe('Organization Billing', () => {
 
     it('should handle organization with no grants', async () => {
       // Mock empty grants
-      await mockModule('@codebuff/internal/db', () => ({
-        default: createDbMock({ grants: [] }),
-      }))
+      const mockDb = createOrgBillingDbMock({ grants: [] })
 
       const organizationId = 'org-empty'
       const quotaResetDate = new Date('2024-01-01')
@@ -136,6 +89,7 @@ describe('Organization Billing', () => {
         quotaResetDate,
         now,
         logger,
+        conn: mockDb,
       })
 
       expect(result.balance.totalRemaining).toBe(0)
@@ -214,6 +168,9 @@ describe('Organization Billing', () => {
 
   describe('consumeOrganizationCredits', () => {
     it('should consume credits from organization grants', async () => {
+      const mockDb = createOrgBillingDbMock({ grants: mockGrants })
+      const mockWithTransaction = createOrgBillingTransactionMock(mockDb)
+
       const organizationId = 'org-123'
       const creditsToConsume = 100
 
@@ -221,6 +178,7 @@ describe('Organization Billing', () => {
         organizationId,
         creditsToConsume,
         logger,
+        withTransaction: mockWithTransaction,
       })
 
       expect(result.consumed).toBe(100)
@@ -230,6 +188,8 @@ describe('Organization Billing', () => {
 
   describe('grantOrganizationCredits', () => {
     it('should create organization credit grant', async () => {
+      const mockDb = createOrgBillingDbMock({ grants: mockGrants })
+
       const organizationId = 'org-123'
       const userId = 'user-123'
       const amount = 1000
@@ -245,24 +205,24 @@ describe('Organization Billing', () => {
           operationId,
           description,
           logger,
+          conn: mockDb,
         }),
       ).resolves.toBeUndefined()
     })
 
     it('should handle duplicate operation IDs gracefully', async () => {
       // Mock database constraint error
-      await mockModule('@codebuff/internal/db', () => ({
-        default: createDbMock({
-          insert: () => ({
-            values: () => {
-              const error = new Error('Duplicate key')
-              ;(error as any).code = '23505'
-              ;(error as any).constraint = 'credit_ledger_pkey'
-              throw error
-            },
-          }),
+      const mockDb = createOrgBillingDbMock({
+        grants: mockGrants,
+        insert: () => ({
+          values: () => {
+            const error = new Error('Duplicate key')
+            ;(error as any).code = '23505'
+            ;(error as any).constraint = 'credit_ledger_pkey'
+            throw error
+          },
         }),
-      }))
+      })
 
       const organizationId = 'org-123'
       const userId = 'user-123'
@@ -279,6 +239,7 @@ describe('Organization Billing', () => {
           operationId,
           description,
           logger,
+          conn: mockDb,
         }),
       ).resolves.toBeUndefined()
     })

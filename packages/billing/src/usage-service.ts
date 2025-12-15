@@ -1,3 +1,4 @@
+import type { OptionalFields } from '@codebuff/common/types/function-params'
 import db from '@codebuff/internal/db'
 import * as schema from '@codebuff/internal/db/schema'
 import { eq, and, desc, gte, sql } from 'drizzle-orm'
@@ -10,8 +11,28 @@ import {
   syncOrganizationBillingCycle,
 } from './org-billing'
 
-import type { CreditBalance } from './balance-calculator'
+import type { CreditBalance, CreditUsageAndBalance } from './balance-calculator'
+import type { MonthlyResetResult } from './grant-credits'
 import type { Logger } from '@codebuff/common/types/contracts/logger'
+
+// Types for dependency injection in tests
+export type TriggerMonthlyResetFn = (params: {
+  userId: string
+  logger: Logger
+}) => Promise<MonthlyResetResult>
+
+export type CheckAutoTopupFn = (params: {
+  userId: string
+  logger: Logger
+}) => Promise<number | undefined>
+
+export type CalculateUsageBalanceFn = (params: {
+  userId: string
+  quotaResetDate: Date
+  now: Date
+  isPersonalContext: boolean
+  logger: Logger
+}) => Promise<CreditUsageAndBalance>
 
 export interface UserUsageData {
   usageThisCycle: number
@@ -44,23 +65,38 @@ export interface OrganizationUsageData {
  * Gets comprehensive user usage data including balance, usage, and auto-topup handling.
  * This consolidates logic from web/src/app/api/user/usage/route.ts
  */
-export async function getUserUsageData(params: {
-  userId: string
-  logger: Logger
-}): Promise<UserUsageData> {
-  const { userId, logger } = params
+export async function getUserUsageData(
+  params: OptionalFields<
+    {
+      userId: string
+      logger: Logger
+      // Injectable dependencies for testing
+      triggerMonthlyReset: TriggerMonthlyResetFn
+      checkAutoTopup: CheckAutoTopupFn
+      calculateUsageBalance: CalculateUsageBalanceFn
+    },
+    'triggerMonthlyReset' | 'checkAutoTopup' | 'calculateUsageBalance'
+  >,
+): Promise<UserUsageData> {
+  const {
+    triggerMonthlyReset = triggerMonthlyResetAndGrant,
+    checkAutoTopup = checkAndTriggerAutoTopup,
+    calculateUsageBalance = calculateUsageAndBalance,
+    ...rest
+  } = params
+  const { userId, logger } = rest
   try {
     const now = new Date()
 
     // Check if we need to reset quota and grant new credits
     // This also returns autoTopupEnabled to avoid a separate query
     const { quotaResetDate, autoTopupEnabled } =
-      await triggerMonthlyResetAndGrant(params)
+      await triggerMonthlyReset(rest)
 
     // Check if we need to trigger auto top-up
     let autoTopupTriggered = false
     try {
-      const topupAmount = await checkAndTriggerAutoTopup(params)
+      const topupAmount = await checkAutoTopup(rest)
       autoTopupTriggered = topupAmount !== undefined
     } catch (error) {
       logger.error(
@@ -72,8 +108,8 @@ export async function getUserUsageData(params: {
 
     // Use the canonical balance calculation function with the effective reset date
     // Pass isPersonalContext: true to exclude organization credits from personal usage
-    const { usageThisCycle, balance } = await calculateUsageAndBalance({
-      ...params,
+    const { usageThisCycle, balance } = await calculateUsageBalance({
+      ...rest,
       quotaResetDate,
       now,
       isPersonalContext: true, // isPersonalContext: true to exclude organization credits

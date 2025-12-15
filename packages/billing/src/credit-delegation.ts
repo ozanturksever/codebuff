@@ -1,3 +1,4 @@
+import type { OptionalFields } from '@codebuff/common/types/function-params'
 import { failure, success } from '@codebuff/common/util/error'
 import db from '@codebuff/internal/db'
 import * as schema from '@codebuff/internal/db/schema'
@@ -9,6 +10,12 @@ import {
   normalizeRepositoryUrl,
   extractOwnerAndRepo,
 } from './org-billing'
+
+// Minimal structural type for database connection
+// This type is intentionally permissive to allow mock injection in tests
+export type CreditDelegationDbConn = {
+  select: (fields?: any) => any
+}
 
 import type { ConsumeCreditsWithFallbackFn } from '@codebuff/common/types/contracts/billing'
 import type { Logger } from '@codebuff/common/types/contracts/logger'
@@ -33,12 +40,19 @@ export interface CreditDelegationResult {
  * Finds the organization associated with a repository for a given user.
  * Uses owner/repo comparison for better matching.
  */
-export async function findOrganizationForRepository(params: {
-  userId: string
-  repositoryUrl: string
-  logger: Logger
-}): Promise<OrganizationLookupResult> {
-  const { userId, repositoryUrl, logger } = params
+export async function findOrganizationForRepository(
+  params: OptionalFields<
+    {
+      userId: string
+      repositoryUrl: string
+      logger: Logger
+      conn: CreditDelegationDbConn
+    },
+    'conn'
+  >,
+): Promise<OrganizationLookupResult> {
+  const { conn = db, ...rest } = params
+  const { userId, repositoryUrl, logger } = rest
 
   try {
     const normalizedUrl = normalizeRepositoryUrl(repositoryUrl)
@@ -53,7 +67,7 @@ export async function findOrganizationForRepository(params: {
     }
 
     // First, check if user is a member of any organizations
-    const userOrganizations = await db
+    const userOrganizations = await conn
       .select({
         orgId: schema.orgMember.org_id,
         orgName: schema.org.name,
@@ -73,7 +87,7 @@ export async function findOrganizationForRepository(params: {
 
     // Check each organization for matching repositories
     for (const userOrg of userOrganizations) {
-      const orgRepos = await db
+      const orgRepos = await conn
         .select({
           repoUrl: schema.orgRepo.repo_url,
           repoName: schema.orgRepo.repo_name,
@@ -142,13 +156,20 @@ export async function findOrganizationForRepository(params: {
 /**
  * Consumes credits with organization delegation if applicable.
  */
-export async function consumeCreditsWithDelegation(params: {
-  userId: string
-  repositoryUrl: string | null
-  creditsToConsume: number
-  logger: Logger
-}): Promise<CreditDelegationResult> {
-  const { userId, repositoryUrl, creditsToConsume, logger } = params
+export async function consumeCreditsWithDelegation(
+  params: OptionalFields<
+    {
+      userId: string
+      repositoryUrl: string | null
+      creditsToConsume: number
+      logger: Logger
+      conn: CreditDelegationDbConn
+    },
+    'conn'
+  >,
+): Promise<CreditDelegationResult> {
+  const { conn = db, ...rest } = params
+  const { userId, repositoryUrl, creditsToConsume, logger } = rest
 
   // If no repository URL, fall back to personal credits
   if (!repositoryUrl) {
@@ -159,7 +180,7 @@ export async function consumeCreditsWithDelegation(params: {
     return { success: false, error: 'No repository URL provided' }
   }
 
-  const withRepoUrl = { ...params, repositoryUrl }
+  const withRepoUrl = { ...rest, repositoryUrl, conn }
 
   try {
     // Find organization for this repository
@@ -176,7 +197,7 @@ export async function consumeCreditsWithDelegation(params: {
     // Consume credits from organization
     try {
       await consumeOrganizationCredits({
-        ...params,
+        ...rest,
         organizationId: orgLookup.organizationId,
       })
 

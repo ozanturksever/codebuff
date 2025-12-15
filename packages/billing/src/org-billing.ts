@@ -9,6 +9,21 @@ import { and, asc, gt, isNull, or, eq } from 'drizzle-orm'
 
 import { consumeFromOrderedGrants } from './balance-calculator'
 
+// Minimal structural type for database connection
+// This type is intentionally permissive to allow mock injection in tests
+export type OrgBillingDbConn = {
+  select: (fields?: any) => any
+  insert: (table?: any) => any
+  update: (table?: any) => any
+}
+
+// Type for transaction wrapper function (permissive for mock injection in tests)
+export type WithTransactionFn = <T>(params: {
+  callback: (tx: OrgBillingDbConn) => Promise<T>
+  context: Record<string, unknown>
+  logger: Logger
+}) => Promise<T>
+
 import type {
   CreditBalance,
   CreditUsageAndBalance,
@@ -18,8 +33,8 @@ import type { Logger } from '@codebuff/common/types/contracts/logger'
 import type { OptionalFields } from '@codebuff/common/types/function-params'
 import type { GrantType } from '@codebuff/internal/db/schema'
 
-// Add a minimal structural type that both `db` and `tx` satisfy
-type DbConn = Pick<typeof db, 'select' | 'update'>
+// Minimal structural type that both `db` and `tx` satisfy (permissive for mock injection)
+type DbConn = OrgBillingDbConn
 
 /**
  * Syncs organization billing cycle with Stripe subscription and returns the current cycle start date.
@@ -267,18 +282,25 @@ export async function calculateOrganizationUsageAndBalance(
 /**
  * Consumes credits from organization grants in priority order.
  */
-export async function consumeOrganizationCredits(params: {
-  organizationId: string
-  creditsToConsume: number
-  logger: Logger
-}): Promise<CreditConsumptionResult> {
-  const { organizationId, creditsToConsume, logger } = params
+export async function consumeOrganizationCredits(
+  params: OptionalFields<
+    {
+      organizationId: string
+      creditsToConsume: number
+      logger: Logger
+      withTransaction: WithTransactionFn
+    },
+    'withTransaction'
+  >,
+): Promise<CreditConsumptionResult> {
+  const { withTransaction = withSerializableTransaction, ...rest } = params
+  const { organizationId, creditsToConsume, logger } = rest
 
-  return await withSerializableTransaction({
+  return await withTransaction({
     callback: async (tx) => {
       const now = new Date()
       const activeGrants = await getOrderedActiveOrganizationGrants({
-        ...params,
+        ...rest,
         now,
         conn: tx,
       })
@@ -319,13 +341,15 @@ export async function grantOrganizationCredits(
       description: string
       expiresAt: Date | null
       logger: Logger
+      conn: OrgBillingDbConn
     },
-    'description' | 'expiresAt'
+    'description' | 'expiresAt' | 'conn'
   >,
 ): Promise<void> {
   const withDefaults = {
     description: 'Organization credit purchase',
     expiresAt: null,
+    conn: db,
     ...params,
   }
   const {
@@ -336,12 +360,13 @@ export async function grantOrganizationCredits(
     description,
     expiresAt,
     logger,
+    conn,
   } = withDefaults
 
   const now = new Date()
 
   try {
-    await db.insert(schema.creditLedger).values({
+    await conn.insert(schema.creditLedger).values({
       operation_id: operationId,
       user_id: userId,
       org_id: organizationId,

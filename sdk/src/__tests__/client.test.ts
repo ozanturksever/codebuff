@@ -1,11 +1,13 @@
+import { wrapMockAsFetch } from '@codebuff/common/testing/fixtures'
 import { describe, expect, test, mock, afterEach } from 'bun:test'
+
 import { CodebuffClient } from '../client'
 
 describe('CodebuffClient', () => {
   const originalFetch = globalThis.fetch
 
   const setFetchMock = (mockFetch: ReturnType<typeof mock>) => {
-    globalThis.fetch = mockFetch as unknown as typeof fetch
+    globalThis.fetch = wrapMockAsFetch(mockFetch)
   }
 
   afterEach(() => {

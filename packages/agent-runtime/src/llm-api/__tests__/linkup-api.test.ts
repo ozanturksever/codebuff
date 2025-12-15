@@ -1,12 +1,11 @@
 import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
 import {
-  clearMockedModules,
-  mockModule,
-} from '@codebuff/common/testing/mock-modules'
+  createMockFetch,
+  createMockFetchError,
+} from '@codebuff/common/testing/fixtures'
 import {
   afterAll,
   afterEach,
-  beforeAll,
   beforeEach,
   describe,
   expect,
@@ -24,13 +23,6 @@ const testServerEnv = { LINKUP_API_KEY: 'test-api-key' }
 describe('Linkup API', () => {
   let agentRuntimeImpl: AgentRuntimeDeps & { serverEnv: typeof testServerEnv }
 
-  beforeAll(async () => {
-    // Mock withTimeout utility
-    await mockModule('@codebuff/common/util/promise', () => ({
-      withTimeout: async (promise: Promise<any>, timeout: number) => promise,
-    }))
-  })
-
   beforeEach(() => {
     agentRuntimeImpl = {
       ...TEST_AGENT_RUNTIME_IMPL,
@@ -42,9 +34,7 @@ describe('Linkup API', () => {
     mock.restore()
   })
 
-  afterAll(() => {
-    clearMockedModules()
-  })
+  afterAll(() => {})
 
   test('should successfully search with basic query', async () => {
     const mockResponse = {
@@ -60,14 +50,7 @@ describe('Linkup API', () => {
       ],
     }
 
-    agentRuntimeImpl.fetch = mock(() => {
-      return Promise.resolve(
-        new Response(JSON.stringify(mockResponse), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
-    }) as unknown as typeof global.fetch
+    agentRuntimeImpl.fetch = createMockFetch({ json: mockResponse })
 
     const result = await searchWeb({
       ...agentRuntimeImpl,
@@ -109,14 +92,7 @@ describe('Linkup API', () => {
       ],
     }
 
-    agentRuntimeImpl.fetch = mock(() => {
-      return Promise.resolve(
-        new Response(JSON.stringify(mockResponse), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
-    }) as unknown as typeof global.fetch
+    agentRuntimeImpl.fetch = createMockFetch({ json: mockResponse })
 
     const result = await searchWeb({
       ...agentRuntimeImpl,
@@ -142,14 +118,10 @@ describe('Linkup API', () => {
   })
 
   test('should handle API errors gracefully', async () => {
-    agentRuntimeImpl.fetch = mock(() => {
-      return Promise.resolve(
-        new Response('Internal Server Error', {
-          status: 500,
-          statusText: 'Internal Server Error',
-        }),
-      )
-    }) as unknown as typeof global.fetch
+    agentRuntimeImpl.fetch = createMockFetch({
+      status: 500,
+      body: 'Internal Server Error',
+    })
 
     const result = await searchWeb({ ...agentRuntimeImpl, query: 'test query' })
 
@@ -157,9 +129,7 @@ describe('Linkup API', () => {
   })
 
   test('should handle network errors', async () => {
-    agentRuntimeImpl.fetch = mock(() => {
-      return Promise.reject(new Error('Network error'))
-    }) as unknown as typeof global.fetch
+    agentRuntimeImpl.fetch = createMockFetchError(new Error('Network error'))
 
     const result = await searchWeb({ ...agentRuntimeImpl, query: 'test query' })
 
@@ -167,14 +137,7 @@ describe('Linkup API', () => {
   })
 
   test('should handle invalid response format', async () => {
-    agentRuntimeImpl.fetch = mock(() => {
-      return Promise.resolve(
-        new Response(JSON.stringify({ invalid: 'format' }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
-    }) as unknown as typeof global.fetch
+    agentRuntimeImpl.fetch = createMockFetch({ json: { invalid: 'format' } })
 
     const result = await searchWeb({ ...agentRuntimeImpl, query: 'test query' })
 
@@ -182,14 +145,7 @@ describe('Linkup API', () => {
   })
 
   test('should handle missing answer field', async () => {
-    agentRuntimeImpl.fetch = mock(() => {
-      return Promise.resolve(
-        new Response(JSON.stringify({ sources: [] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
-    }) as unknown as typeof global.fetch
+    agentRuntimeImpl.fetch = createMockFetch({ json: { sources: [] } })
 
     const result = await searchWeb({
       ...agentRuntimeImpl,
@@ -199,19 +155,9 @@ describe('Linkup API', () => {
     expect(result).toBeNull()
   })
   test('should handle empty answer', async () => {
-    const mockResponse = {
-      answer: '',
-      sources: [],
-    }
-
-    agentRuntimeImpl.fetch = mock(() => {
-      return Promise.resolve(
-        new Response(JSON.stringify(mockResponse), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
-    }) as unknown as typeof global.fetch
+    agentRuntimeImpl.fetch = createMockFetch({
+      json: { answer: '', sources: [] },
+    })
 
     const result = await searchWeb({ ...agentRuntimeImpl, query: 'test query' })
 
@@ -226,14 +172,7 @@ describe('Linkup API', () => {
       ],
     }
 
-    agentRuntimeImpl.fetch = mock(() => {
-      return Promise.resolve(
-        new Response(JSON.stringify(mockResponse), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
-    }) as unknown as typeof global.fetch
+    agentRuntimeImpl.fetch = createMockFetch({ json: mockResponse })
 
     await searchWeb({ ...agentRuntimeImpl, query: 'test query' })
 
@@ -251,14 +190,10 @@ describe('Linkup API', () => {
   })
 
   test('should handle malformed JSON response', async () => {
-    agentRuntimeImpl.fetch = mock(() => {
-      return Promise.resolve(
-        new Response('invalid json{', {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
-    }) as unknown as typeof global.fetch
+    agentRuntimeImpl.fetch = createMockFetch({
+      body: 'invalid json{',
+      headers: { 'Content-Type': 'application/json' },
+    })
     agentRuntimeImpl.logger.error = mock(() => {})
 
     const result = await searchWeb({ ...agentRuntimeImpl, query: 'test query' })
@@ -271,15 +206,11 @@ describe('Linkup API', () => {
   test('should log detailed error information for 404 responses', async () => {
     const mockErrorResponse =
       'Not Found - The requested endpoint does not exist'
-    agentRuntimeImpl.fetch = mock(() => {
-      return Promise.resolve(
-        new Response(mockErrorResponse, {
-          status: 404,
-          statusText: 'Not Found',
-          headers: { 'Content-Type': 'text/plain' },
-        }),
-      )
-    }) as unknown as typeof global.fetch
+    agentRuntimeImpl.fetch = createMockFetch({
+      status: 404,
+      body: mockErrorResponse,
+      headers: { 'Content-Type': 'text/plain' },
+    })
 
     const result = await searchWeb({
       ...agentRuntimeImpl,

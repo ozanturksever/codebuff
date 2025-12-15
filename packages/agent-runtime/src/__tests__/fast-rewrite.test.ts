@@ -2,11 +2,7 @@ import path from 'path'
 
 import { TEST_USER_ID } from '@codebuff/common/old-constants'
 import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
-import {
-  clearMockedModules,
-  mockModule,
-} from '@codebuff/common/testing/mock-modules'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, it } from 'bun:test'
 import { createPatch } from 'diff'
 
 import { rewriteWithOpenAI } from '../fast-rewrite'
@@ -19,30 +15,11 @@ import type {
 describe.skip('rewriteWithOpenAI', () => {
   let agentRuntimeImpl: AgentRuntimeDeps & AgentRuntimeScopedDeps
 
-  beforeAll(async () => {
-    // Mock database interactions
-    await mockModule('pg-pool', () => ({
-      Pool: class {
-        connect() {
-          return {
-            query: () => ({
-              rows: [{ id: 'test-user-id' }],
-              rowCount: 1,
-            }),
-            release: () => {},
-          }
-        }
-      },
-    }))
-  })
-
   beforeEach(() => {
     agentRuntimeImpl = { ...TEST_AGENT_RUNTIME_IMPL }
   })
 
-  afterAll(() => {
-    clearMockedModules()
-  })
+  afterAll(() => {})
 
   it('should correctly integrate edit snippet changes while preserving formatting', async () => {
     const testDataDir = path.join(__dirname, 'test-data', 'dex-go')

@@ -1,10 +1,13 @@
-import {
-  clearMockedModules,
-  mockModule,
-} from '@codebuff/common/testing/mock-modules'
-import { afterEach, describe, expect, it } from 'bun:test'
+import { afterEach, describe, expect, it, mock } from 'bun:test'
+
+import { getUserUsageData } from '../usage-service'
 
 import type { Logger } from '@codebuff/common/types/contracts/logger'
+import type {
+  TriggerMonthlyResetFn,
+  CheckAutoTopupFn,
+  CalculateUsageBalanceFn,
+} from '../usage-service'
 
 const logger: Logger = {
   debug: () => {},
@@ -25,35 +28,30 @@ const mockBalance = {
 
 describe('usage-service', () => {
   afterEach(() => {
-    clearMockedModules()
+    mock.restore()
   })
 
   describe('getUserUsageData', () => {
     describe('autoTopupEnabled field', () => {
       it('should include autoTopupEnabled: true when triggerMonthlyResetAndGrant returns true', async () => {
-        await mockModule('@codebuff/billing/grant-credits', () => ({
-          triggerMonthlyResetAndGrant: async () => ({
-            quotaResetDate: futureDate,
-            autoTopupEnabled: true,
-          }),
-        }))
+        const mockTriggerMonthlyReset: TriggerMonthlyResetFn = async () => ({
+          quotaResetDate: futureDate,
+          autoTopupEnabled: true,
+        })
 
-        await mockModule('@codebuff/billing/auto-topup', () => ({
-          checkAndTriggerAutoTopup: async () => undefined,
-        }))
+        const mockCheckAutoTopup: CheckAutoTopupFn = async () => undefined
 
-        await mockModule('@codebuff/billing/balance-calculator', () => ({
-          calculateUsageAndBalance: async () => ({
-            usageThisCycle: 100,
-            balance: mockBalance,
-          }),
-        }))
-
-        const { getUserUsageData } = await import('@codebuff/billing/usage-service')
+        const mockCalculateUsageBalance: CalculateUsageBalanceFn = async () => ({
+          usageThisCycle: 100,
+          balance: mockBalance,
+        })
 
         const result = await getUserUsageData({
           userId: 'user-123',
           logger,
+          triggerMonthlyReset: mockTriggerMonthlyReset,
+          checkAutoTopup: mockCheckAutoTopup,
+          calculateUsageBalance: mockCalculateUsageBalance,
         })
 
         expect(result.autoTopupEnabled).toBe(true)
@@ -63,58 +61,48 @@ describe('usage-service', () => {
       })
 
       it('should include autoTopupEnabled: false when triggerMonthlyResetAndGrant returns false', async () => {
-        await mockModule('@codebuff/billing/grant-credits', () => ({
-          triggerMonthlyResetAndGrant: async () => ({
-            quotaResetDate: futureDate,
-            autoTopupEnabled: false,
-          }),
-        }))
+        const mockTriggerMonthlyReset: TriggerMonthlyResetFn = async () => ({
+          quotaResetDate: futureDate,
+          autoTopupEnabled: false,
+        })
 
-        await mockModule('@codebuff/billing/auto-topup', () => ({
-          checkAndTriggerAutoTopup: async () => undefined,
-        }))
+        const mockCheckAutoTopup: CheckAutoTopupFn = async () => undefined
 
-        await mockModule('@codebuff/billing/balance-calculator', () => ({
-          calculateUsageAndBalance: async () => ({
-            usageThisCycle: 100,
-            balance: mockBalance,
-          }),
-        }))
-
-        const { getUserUsageData } = await import('@codebuff/billing/usage-service')
+        const mockCalculateUsageBalance: CalculateUsageBalanceFn = async () => ({
+          usageThisCycle: 100,
+          balance: mockBalance,
+        })
 
         const result = await getUserUsageData({
           userId: 'user-123',
           logger,
+          triggerMonthlyReset: mockTriggerMonthlyReset,
+          checkAutoTopup: mockCheckAutoTopup,
+          calculateUsageBalance: mockCalculateUsageBalance,
         })
 
         expect(result.autoTopupEnabled).toBe(false)
       })
 
       it('should include autoTopupTriggered: true when auto top-up was triggered', async () => {
-        await mockModule('@codebuff/billing/grant-credits', () => ({
-          triggerMonthlyResetAndGrant: async () => ({
-            quotaResetDate: futureDate,
-            autoTopupEnabled: true,
-          }),
-        }))
+        const mockTriggerMonthlyReset: TriggerMonthlyResetFn = async () => ({
+          quotaResetDate: futureDate,
+          autoTopupEnabled: true,
+        })
 
-        await mockModule('@codebuff/billing/auto-topup', () => ({
-          checkAndTriggerAutoTopup: async () => 500, // Returns amount when triggered
-        }))
+        const mockCheckAutoTopup: CheckAutoTopupFn = async () => 500 // Returns amount when triggered
 
-        await mockModule('@codebuff/billing/balance-calculator', () => ({
-          calculateUsageAndBalance: async () => ({
-            usageThisCycle: 100,
-            balance: mockBalance,
-          }),
-        }))
-
-        const { getUserUsageData } = await import('@codebuff/billing/usage-service')
+        const mockCalculateUsageBalance: CalculateUsageBalanceFn = async () => ({
+          usageThisCycle: 100,
+          balance: mockBalance,
+        })
 
         const result = await getUserUsageData({
           userId: 'user-123',
           logger,
+          triggerMonthlyReset: mockTriggerMonthlyReset,
+          checkAutoTopup: mockCheckAutoTopup,
+          calculateUsageBalance: mockCalculateUsageBalance,
         })
 
         expect(result.autoTopupTriggered).toBe(true)
@@ -122,61 +110,51 @@ describe('usage-service', () => {
       })
 
       it('should include autoTopupTriggered: false when auto top-up was not triggered', async () => {
-        await mockModule('@codebuff/billing/grant-credits', () => ({
-          triggerMonthlyResetAndGrant: async () => ({
-            quotaResetDate: futureDate,
-            autoTopupEnabled: true,
-          }),
-        }))
+        const mockTriggerMonthlyReset: TriggerMonthlyResetFn = async () => ({
+          quotaResetDate: futureDate,
+          autoTopupEnabled: true,
+        })
 
-        await mockModule('@codebuff/billing/auto-topup', () => ({
-          checkAndTriggerAutoTopup: async () => undefined, // Returns undefined when not triggered
-        }))
+        const mockCheckAutoTopup: CheckAutoTopupFn = async () => undefined // Returns undefined when not triggered
 
-        await mockModule('@codebuff/billing/balance-calculator', () => ({
-          calculateUsageAndBalance: async () => ({
-            usageThisCycle: 100,
-            balance: mockBalance,
-          }),
-        }))
-
-        const { getUserUsageData } = await import('@codebuff/billing/usage-service')
+        const mockCalculateUsageBalance: CalculateUsageBalanceFn = async () => ({
+          usageThisCycle: 100,
+          balance: mockBalance,
+        })
 
         const result = await getUserUsageData({
           userId: 'user-123',
           logger,
+          triggerMonthlyReset: mockTriggerMonthlyReset,
+          checkAutoTopup: mockCheckAutoTopup,
+          calculateUsageBalance: mockCalculateUsageBalance,
         })
 
         expect(result.autoTopupTriggered).toBe(false)
       })
 
       it('should continue and return data even when auto top-up check fails', async () => {
-        await mockModule('@codebuff/billing/grant-credits', () => ({
-          triggerMonthlyResetAndGrant: async () => ({
-            quotaResetDate: futureDate,
-            autoTopupEnabled: true,
-          }),
-        }))
+        const mockTriggerMonthlyReset: TriggerMonthlyResetFn = async () => ({
+          quotaResetDate: futureDate,
+          autoTopupEnabled: true,
+        })
 
-        await mockModule('@codebuff/billing/auto-topup', () => ({
-          checkAndTriggerAutoTopup: async () => {
-            throw new Error('Payment failed')
-          },
-        }))
+        const mockCheckAutoTopup: CheckAutoTopupFn = async () => {
+          throw new Error('Payment failed')
+        }
 
-        await mockModule('@codebuff/billing/balance-calculator', () => ({
-          calculateUsageAndBalance: async () => ({
-            usageThisCycle: 100,
-            balance: mockBalance,
-          }),
-        }))
-
-        const { getUserUsageData } = await import('@codebuff/billing/usage-service')
+        const mockCalculateUsageBalance: CalculateUsageBalanceFn = async () => ({
+          usageThisCycle: 100,
+          balance: mockBalance,
+        })
 
         // Should not throw
         const result = await getUserUsageData({
           userId: 'user-123',
           logger,
+          triggerMonthlyReset: mockTriggerMonthlyReset,
+          checkAutoTopup: mockCheckAutoTopup,
+          calculateUsageBalance: mockCalculateUsageBalance,
         })
 
         expect(result.autoTopupTriggered).toBe(false)

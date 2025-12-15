@@ -1,3 +1,4 @@
+import { wrapMockAsFetch } from '@codebuff/common/testing/fixtures'
 import {
   AuthenticationError,
   NetworkError,
@@ -44,7 +45,7 @@ describe('API Integration', () => {
     impl: Parameters<typeof mock>[0],
   ): ReturnType<typeof mock> => {
     const fetchMock = mock(impl)
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = wrapMockAsFetch(fetchMock)
     return fetchMock
   }
 

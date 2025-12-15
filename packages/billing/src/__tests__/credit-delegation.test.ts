@@ -1,8 +1,9 @@
+import { afterEach, describe, expect, it, mock } from 'bun:test'
+
 import {
-  clearMockedModules,
-  mockModule,
-} from '@codebuff/common/testing/mock-modules'
-import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test'
+  createCreditDelegationDbMock,
+  testLogger,
+} from '@codebuff/common/testing/fixtures'
 
 import {
   consumeCreditsWithDelegation,
@@ -10,82 +11,31 @@ import {
 } from '../credit-delegation'
 
 describe('Credit Delegation', () => {
-  const logger = {
-    debug: () => {},
-    info: () => {},
-    warn: () => {},
-    error: () => {},
-  }
+  const logger = testLogger
 
-  beforeAll(async () => {
-    // Mock the org-billing functions that credit-delegation depends on
-    await mockModule('@codebuff/billing/org-billing', () => ({
-      normalizeRepositoryUrl: mock((url: string) => url.toLowerCase().trim()),
-      extractOwnerAndRepo: mock((url: string) => {
-        if (url.includes('codebuffai/codebuff')) {
-          return { owner: 'codebuffai', repo: 'codebuff' }
-        }
-        return null
-      }),
-      consumeOrganizationCredits: mock(() => Promise.resolve()),
-    }))
-
-    // Mock common dependencies
-    await mockModule('@codebuff/internal/db', () => {
-      const select = mock((fields: Record<string, unknown>) => {
-        if ('orgId' in fields && 'orgName' in fields) {
-          return {
-            from: () => ({
-              innerJoin: () => ({
-                where: () =>
-                  Promise.resolve([
-                    {
-                      orgId: 'org-123',
-                      orgName: 'CodebuffAI',
-                      orgSlug: 'codebuffai',
-                    },
-                  ]),
-              }),
-            }),
-          }
-        }
-
-        if ('repoUrl' in fields) {
-          return {
-            from: () => ({
-              where: () =>
-                Promise.resolve([
-                  {
-                    repoUrl: 'https://github.com/codebuffai/codebuff',
-                    repoName: 'codebuff',
-                    isActive: true,
-                  },
-                ]),
-            }),
-          }
-        }
-
-        return {
-          from: () => ({
-            where: () => Promise.resolve([]),
-          }),
-        }
-      })
-
-      return {
-        default: {
-          select,
-        },
-      }
-    })
-  })
-
-  afterAll(() => {
-    clearMockedModules()
+  afterEach(() => {
+    mock.restore()
   })
 
   describe('findOrganizationForRepository', () => {
     it('should find organization for matching repository', async () => {
+      const mockDb = createCreditDelegationDbMock({
+        userOrganizations: [
+          {
+            orgId: 'org-123',
+            orgName: 'CodebuffAI',
+            orgSlug: 'codebuffai',
+          },
+        ],
+        orgRepos: [
+          {
+            repoUrl: 'https://github.com/codebuffai/codebuff',
+            repoName: 'codebuff',
+            isActive: true,
+          },
+        ],
+      })
+
       const userId = 'user-123'
       const repositoryUrl = 'https://github.com/codebuffai/codebuff'
 
@@ -93,6 +43,7 @@ describe('Credit Delegation', () => {
         userId,
         repositoryUrl,
         logger,
+        conn: mockDb,
       })
 
       expect(result.found).toBe(true)
@@ -101,6 +52,23 @@ describe('Credit Delegation', () => {
     })
 
     it('should return not found for non-matching repository', async () => {
+      const mockDb = createCreditDelegationDbMock({
+        userOrganizations: [
+          {
+            orgId: 'org-123',
+            orgName: 'CodebuffAI',
+            orgSlug: 'codebuffai',
+          },
+        ],
+        orgRepos: [
+          {
+            repoUrl: 'https://github.com/codebuffai/codebuff',
+            repoName: 'codebuff',
+            isActive: true,
+          },
+        ],
+      })
+
       const userId = 'user-123'
       const repositoryUrl = 'https://github.com/other/repo'
 
@@ -108,6 +76,26 @@ describe('Credit Delegation', () => {
         userId,
         repositoryUrl,
         logger,
+        conn: mockDb,
+      })
+
+      expect(result.found).toBe(false)
+    })
+
+    it('should return not found when user has no organizations', async () => {
+      const mockDb = createCreditDelegationDbMock({
+        userOrganizations: [],
+        orgRepos: [],
+      })
+
+      const userId = 'user-123'
+      const repositoryUrl = 'https://github.com/some/repo'
+
+      const result = await findOrganizationForRepository({
+        userId,
+        repositoryUrl,
+        logger,
+        conn: mockDb,
       })
 
       expect(result.found).toBe(false)
@@ -116,6 +104,8 @@ describe('Credit Delegation', () => {
 
   describe('consumeCreditsWithDelegation', () => {
     it('should fail when no repository URL provided', async () => {
+      const mockDb = createCreditDelegationDbMock()
+
       const userId = 'user-123'
       const repositoryUrl = null
       const creditsToConsume = 100
@@ -125,10 +115,33 @@ describe('Credit Delegation', () => {
         repositoryUrl,
         creditsToConsume,
         logger,
+        conn: mockDb,
       })
 
       expect(result.success).toBe(false)
       expect(result.error).toBe('No repository URL provided')
+    })
+
+    it('should fail when no organization found for repository', async () => {
+      const mockDb = createCreditDelegationDbMock({
+        userOrganizations: [],
+        orgRepos: [],
+      })
+
+      const userId = 'user-123'
+      const repositoryUrl = 'https://github.com/other/repo'
+      const creditsToConsume = 100
+
+      const result = await consumeCreditsWithDelegation({
+        userId,
+        repositoryUrl,
+        creditsToConsume,
+        logger,
+        conn: mockDb,
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('No organization found for repository')
     })
   })
 })

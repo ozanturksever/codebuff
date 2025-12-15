@@ -1,3 +1,4 @@
+import { wrapMockAsFetch } from '@codebuff/common/testing/fixtures'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import {
@@ -44,13 +45,15 @@ describe('fetchUsageData', () => {
       next_quota_reset: '2024-02-01T00:00:00.000Z',
     }
 
-    globalThis.fetch = mock(
-      async () =>
-        new Response(JSON.stringify(mockResponse), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-    ) as unknown as typeof fetch
+    globalThis.fetch = wrapMockAsFetch(
+      mock(
+        async () =>
+          new Response(JSON.stringify(mockResponse), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ),
+    )
 
     const result = await fetchUsageData({ authToken: 'test-token' })
 
@@ -58,9 +61,9 @@ describe('fetchUsageData', () => {
   })
 
   test('should throw error on failed request', async () => {
-    globalThis.fetch = mock(
-      async () => new Response('Error', { status: 500 }),
-    ) as unknown as typeof fetch
+    globalThis.fetch = wrapMockAsFetch(
+      mock(async () => new Response('Error', { status: 500 })),
+    )
     const mockLogger = {
       error: mock(() => {}),
       warn: mock(() => {}),
@@ -127,13 +130,15 @@ describe('useUsageQuery', () => {
       next_quota_reset: '2024-02-01T00:00:00.000Z',
     }
 
-    globalThis.fetch = mock(
-      async () =>
-        new Response(JSON.stringify(mockResponse), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-    ) as unknown as typeof fetch
+    globalThis.fetch = wrapMockAsFetch(
+      mock(
+        async () =>
+          new Response(JSON.stringify(mockResponse), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ),
+    )
 
     const { result } = renderHook(() => useUsageQuery(), {
       wrapper: createWrapper(),
@@ -148,10 +153,8 @@ describe('useUsageQuery', () => {
     getAuthTokenSpy = spyOn(authModule, 'getAuthToken').mockReturnValue(
       'test-token',
     )
-    const fetchMock = mock(
-      async () => new Response('{}'),
-    ) as unknown as typeof fetch
-    globalThis.fetch = fetchMock
+    const fetchMock = mock(async () => new Response('{}'))
+    globalThis.fetch = wrapMockAsFetch(fetchMock)
 
     const { result } = renderHook(() => useUsageQuery({ enabled: false }), {
       wrapper: createWrapper(),
@@ -167,10 +170,8 @@ describe('useUsageQuery', () => {
     getAuthTokenSpy = spyOn(authModule, 'getAuthToken').mockReturnValue(
       undefined,
     )
-    const fetchMock = mock(
-      async () => new Response('{}'),
-    ) as unknown as typeof fetch
-    globalThis.fetch = fetchMock
+    const fetchMock = mock(async () => new Response('{}'))
+    globalThis.fetch = wrapMockAsFetch(fetchMock)
 
     renderHook(() => useUsageQuery(), {
       wrapper: createWrapper(),

@@ -1,3 +1,4 @@
+import { wrapMockAsFetch } from '@codebuff/common/testing/fixtures'
 import { describe, test, expect, mock, beforeEach } from 'bun:test'
 
 import { createCodebuffApiClient } from '../codebuff-api'
@@ -39,7 +40,7 @@ describe('createCodebuffApiClient', () => {
     test('should make GET request with correct URL', async () => {
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockFetch),
       })
 
       await client.get('/api/v1/test', { retry: false })
@@ -52,7 +53,7 @@ describe('createCodebuffApiClient', () => {
     test('should add query parameters', async () => {
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockFetch),
       })
 
       await client.get('/api/v1/me', {
@@ -68,7 +69,7 @@ describe('createCodebuffApiClient', () => {
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
         authToken: 'my-token',
-        fetch: mockFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockFetch),
       })
 
       await client.get('/api/v1/test', { retry: false })
@@ -86,7 +87,7 @@ describe('createCodebuffApiClient', () => {
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
         authToken: 'my-token',
-        fetch: mockFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockFetch),
       })
 
       await client.get('/api/v1/test', { includeAuth: false, retry: false })
@@ -103,7 +104,7 @@ describe('createCodebuffApiClient', () => {
     test('should make POST request with JSON body', async () => {
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockFetch),
       })
 
       await client.post('/api/v1/test', { key: 'value' }, { retry: false })
@@ -123,7 +124,7 @@ describe('createCodebuffApiClient', () => {
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
         authToken: 'my-token',
-        fetch: mockFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockFetch),
       })
 
       await client.post(
@@ -147,7 +148,7 @@ describe('createCodebuffApiClient', () => {
     test('should make PUT request with JSON body', async () => {
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockFetch),
       })
 
       await client.put('/api/v1/test', { key: 'value' }, { retry: false })
@@ -167,7 +168,7 @@ describe('createCodebuffApiClient', () => {
     test('should make PATCH request with JSON body', async () => {
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockFetch),
       })
 
       await client.patch('/api/v1/test', { key: 'value' }, { retry: false })
@@ -184,7 +185,7 @@ describe('createCodebuffApiClient', () => {
     test('should make DELETE request without body', async () => {
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockFetch),
       })
 
       await client.delete('/api/v1/test/123', { retry: false })
@@ -212,7 +213,7 @@ describe('createCodebuffApiClient', () => {
 
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockSuccessFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockSuccessFetch),
       })
 
       const result = await client.get('/api/v1/me', { retry: false })
@@ -236,7 +237,7 @@ describe('createCodebuffApiClient', () => {
 
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockErrorFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockErrorFetch),
       })
 
       const result = await client.get('/api/v1/me', { retry: false })
@@ -249,6 +250,8 @@ describe('createCodebuffApiClient', () => {
     })
 
     test('should handle non-JSON error responses', async () => {
+      // This partial Response mock is acceptable - it tests a specific error path
+      // where json() rejects and we fall back to text()
       const mockErrorFetch = mock<MockFetch>(() =>
         Promise.resolve({
           ok: false,
@@ -256,12 +259,12 @@ describe('createCodebuffApiClient', () => {
           statusText: 'Internal Server Error',
           json: () => Promise.reject(new Error('Not JSON')),
           text: () => Promise.resolve('Server error occurred'),
-        } as unknown as Response),
+        } as Response),
       )
 
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockErrorFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockErrorFetch),
       })
 
       const result = await client.get('/api/v1/test', { retry: false })
@@ -284,7 +287,7 @@ describe('createCodebuffApiClient', () => {
 
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockNoContentFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockNoContentFetch),
       })
 
       const result = await client.delete('/api/v1/test/123', { retry: false })
@@ -316,7 +319,7 @@ describe('createCodebuffApiClient', () => {
 
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockRetryFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockRetryFetch),
         retry: {
           maxRetries: 3,
           initialDelayMs: 10, // Fast for testing
@@ -342,7 +345,7 @@ describe('createCodebuffApiClient', () => {
 
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockBadRequestFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockBadRequestFetch),
         retry: { maxRetries: 3, initialDelayMs: 10 },
       })
 
@@ -365,7 +368,7 @@ describe('createCodebuffApiClient', () => {
 
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockServerErrorFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockServerErrorFetch),
         retry: { maxRetries: 3 },
       })
 
@@ -391,7 +394,7 @@ describe('createCodebuffApiClient', () => {
 
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockNetworkErrorFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockNetworkErrorFetch),
         retry: { maxRetries: 3, initialDelayMs: 10 },
       })
 
@@ -419,7 +422,7 @@ describe('createCodebuffApiClient', () => {
 
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockFetchWithSignal as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockFetchWithSignal),
         defaultTimeoutMs: 5000,
       })
 
@@ -438,7 +441,7 @@ describe('createCodebuffApiClient', () => {
 
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
-        fetch: mockAbortFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockAbortFetch),
       })
 
       // Should retry on abort errors
@@ -453,7 +456,7 @@ describe('createCodebuffApiClient', () => {
       const client = createCodebuffApiClient({
         baseUrl: 'https://test.api',
         authToken: 'my-token',
-        fetch: mockFetch as unknown as typeof fetch,
+        fetch: wrapMockAsFetch(mockFetch),
       })
 
       await client.get('/api/v1/test', {

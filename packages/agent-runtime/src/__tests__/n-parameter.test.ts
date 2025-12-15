@@ -1,5 +1,9 @@
 import * as analytics from '@codebuff/common/analytics'
 import { TEST_USER_ID } from '@codebuff/common/old-constants'
+import {
+  mockAnalytics,
+  mockRandomUUID,
+} from '@codebuff/common/testing/fixtures/agent-runtime'
 import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
 import { getInitialSessionState } from '@codebuff/common/types/session-state'
 import { assistantMessage, userMessage } from '@codebuff/common/util/messages'
@@ -55,16 +59,10 @@ describe('n parameter and GENERATE_N functionality', () => {
       sendAction: () => {},
     }
 
-    // Mock analytics
-    spyOn(analytics, 'initAnalytics').mockImplementation(() => {})
+    // Mock external dependencies
+    mockAnalytics(analytics)
+    mockRandomUUID()
     analytics.initAnalytics({ logger })
-    spyOn(analytics, 'trackEvent').mockImplementation(() => {})
-
-    // Mock crypto.randomUUID
-    spyOn(crypto, 'randomUUID').mockImplementation(
-      () =>
-        'mock-uuid-0000-0000-0000-000000000000' as `${string}-${string}-${string}-${string}-${string}`,
-    )
 
     // Create mock template
     mockTemplate = {

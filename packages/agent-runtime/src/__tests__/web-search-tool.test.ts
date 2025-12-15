@@ -1,6 +1,10 @@
 import * as bigquery from '@codebuff/bigquery'
 import * as analytics from '@codebuff/common/analytics'
 import { TEST_USER_ID } from '@codebuff/common/old-constants'
+import {
+  mockAnalytics,
+  mockBigQuery,
+} from '@codebuff/common/testing/fixtures/agent-runtime'
 import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
 import { getInitialSessionState } from '@codebuff/common/types/session-state'
 import { success } from '@codebuff/common/util/error'
@@ -78,12 +82,9 @@ describe('web_search tool with researcher agent (via web API facade)', () => {
     }
 
     // Mock analytics and tracing
-    spyOn(analytics, 'initAnalytics').mockImplementation(() => {})
+    mockAnalytics(analytics)
+    mockBigQuery(bigquery)
     analytics.initAnalytics(runAgentStepBaseParams)
-    spyOn(analytics, 'trackEvent').mockImplementation(() => {})
-    spyOn(bigquery, 'insertTrace').mockImplementation(() =>
-      Promise.resolve(true),
-    )
 
     // Mock websocket actions
     runAgentStepBaseParams.requestFiles = async () => ({})

@@ -1,12 +1,14 @@
 import * as analytics from '@codebuff/common/analytics'
 import { TEST_USER_ID } from '@codebuff/common/old-constants'
-import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
 import {
-  clearMockedModules,
-  mockModule,
-} from '@codebuff/common/testing/mock-modules'
+  mockAnalytics,
+  mockBigQuery,
+  mockRandomUUID,
+} from '@codebuff/common/testing/fixtures/agent-runtime'
+import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
 import { getInitialSessionState } from '@codebuff/common/types/session-state'
 import { assistantMessage, userMessage } from '@codebuff/common/util/messages'
+import * as bigquery from '@codebuff/bigquery'
 import db from '@codebuff/internal/db'
 import {
   afterAll,
@@ -45,16 +47,16 @@ describe('loopAgentSteps - runAgentStep vs runProgrammaticStep behavior', () => 
     'localAgentTemplates' | 'agentType'
   >
 
-  beforeAll(async () => {
+  beforeAll(() => {
     disableLiveUserInputCheck()
-
-    // Mock bigquery
-    await mockModule('@codebuff/bigquery', () => ({
-      insertTrace: () => {},
-    }))
   })
 
   beforeEach(() => {
+    // Mock external dependencies
+    mockBigQuery(bigquery)
+    mockAnalytics(analytics)
+    mockRandomUUID()
+
     agentRuntimeImpl = {
       ...TEST_AGENT_RUNTIME_IMPL,
       sendAction: () => {},
@@ -84,15 +86,6 @@ describe('loopAgentSteps - runAgentStep vs runProgrammaticStep behavior', () => 
       yield createToolCallChunk('end_turn', {})
       return 'mock-message-id'
     }
-
-    // Mock analytics
-    spyOn(analytics, 'initAnalytics').mockImplementation(() => {})
-    spyOn(analytics, 'trackEvent').mockImplementation(() => {})
-
-    // Mock crypto.randomUUID
-    spyOn(crypto, 'randomUUID').mockImplementation(
-      () => 'mock-uuid-0000-0000-0000-000000000000' as const,
-    )
 
     // Create mock template with programmatic agent
     mockTemplate = {
@@ -150,9 +143,7 @@ describe('loopAgentSteps - runAgentStep vs runProgrammaticStep behavior', () => 
     agentRuntimeImpl = { ...TEST_AGENT_RUNTIME_IMPL }
   })
 
-  afterAll(() => {
-    clearMockedModules()
-  })
+  afterAll(() => {})
 
   it('should verify correct STEP behavior - LLM called once after STEP', async () => {
     // This test verifies that when a programmatic agent yields STEP,

@@ -463,6 +463,10 @@ async function main(): Promise<void> {
     console.log('Installing dependencies with bun...')
     await runCommand('bun', ['install'], worktreePath)
 
+    // Build the SDK (required for CLI tests to resolve @codebuff/sdk)
+    console.log('Building SDK...')
+    await runCommand('bun', ['run', 'build'], join(worktreePath, 'sdk'))
+
     console.log(`✅ Worktree '${args.name}' created and set up successfully!`)
     console.log(`📁 Location: ${worktreePath}`)
     console.log(`🌿 Based on: ${baseBranch} (HEAD)`)

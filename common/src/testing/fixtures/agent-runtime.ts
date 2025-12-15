@@ -5,6 +5,8 @@
  * Do not import from production code.
  */
 
+import { spyOn } from 'bun:test'
+
 import type { AgentTemplate } from '../../types/agent-template'
 import type {
   AgentRuntimeDeps,
@@ -135,3 +137,90 @@ export const TEST_AGENT_RUNTIME_IMPL = Object.freeze<
 
   apiKey: 'test-api-key',
 })
+
+/**
+ * Type for the analytics module to be mocked.
+ * Matches the shape of @codebuff/common/analytics.
+ */
+type AnalyticsModule = {
+  initAnalytics: (...args: unknown[]) => void
+  trackEvent: (...args: unknown[]) => void
+  flushAnalytics?: (...args: unknown[]) => Promise<void>
+}
+
+/**
+ * Type for the bigquery module to be mocked.
+ * Matches the shape of @codebuff/bigquery.
+ */
+type BigQueryModule = {
+  insertTrace: (...args: unknown[]) => Promise<boolean>
+}
+
+/**
+ * Mocks the analytics module with no-op implementations.
+ * Call this in beforeEach or beforeAll in tests that use analytics.
+ *
+ * @param analyticsModule - The imported analytics module (import * as analytics from '@codebuff/common/analytics')
+ *
+ * @example
+ * ```ts
+ * import * as analytics from '@codebuff/common/analytics'
+ * import { mockAnalytics } from '@codebuff/common/testing/fixtures/agent-runtime'
+ *
+ * beforeEach(() => {
+ *   mockAnalytics(analytics)
+ * })
+ * ```
+ */
+export function mockAnalytics(analyticsModule: AnalyticsModule): void {
+  spyOn(analyticsModule, 'initAnalytics').mockImplementation(() => {})
+  spyOn(analyticsModule, 'trackEvent').mockImplementation(() => {})
+  if (analyticsModule.flushAnalytics) {
+    spyOn(analyticsModule, 'flushAnalytics').mockImplementation(() =>
+      Promise.resolve(),
+    )
+  }
+}
+
+/**
+ * Mocks the bigquery module with no-op implementations.
+ * Call this in beforeEach or beforeAll in tests that use bigquery tracing.
+ *
+ * @param bigqueryModule - The imported bigquery module (import * as bigquery from '@codebuff/bigquery')
+ *
+ * @example
+ * ```ts
+ * import * as bigquery from '@codebuff/bigquery'
+ * import { mockBigQuery } from '@codebuff/common/testing/fixtures/agent-runtime'
+ *
+ * beforeEach(() => {
+ *   mockBigQuery(bigquery)
+ * })
+ * ```
+ */
+export function mockBigQuery(bigqueryModule: BigQueryModule): void {
+  spyOn(bigqueryModule, 'insertTrace').mockImplementation(async () => true)
+}
+
+/**
+ * Mocks the crypto.randomUUID function with a predictable value.
+ * Useful for tests that need deterministic UUIDs.
+ *
+ * @param uuid - The UUID string to return (defaults to a test UUID)
+ *
+ * @example
+ * ```ts
+ * import { mockRandomUUID } from '@codebuff/common/testing/fixtures/agent-runtime'
+ *
+ * beforeEach(() => {
+ *   mockRandomUUID()
+ * })
+ * ```
+ */
+export function mockRandomUUID(
+  uuid: string = 'mock-uuid-0000-0000-0000-000000000000',
+): void {
+  spyOn(crypto, 'randomUUID').mockImplementation(
+    () => uuid as `${string}-${string}-${string}-${string}-${string}`,
+  )
+}

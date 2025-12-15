@@ -2,6 +2,7 @@ import { trackEvent } from '@codebuff/common/analytics'
 import { AnalyticsEvent } from '@codebuff/common/constants/analytics-events'
 import { GRANT_PRIORITIES } from '@codebuff/common/constants/grant-priorities'
 import { DEFAULT_FREE_CREDITS_GRANT } from '@codebuff/common/old-constants'
+import type { OptionalFields } from '@codebuff/common/types/function-params'
 import { getNextQuotaReset } from '@codebuff/common/util/dates'
 import { withRetry } from '@codebuff/common/util/promise'
 import db from '@codebuff/internal/db'
@@ -21,6 +22,13 @@ type DbTransaction = Parameters<typeof db.transaction>[0] extends (
   ? T
   : never
 
+// Minimal structural type for database connection
+// This type is intentionally permissive to allow mock injection in tests
+export type BillingDbConn = {
+  transaction: <T>(callback: (tx: any) => Promise<T>) => Promise<T>
+  select: (fields?: any) => any
+}
+
 /**
  * Finds the amount of the most recent expired 'free' grant for a user.
  * Finds the amount of the most recent expired 'free' grant for a user,
@@ -30,14 +38,21 @@ type DbTransaction = Parameters<typeof db.transaction>[0] extends (
  * @param userId The ID of the user.
  * @returns The amount of the last expired free grant (capped at 2000) or the default.
  */
-export async function getPreviousFreeGrantAmount(params: {
-  userId: string
-  logger: Logger
-}): Promise<number> {
-  const { userId, logger } = params
+export async function getPreviousFreeGrantAmount(
+  params: OptionalFields<
+    {
+      userId: string
+      logger: Logger
+      conn: BillingDbConn
+    },
+    'conn'
+  >,
+): Promise<number> {
+  const { conn = db, ...rest } = params
+  const { userId, logger } = rest
 
   const now = new Date()
-  const lastExpiredFreeGrant = await db
+  const lastExpiredFreeGrant = await conn
     .select({
       principal: schema.creditLedger.principal,
     })
@@ -75,14 +90,21 @@ export async function getPreviousFreeGrantAmount(params: {
  * @param userId The ID of the user.
  * @returns The total referral bonus credits earned.
  */
-export async function calculateTotalReferralBonus(params: {
-  userId: string
-  logger: Logger
-}): Promise<number> {
-  const { userId, logger } = params
+export async function calculateTotalReferralBonus(
+  params: OptionalFields<
+    {
+      userId: string
+      logger: Logger
+      conn: BillingDbConn
+    },
+    'conn'
+  >,
+): Promise<number> {
+  const { conn = db, ...rest } = params
+  const { userId, logger } = rest
 
   try {
-    const result = await db
+    const result = await conn
       .select({
         totalCredits: sql<string>`COALESCE(SUM(${schema.referral.credits}), 0)`,
       })
@@ -349,18 +371,25 @@ export async function revokeGrantByOperationId(params: {
  * @param userId The ID of the user
  * @returns The effective quota reset date (either existing or new)
  */
-export interface MonthlyResetResult {
+export type MonthlyResetResult = {
   quotaResetDate: Date
   autoTopupEnabled: boolean
 }
 
-export async function triggerMonthlyResetAndGrant(params: {
-  userId: string
-  logger: Logger
-}): Promise<MonthlyResetResult> {
-  const { userId, logger } = params
+export async function triggerMonthlyResetAndGrant(
+  params: OptionalFields<
+    {
+      userId: string
+      logger: Logger
+      conn: BillingDbConn
+    },
+    'conn'
+  >,
+): Promise<MonthlyResetResult> {
+  const { conn = db, ...rest } = params
+  const { userId, logger } = rest
 
-  return await db.transaction(async (tx) => {
+  return await conn.transaction(async (tx) => {
     const now = new Date()
 
     // Get user's current reset date and auto top-up status
@@ -389,8 +418,8 @@ export async function triggerMonthlyResetAndGrant(params: {
 
     // Calculate grant amounts separately
     const [freeGrantAmount, referralBonus] = await Promise.all([
-      getPreviousFreeGrantAmount(params),
-      calculateTotalReferralBonus(params),
+      getPreviousFreeGrantAmount({ ...rest, conn }),
+      calculateTotalReferralBonus({ ...rest, conn }),
     ])
 
     // Generate a deterministic operation ID based on userId and reset date to minute precision
@@ -406,7 +435,7 @@ export async function triggerMonthlyResetAndGrant(params: {
 
     // Always grant free credits - use grantCreditOperation with tx to keep everything in the same transaction
     await grantCreditOperation({
-      ...params,
+      ...rest,
       amount: freeGrantAmount,
       type: 'free',
       description: 'Monthly free credits',
@@ -418,7 +447,7 @@ export async function triggerMonthlyResetAndGrant(params: {
     // Only grant referral credits if there are any
     if (referralBonus > 0) {
       await grantCreditOperation({
-        ...params,
+        ...rest,
         amount: referralBonus,
         type: 'referral',
         description: 'Monthly referral bonus',

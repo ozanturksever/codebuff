@@ -1,4 +1,4 @@
-import { spawn } from 'child_process'
+import { spawn as nodeSpawn } from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -18,25 +18,30 @@ const INCLUDED_HIDDEN_DIRS = [
   '.husky', // Git hooks
 ]
 
-export function codeSearch({
-  projectPath,
-  pattern,
-  flags,
-  cwd,
-  maxResults = 15,
-  globalMaxResults = 250,
-  maxOutputStringLength = 20_000,
-  timeoutSeconds = 10,
-}: {
-  projectPath: string
-  pattern: string
-  flags?: string
-  cwd?: string
-  maxResults?: number
-  globalMaxResults?: number
-  maxOutputStringLength?: number
-  timeoutSeconds?: number
-}): Promise<CodebuffToolOutput<'code_search'>> {
+export type SpawnFn = typeof nodeSpawn
+
+export function codeSearchWithSpawn(
+  spawn: SpawnFn,
+  {
+    projectPath,
+    pattern,
+    flags,
+    cwd,
+    maxResults = 15,
+    globalMaxResults = 250,
+    maxOutputStringLength = 20_000,
+    timeoutSeconds = 10,
+  }: {
+    projectPath: string
+    pattern: string
+    flags?: string
+    cwd?: string
+    maxResults?: number
+    globalMaxResults?: number
+    maxOutputStringLength?: number
+    timeoutSeconds?: number
+  },
+): Promise<CodebuffToolOutput<'code_search'>> {
   return new Promise((resolve) => {
     let isResolved = false
 
@@ -382,4 +387,17 @@ export function codeSearch({
       })
     })
   })
+}
+
+export function codeSearch(params: {
+  projectPath: string
+  pattern: string
+  flags?: string
+  cwd?: string
+  maxResults?: number
+  globalMaxResults?: number
+  maxOutputStringLength?: number
+  timeoutSeconds?: number
+}): Promise<CodebuffToolOutput<'code_search'>> {
+  return codeSearchWithSpawn(nodeSpawn, params)
 }

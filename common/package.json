@@ -10,6 +10,12 @@
       "import": "./src/*.ts",
       "types": "./src/*.ts",
       "default": "./src/*.ts"
+    },
+    "./testing/fixtures": {
+      "bun": "./src/testing/fixtures/index.ts",
+      "import": "./src/testing/fixtures/index.ts",
+      "types": "./src/testing/fixtures/index.ts",
+      "default": "./src/testing/fixtures/index.ts"
     }
   },
   "scripts": {

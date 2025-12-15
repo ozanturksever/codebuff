@@ -1,3 +1,4 @@
+import { wrapMockAsFetch } from '@codebuff/common/testing/fixtures'
 import { QueryClient } from '@tanstack/react-query'
 import {
   describe,
@@ -52,8 +53,8 @@ describe('Usage Refresh on SDK Completion', () => {
     )
 
     // Mock successful API response
-    globalThis.fetch = mock(
-      async () =>
+    globalThis.fetch = wrapMockAsFetch(
+      mock(async () =>
         new Response(
           JSON.stringify({
             type: 'usage-response',
@@ -63,7 +64,8 @@ describe('Usage Refresh on SDK Completion', () => {
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         ),
-    ) as unknown as typeof fetch
+      ),
+    )
   })
 
   afterEach(() => {
