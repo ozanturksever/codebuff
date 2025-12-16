@@ -68,13 +68,12 @@ export async function getPreviousFreeGrantAmount(
     .limit(1)
 
   if (lastExpiredFreeGrant.length > 0) {
-    // TODO: remove this once it's past May 22nd, after all users have been migrated over
-    const cappedAmount = Math.min(lastExpiredFreeGrant[0].principal, 2000)
+    const amount = lastExpiredFreeGrant[0].principal
     logger.debug(
-      { userId, amount: lastExpiredFreeGrant[0].principal },
+      { userId, amount },
       'Found previous expired free grant amount.',
     )
-    return cappedAmount
+    return amount
   } else {
     logger.debug(
       { userId, defaultAmount: DEFAULT_FREE_CREDITS_GRANT },
