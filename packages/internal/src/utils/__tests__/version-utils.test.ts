@@ -3,7 +3,7 @@ import { describe, expect, it, afterEach, mock } from 'bun:test'
 import {
   createVersionQueryDbMock,
   createExistsQueryDbMock,
-} from '@codebuff/common/testing/fixtures/database'
+} from '@codebuff/common/testing/fixtures'
 
 import * as versionUtils from '../version-utils'
 
