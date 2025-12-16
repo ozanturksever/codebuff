@@ -143,9 +143,9 @@ export const TEST_AGENT_RUNTIME_IMPL = Object.freeze<
  * Matches the shape of @codebuff/common/analytics.
  */
 type AnalyticsModule = {
-  initAnalytics: (...args: unknown[]) => void
-  trackEvent: (...args: unknown[]) => void
-  flushAnalytics?: (...args: unknown[]) => Promise<void>
+  initAnalytics: (...args: any[]) => void
+  trackEvent: (...args: any[]) => void
+  flushAnalytics?: (...args: any[]) => Promise<void>
 }
 
 /**
@@ -153,7 +153,7 @@ type AnalyticsModule = {
  * Matches the shape of @codebuff/bigquery.
  */
 type BigQueryModule = {
-  insertTrace: (...args: unknown[]) => Promise<boolean>
+  insertTrace: (...args: any[]) => Promise<boolean>
 }
 
 /**

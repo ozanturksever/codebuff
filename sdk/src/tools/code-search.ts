@@ -5,7 +5,14 @@ import * as path from 'path'
 import { formatCodeSearchOutput } from '../../../common/src/util/format-code-search'
 import { getBundledRgPath } from '../native/ripgrep'
 
+import type {
+  ChildProcessByStdio,
+  SpawnOptionsWithStdioTuple,
+  StdioNull,
+  StdioPipe,
+} from 'child_process'
 import type { CodebuffToolOutput } from '../../../common/src/tools/list'
+import type { Readable } from 'stream'
 
 // Hidden directories to include in code search by default.
 // These are searched in addition to '.' to ensure important config/workflow files are discoverable.
@@ -18,7 +25,11 @@ const INCLUDED_HIDDEN_DIRS = [
   '.husky', // Git hooks
 ]
 
-export type SpawnFn = typeof nodeSpawn
+export type SpawnFn = (
+  command: string,
+  args: readonly string[],
+  options: SpawnOptionsWithStdioTuple<StdioNull, StdioPipe, StdioPipe>,
+) => ChildProcessByStdio<null, Readable, Readable>
 
 export function codeSearchWithSpawn(
   spawn: SpawnFn,

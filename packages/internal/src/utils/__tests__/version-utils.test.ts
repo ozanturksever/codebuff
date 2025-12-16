@@ -7,6 +7,8 @@ import {
 
 import * as versionUtils from '../version-utils'
 
+import type { CodebuffPgDatabase } from '../../db/types'
+
 const {
   versionOne,
   parseVersion,
@@ -127,7 +129,7 @@ describe('version-utils', () => {
 
   describe('getLatestAgentVersion', () => {
     it('should return version 0.0.0 when no agent exists', async () => {
-      const mockDb = createVersionQueryDbMock([])
+      const mockDb = createVersionQueryDbMock([]) as unknown as CodebuffPgDatabase
 
       const result = await getLatestAgentVersion({
         agentId: 'test-agent',
@@ -138,7 +140,9 @@ describe('version-utils', () => {
     })
 
     it('should return latest version when agent exists', async () => {
-      const mockDb = createVersionQueryDbMock([{ major: 1, minor: 2, patch: 3 }])
+      const mockDb = createVersionQueryDbMock([
+        { major: 1, minor: 2, patch: 3 },
+      ]) as unknown as CodebuffPgDatabase
 
       const result = await getLatestAgentVersion({
         agentId: 'test-agent',
@@ -149,7 +153,9 @@ describe('version-utils', () => {
     })
 
     it('should handle null values in database response', async () => {
-      const mockDb = createVersionQueryDbMock([{ major: null, minor: null, patch: null }])
+      const mockDb = createVersionQueryDbMock([
+        { major: null, minor: null, patch: null },
+      ]) as unknown as CodebuffPgDatabase
 
       const result = await getLatestAgentVersion({
         agentId: 'test-agent',
@@ -162,7 +168,9 @@ describe('version-utils', () => {
 
   describe('determineNextVersion', () => {
     it('should increment patch of latest version when no version provided', async () => {
-      const mockDb = createVersionQueryDbMock([{ major: 1, minor: 2, patch: 3 }])
+      const mockDb = createVersionQueryDbMock([
+        { major: 1, minor: 2, patch: 3 },
+      ]) as unknown as CodebuffPgDatabase
 
       const result = await determineNextVersion({
         agentId: 'test-agent',
@@ -173,7 +181,7 @@ describe('version-utils', () => {
     })
 
     it('should use provided version when higher than latest', async () => {
-      const mockDb = createVersionQueryDbMock([])
+      const mockDb = createVersionQueryDbMock([]) as unknown as CodebuffPgDatabase
 
       const result = await determineNextVersion({
         agentId: 'test-agent',
@@ -185,7 +193,9 @@ describe('version-utils', () => {
     })
 
     it('should throw error when provided version is not greater than latest', async () => {
-      const mockDb = createVersionQueryDbMock([{ major: 2, minor: 0, patch: 0 }])
+      const mockDb = createVersionQueryDbMock([
+        { major: 2, minor: 0, patch: 0 },
+      ]) as unknown as CodebuffPgDatabase
 
       await expect(
         determineNextVersion({
@@ -200,7 +210,9 @@ describe('version-utils', () => {
     })
 
     it('should throw error when provided version equals latest', async () => {
-      const mockDb = createVersionQueryDbMock([{ major: 1, minor: 5, patch: 0 }])
+      const mockDb = createVersionQueryDbMock([
+        { major: 1, minor: 5, patch: 0 },
+      ]) as unknown as CodebuffPgDatabase
 
       await expect(
         determineNextVersion({
@@ -215,7 +227,7 @@ describe('version-utils', () => {
     })
 
     it('should throw error for invalid provided version', async () => {
-      const mockDb = createVersionQueryDbMock([])
+      const mockDb = createVersionQueryDbMock([]) as unknown as CodebuffPgDatabase
 
       await expect(
         determineNextVersion({
@@ -232,7 +244,9 @@ describe('version-utils', () => {
 
   describe('versionExists', () => {
     it('should return true when version exists', async () => {
-      const mockDb = createExistsQueryDbMock([{ id: 'test-agent' }])
+      const mockDb = createExistsQueryDbMock([
+        { id: 'test-agent' },
+      ]) as unknown as CodebuffPgDatabase
 
       const result = await versionExists({
         agentId: 'test-agent',
@@ -244,7 +258,7 @@ describe('version-utils', () => {
     })
 
     it('should return false when version does not exist', async () => {
-      const mockDb = createExistsQueryDbMock([])
+      const mockDb = createExistsQueryDbMock([]) as unknown as CodebuffPgDatabase
 
       const result = await versionExists({
         agentId: 'test-agent',

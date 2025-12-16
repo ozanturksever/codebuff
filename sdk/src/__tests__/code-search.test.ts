@@ -1,21 +1,30 @@
 import { EventEmitter } from 'events'
+import { PassThrough } from 'stream'
 
 import { describe, expect, it, beforeEach, afterEach, spyOn } from 'bun:test'
 
 import { codeSearchWithSpawn, type SpawnFn } from '../tools/code-search'
 
-import type { ChildProcess } from 'child_process'
+import type { ChildProcessByStdio } from 'child_process'
+import type { Readable } from 'stream'
 
 // Helper to create a mock child process with proper ChildProcess shape
-function createMockChildProcess(): ChildProcess {
-  const proc = new EventEmitter() as ChildProcess
-  const stdout = new EventEmitter()
-  const stderr = new EventEmitter()
+function createMockChildProcess(): ChildProcessByStdio<null, Readable, Readable> {
+  const proc = new EventEmitter() as unknown as ChildProcessByStdio<
+    null,
+    Readable,
+    Readable
+  >
+  const stdout: Readable = new PassThrough()
+  const stderr: Readable = new PassThrough()
   
   Object.defineProperty(proc, 'stdout', { value: stdout, writable: false })
   Object.defineProperty(proc, 'stderr', { value: stderr, writable: false })
   Object.defineProperty(proc, 'stdin', { value: null, writable: false })
-  Object.defineProperty(proc, 'stdio', { value: [null, stdout, stderr], writable: false })
+  Object.defineProperty(proc, 'stdio', {
+    value: [null, stdout, stderr, undefined, undefined],
+    writable: false,
+  })
   Object.defineProperty(proc, 'pid', { value: 12345, writable: false })
   Object.defineProperty(proc, 'killed', { value: false, writable: true })
   Object.defineProperty(proc, 'connected', { value: false, writable: false })
@@ -29,7 +38,7 @@ function createMockChildProcess(): ChildProcess {
 
 /** Creates a typed mock spawn function that captures calls and returns controlled processes */
 function createMockSpawn() {
-  let currentProcess: ChildProcess = createMockChildProcess()
+  let currentProcess = createMockChildProcess()
   const calls: Array<{ command: string; args: string[]; options: any }> = []
   
   const spawn: SpawnFn = (command, args, options) => {
