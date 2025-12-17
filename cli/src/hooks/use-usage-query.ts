@@ -28,7 +28,7 @@ interface UsageResponse {
 interface FetchUsageParams {
   authToken: string
   logger?: Logger
-  clientEnv?: ClientEnv
+  clientEnv?: Partial<Pick<ClientEnv, 'NEXT_PUBLIC_CODEBUFF_APP_URL'>>
 }
 
 /**

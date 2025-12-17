@@ -9,7 +9,6 @@ import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-run
 import { getInitialSessionState } from '@codebuff/common/types/session-state'
 import { assistantMessage, userMessage } from '@codebuff/common/util/messages'
 import * as bigquery from '@codebuff/bigquery'
-import db from '@codebuff/internal/db'
 import {
   afterAll,
   afterEach,
@@ -64,21 +63,6 @@ describe('loopAgentSteps - runAgentStep vs runProgrammaticStep behavior', () => 
     }
 
     llmCallCount = 0
-
-    // Setup spies for database operations
-    spyOn(db, 'insert').mockReturnValue({
-      values: mock(() => {
-        return Promise.resolve({ id: 'test-run-id' })
-      }),
-    } as any)
-
-    spyOn(db, 'update').mockReturnValue({
-      set: mock(() => ({
-        where: mock(() => {
-          return Promise.resolve()
-        }),
-      })),
-    } as any)
 
     agentRuntimeImpl.promptAiSdkStream = async function* ({}) {
       llmCallCount++

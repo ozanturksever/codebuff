@@ -1,16 +1,16 @@
-import { wrapMockAsFetch } from '@codebuff/common/testing/fixtures'
+import { wrapMockAsFetch, type FetchCallFn } from '@codebuff/common/testing/fixtures'
 import { describe, test, expect, mock, beforeEach } from 'bun:test'
 
 import { createCodebuffApiClient } from '../codebuff-api'
 
-// Type for mocked fetch function
-type MockFetch = (url: string, options?: RequestInit) => Promise<Response>
+const toUrlString = (input: RequestInfo | URL): string =>
+  input instanceof Request ? input.url : String(input)
 
 describe('createCodebuffApiClient', () => {
-  let mockFetch: ReturnType<typeof mock<MockFetch>>
+  let mockFetch: ReturnType<typeof mock<FetchCallFn>>
 
   beforeEach(() => {
-    mockFetch = mock<MockFetch>(() =>
+    mockFetch = mock<FetchCallFn>(() =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -46,8 +46,8 @@ describe('createCodebuffApiClient', () => {
       await client.get('/api/v1/test', { retry: false })
 
       expect(mockFetch).toHaveBeenCalledTimes(1)
-      const [url] = mockFetch.mock.calls[0] as [string, RequestInit | undefined]
-      expect(url).toBe('https://test.api/api/v1/test')
+      const [request] = mockFetch.mock.calls[0]
+      expect(toUrlString(request)).toBe('https://test.api/api/v1/test')
     })
 
     test('should add query parameters', async () => {
@@ -61,8 +61,10 @@ describe('createCodebuffApiClient', () => {
         retry: false,
       })
 
-      const [url] = mockFetch.mock.calls[0] as [string, RequestInit | undefined]
-      expect(url).toBe('https://test.api/api/v1/me?fields=id%2Cemail')
+      const [request] = mockFetch.mock.calls[0]
+      expect(toUrlString(request)).toBe(
+        'https://test.api/api/v1/me?fields=id%2Cemail',
+      )
     })
 
     test('should include Authorization header when authToken provided', async () => {
@@ -74,10 +76,7 @@ describe('createCodebuffApiClient', () => {
 
       await client.get('/api/v1/test', { retry: false })
 
-      const [, options] = mockFetch.mock.calls[0] as [
-        string,
-        RequestInit | undefined,
-      ]
+      const [, options] = mockFetch.mock.calls[0]
       expect(options?.headers).toEqual({
         Authorization: 'Bearer my-token',
       })
@@ -92,10 +91,7 @@ describe('createCodebuffApiClient', () => {
 
       await client.get('/api/v1/test', { includeAuth: false, retry: false })
 
-      const [, options] = mockFetch.mock.calls[0] as [
-        string,
-        RequestInit | undefined,
-      ]
+      const [, options] = mockFetch.mock.calls[0]
       expect(options?.headers).toEqual({})
     })
   })
@@ -109,10 +105,7 @@ describe('createCodebuffApiClient', () => {
 
       await client.post('/api/v1/test', { key: 'value' }, { retry: false })
 
-      const [, options] = mockFetch.mock.calls[0] as [
-        string,
-        RequestInit | undefined,
-      ]
+      const [, options] = mockFetch.mock.calls[0]
       expect(options?.method).toBe('POST')
       expect(options?.headers).toEqual({
         'Content-Type': 'application/json',
@@ -133,10 +126,7 @@ describe('createCodebuffApiClient', () => {
         { includeCookie: true, includeAuth: false, retry: false },
       )
 
-      const [, options] = mockFetch.mock.calls[0] as [
-        string,
-        RequestInit | undefined,
-      ]
+      const [, options] = mockFetch.mock.calls[0]
       expect(options?.headers).toEqual({
         'Content-Type': 'application/json',
         Cookie: 'next-auth.session-token=my-token;',
@@ -153,10 +143,7 @@ describe('createCodebuffApiClient', () => {
 
       await client.put('/api/v1/test', { key: 'value' }, { retry: false })
 
-      const [, options] = mockFetch.mock.calls[0] as [
-        string,
-        RequestInit | undefined,
-      ]
+      const [, options] = mockFetch.mock.calls[0]
       expect(options?.method).toBe('PUT')
       expect(options?.headers).toEqual({
         'Content-Type': 'application/json',
@@ -173,10 +160,7 @@ describe('createCodebuffApiClient', () => {
 
       await client.patch('/api/v1/test', { key: 'value' }, { retry: false })
 
-      const [, options] = mockFetch.mock.calls[0] as [
-        string,
-        RequestInit | undefined,
-      ]
+      const [, options] = mockFetch.mock.calls[0]
       expect(options?.method).toBe('PATCH')
     })
   })
@@ -190,11 +174,8 @@ describe('createCodebuffApiClient', () => {
 
       await client.delete('/api/v1/test/123', { retry: false })
 
-      const [url, options] = mockFetch.mock.calls[0] as [
-        string,
-        RequestInit | undefined,
-      ]
-      expect(url).toBe('https://test.api/api/v1/test/123')
+      const [request, options] = mockFetch.mock.calls[0]
+      expect(toUrlString(request)).toBe('https://test.api/api/v1/test/123')
       expect(options?.method).toBe('DELETE')
       expect(options?.body).toBeUndefined()
     })
@@ -203,7 +184,7 @@ describe('createCodebuffApiClient', () => {
   describe('response handling', () => {
     test('should return ok response with data', async () => {
       const responseData = { id: 'user-123', email: 'test@example.com' }
-      const mockSuccessFetch = mock<MockFetch>(() =>
+      const mockSuccessFetch = mock<FetchCallFn>(() =>
         Promise.resolve({
           ok: true,
           status: 200,
@@ -226,7 +207,7 @@ describe('createCodebuffApiClient', () => {
     })
 
     test('should return error response with message', async () => {
-      const mockErrorFetch = mock<MockFetch>(() =>
+      const mockErrorFetch = mock<FetchCallFn>(() =>
         Promise.resolve({
           ok: false,
           status: 401,
@@ -252,7 +233,7 @@ describe('createCodebuffApiClient', () => {
     test('should handle non-JSON error responses', async () => {
       // This partial Response mock is acceptable - it tests a specific error path
       // where json() rejects and we fall back to text()
-      const mockErrorFetch = mock<MockFetch>(() =>
+      const mockErrorFetch = mock<FetchCallFn>(() =>
         Promise.resolve({
           ok: false,
           status: 500,
@@ -277,7 +258,7 @@ describe('createCodebuffApiClient', () => {
     })
 
     test('should handle 204 No Content responses', async () => {
-      const mockNoContentFetch = mock<MockFetch>(() =>
+      const mockNoContentFetch = mock<FetchCallFn>(() =>
         Promise.resolve({
           ok: true,
           status: 204,
@@ -300,7 +281,7 @@ describe('createCodebuffApiClient', () => {
   describe('retry logic', () => {
     test('should retry on 500 errors', async () => {
       let callCount = 0
-      const mockRetryFetch = mock<MockFetch>(() => {
+      const mockRetryFetch = mock<FetchCallFn>(() => {
         callCount++
         if (callCount < 3) {
           return Promise.resolve({
@@ -334,7 +315,7 @@ describe('createCodebuffApiClient', () => {
     })
 
     test('should not retry on 400 errors', async () => {
-      const mockBadRequestFetch = mock<MockFetch>(() =>
+      const mockBadRequestFetch = mock<FetchCallFn>(() =>
         Promise.resolve({
           ok: false,
           status: 400,
@@ -357,7 +338,7 @@ describe('createCodebuffApiClient', () => {
     })
 
     test('should respect retry: false option', async () => {
-      const mockServerErrorFetch = mock<MockFetch>(() =>
+      const mockServerErrorFetch = mock<FetchCallFn>(() =>
         Promise.resolve({
           ok: false,
           status: 500,
@@ -380,7 +361,7 @@ describe('createCodebuffApiClient', () => {
 
     test('should retry on network errors', async () => {
       let callCount = 0
-      const mockNetworkErrorFetch = mock<MockFetch>(() => {
+      const mockNetworkErrorFetch = mock<FetchCallFn>(() => {
         callCount++
         if (callCount < 2) {
           return Promise.reject(new Error('Network error: fetch failed'))
@@ -409,8 +390,8 @@ describe('createCodebuffApiClient', () => {
     test('should pass abort signal to fetch', async () => {
       let receivedSignal: AbortSignal | null | undefined
 
-      const mockFetchWithSignal = mock<MockFetch>(
-        async (_url: string, options?: RequestInit) => {
+      const mockFetchWithSignal = mock<FetchCallFn>(
+        async (_input: RequestInfo | URL, options?: RequestInit) => {
           receivedSignal = options?.signal
           return {
             ok: true,
@@ -433,7 +414,7 @@ describe('createCodebuffApiClient', () => {
     })
 
     test('should handle abort error from fetch', async () => {
-      const mockAbortFetch = mock<MockFetch>(() => {
+      const mockAbortFetch = mock<FetchCallFn>(() => {
         const error = new Error('The operation was aborted')
         error.name = 'AbortError'
         return Promise.reject(error)
@@ -464,10 +445,7 @@ describe('createCodebuffApiClient', () => {
         retry: false,
       })
 
-      const [, options] = mockFetch.mock.calls[0] as [
-        string,
-        RequestInit | undefined,
-      ]
+      const [, options] = mockFetch.mock.calls[0]
       expect(options?.headers).toEqual({
         'X-Custom-Header': 'custom-value',
         Authorization: 'Bearer my-token',

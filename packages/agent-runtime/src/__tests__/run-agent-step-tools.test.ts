@@ -8,7 +8,6 @@ import {
 import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
 import { getInitialSessionState } from '@codebuff/common/types/session-state'
 import { assistantMessage, userMessage } from '@codebuff/common/util/messages'
-import db from '@codebuff/internal/db'
 import {
   afterAll,
   afterEach,
@@ -67,17 +66,6 @@ describe('runAgentStep - set_output tool', () => {
       instructionsPrompt: 'Test instructions prompt',
       stepPrompt: 'Test agent step prompt',
     }
-
-    // Setup spies for database operations
-    spyOn(db, 'insert').mockReturnValue({
-      values: mock(() => Promise.resolve({ id: 'test-run-id' })),
-    } as any)
-
-    spyOn(db, 'update').mockReturnValue({
-      set: mock(() => ({
-        where: mock(() => Promise.resolve()),
-      })),
-    } as any)
 
     // Mock analytics and tracing
     mockAnalytics(analytics)

@@ -6,7 +6,6 @@ import { formatCodeSearchOutput } from '../../../common/src/util/format-code-sea
 import { getBundledRgPath } from '../native/ripgrep'
 
 import type {
-  ChildProcessByStdio,
   SpawnOptionsWithStdioTuple,
   StdioNull,
   StdioPipe,
@@ -29,7 +28,18 @@ export type SpawnFn = (
   command: string,
   args: readonly string[],
   options: SpawnOptionsWithStdioTuple<StdioNull, StdioPipe, StdioPipe>,
-) => ChildProcessByStdio<null, Readable, Readable>
+) => SpawnedProcess
+
+export type SpawnedProcess = {
+  stdout: Readable
+  stderr: Readable
+  kill: (signal?: NodeJS.Signals | number) => boolean
+  once: {
+    (event: 'close', listener: (code: number | null) => void): unknown
+    (event: 'error', listener: (error: Error) => void): unknown
+  }
+  removeAllListeners: (event?: string | symbol) => unknown
+}
 
 export function codeSearchWithSpawn(
   spawn: SpawnFn,
@@ -120,7 +130,9 @@ export function codeSearchWithSpawn(
     let estimatedOutputLen = 0
     let killedForLimit = false
 
-    const settle = (payload: any) => {
+    type CodeSearchValue = CodebuffToolOutput<'code_search'>[0]['value']
+
+    const settle = (payload: CodeSearchValue) => {
       if (isResolved) return
       isResolved = true
 

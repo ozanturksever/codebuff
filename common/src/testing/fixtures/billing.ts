@@ -100,12 +100,12 @@ export function createGrantCreditsDbMock(
     insert: () => ({
       values: () => Promise.resolve(),
     }),
-    select: () => createChainableQuery([] as never[]),
+    select: () => createChainableQuery<never[]>([]),
   })
 
   return {
     transaction: async (callback) => callback(createTx()),
-    select: () => createChainableQuery([] as never[]),
+    select: () => createChainableQuery<never[]>([]),
   }
 }
 
@@ -254,7 +254,7 @@ export interface CreditDelegationDbConn {
       innerJoin?: () => {
         where: () => Promise<UserOrganization[]>
       }
-      where: () => Promise<OrgRepo[] | never[]>
+      where: () => Promise<OrgRepo[]>
     }
   }
 }
@@ -292,7 +292,7 @@ export function createCreditDelegationDbMock(
             innerJoin: () => ({
               where: () => Promise.resolve(userOrganizations),
             }),
-            where: () => Promise.resolve([] as never[]),
+            where: () => Promise.resolve<OrgRepo[]>([]),
           }),
         }
       }
@@ -309,7 +309,7 @@ export function createCreditDelegationDbMock(
       // Default: return empty array
       return {
         from: () => ({
-          where: () => Promise.resolve([] as never[]),
+          where: () => Promise.resolve<OrgRepo[]>([]),
         }),
       }
     },

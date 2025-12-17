@@ -2,9 +2,50 @@ import { and, desc, eq } from 'drizzle-orm'
 
 import * as schema from '@codebuff/internal/db/schema'
 
-import type { CodebuffPgDatabase } from '../db/types'
-
 export type Version = { major: number; minor: number; patch: number }
+
+type LatestAgentVersionRow = {
+  major: number | null
+  minor: number | null
+  patch: number | null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isNumberOrNull(value: unknown): value is number | null {
+  return value === null || typeof value === 'number'
+}
+
+function isLatestAgentVersionRow(value: unknown): value is LatestAgentVersionRow {
+  if (!isRecord(value)) return false
+  return (
+    isNumberOrNull(value.major) &&
+    isNumberOrNull(value.minor) &&
+    isNumberOrNull(value.patch)
+  )
+}
+
+export type LatestAgentVersionDb = {
+  select(selection: Record<string, unknown>): {
+    from(table: unknown): {
+      where(condition: unknown): {
+        orderBy(...orderBy: unknown[]): {
+          limit(n: number): PromiseLike<unknown[]>
+        }
+      }
+    }
+  }
+}
+
+export type VersionExistsDb = {
+  select(): {
+    from(table: unknown): {
+      where(condition: unknown): PromiseLike<unknown[]>
+    }
+  }
+}
 
 export function versionOne(): Version {
   return { major: 0, minor: 0, patch: 1 }
@@ -54,11 +95,11 @@ export function isGreater(v1: Version, v2: Version): boolean {
 export async function getLatestAgentVersion(params: {
   agentId: string
   publisherId: string
-  db: CodebuffPgDatabase
+  db: LatestAgentVersionDb
 }): Promise<Version> {
   const { agentId, publisherId, db } = params
 
-  const latestAgent = await db
+  const latestAgentRaw = await db
     .select({
       major: schema.agentConfig.major,
       minor: schema.agentConfig.minor,
@@ -79,6 +120,10 @@ export async function getLatestAgentVersion(params: {
     .limit(1)
     .then((rows) => rows[0])
 
+  const latestAgent = isLatestAgentVersionRow(latestAgentRaw)
+    ? latestAgentRaw
+    : undefined
+
   return {
     major: latestAgent?.major ?? 0,
     minor: latestAgent?.minor ?? 0,
@@ -96,7 +141,7 @@ export async function determineNextVersion(params: {
   agentId: string
   publisherId: string
   providedVersion?: string
-  db: CodebuffPgDatabase
+  db: LatestAgentVersionDb
 }): Promise<Version> {
   const { agentId, publisherId, providedVersion, db } = params
 
@@ -137,7 +182,7 @@ export async function versionExists(params: {
   agentId: string
   version: Version
   publisherId: string
-  db: CodebuffPgDatabase
+  db: VersionExistsDb
 }): Promise<boolean> {
   const { agentId, version, publisherId, db } = params
 

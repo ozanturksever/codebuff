@@ -1,4 +1,4 @@
-import { wrapMockAsFetch } from '@codebuff/common/testing/fixtures'
+import { wrapMockAsFetch, type FetchCallFn } from '@codebuff/common/testing/fixtures'
 import {
   AuthenticationError,
   NetworkError,
@@ -42,9 +42,9 @@ describe('API Integration', () => {
     }) as LoggerMocks
 
   const setFetchMock = (
-    impl: Parameters<typeof mock>[0],
-  ): ReturnType<typeof mock> => {
-    const fetchMock = mock(impl)
+    impl: FetchCallFn,
+  ): ReturnType<typeof mock<FetchCallFn>> => {
+    const fetchMock = mock<FetchCallFn>(impl)
     globalThis.fetch = wrapMockAsFetch(fetchMock)
     return fetchMock
   }

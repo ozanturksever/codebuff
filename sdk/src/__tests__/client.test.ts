@@ -1,4 +1,4 @@
-import { wrapMockAsFetch } from '@codebuff/common/testing/fixtures'
+import { wrapMockAsFetch, type FetchCallFn } from '@codebuff/common/testing/fixtures'
 import { describe, expect, test, mock, afterEach } from 'bun:test'
 
 import { CodebuffClient } from '../client'
@@ -6,7 +6,7 @@ import { CodebuffClient } from '../client'
 describe('CodebuffClient', () => {
   const originalFetch = globalThis.fetch
 
-  const setFetchMock = (mockFetch: ReturnType<typeof mock>) => {
+  const setFetchMock = (mockFetch: ReturnType<typeof mock<FetchCallFn>>) => {
     globalThis.fetch = wrapMockAsFetch(mockFetch)
   }
 
@@ -16,7 +16,7 @@ describe('CodebuffClient', () => {
 
   describe('checkConnection', () => {
     test('returns true when healthz responds with status ok', async () => {
-      const mockFetch = mock(() =>
+      const mockFetch = mock<FetchCallFn>(() =>
         Promise.resolve({
           ok: true,
           json: () => Promise.resolve({ status: 'ok' }),
@@ -33,7 +33,7 @@ describe('CodebuffClient', () => {
     })
 
     test('returns false when response is not ok', async () => {
-      const mockFetch = mock(() =>
+      const mockFetch = mock<FetchCallFn>(() =>
         Promise.resolve({
           ok: false,
           json: () => Promise.resolve({ status: 'ok' }),
@@ -50,7 +50,7 @@ describe('CodebuffClient', () => {
     })
 
     test('returns false when status is not ok', async () => {
-      const mockFetch = mock(() =>
+      const mockFetch = mock<FetchCallFn>(() =>
         Promise.resolve({
           ok: true,
           json: () => Promise.resolve({ status: 'error' }),
@@ -66,7 +66,7 @@ describe('CodebuffClient', () => {
     })
 
     test('returns false when response is not valid JSON', async () => {
-      const mockFetch = mock(() =>
+      const mockFetch = mock<FetchCallFn>(() =>
         Promise.resolve({
           ok: true,
           json: () => Promise.reject(new Error('Invalid JSON')),
@@ -82,7 +82,9 @@ describe('CodebuffClient', () => {
     })
 
     test('returns false when fetch throws an error', async () => {
-      const mockFetch = mock(() => Promise.reject(new Error('Network error')))
+      const mockFetch = mock<FetchCallFn>(() =>
+        Promise.reject(new Error('Network error')),
+      )
 
       setFetchMock(mockFetch)
 
@@ -93,7 +95,7 @@ describe('CodebuffClient', () => {
     })
 
     test('returns false when response body is not an object', async () => {
-      const mockFetch = mock(() =>
+      const mockFetch = mock<FetchCallFn>(() =>
         Promise.resolve({
           ok: true,
           json: () => Promise.resolve('not an object'),
@@ -109,7 +111,7 @@ describe('CodebuffClient', () => {
     })
 
     test('returns false when response body is null', async () => {
-      const mockFetch = mock(() =>
+      const mockFetch = mock<FetchCallFn>(() =>
         Promise.resolve({
           ok: true,
           json: () => Promise.resolve(null),
@@ -125,7 +127,7 @@ describe('CodebuffClient', () => {
     })
 
     test('returns false when response body has no status field', async () => {
-      const mockFetch = mock(() =>
+      const mockFetch = mock<FetchCallFn>(() =>
         Promise.resolve({
           ok: true,
           json: () => Promise.resolve({ message: 'healthy' }),

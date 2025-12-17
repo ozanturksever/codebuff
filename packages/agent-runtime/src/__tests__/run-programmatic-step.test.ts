@@ -21,6 +21,7 @@ import {
   spyOn,
 } from 'bun:test'
 import { cloneDeep } from 'lodash'
+import { z } from 'zod/v4'
 
 import {
   clearAgentGeneratorCache,
@@ -856,15 +857,11 @@ describe('runProgrammaticStep', () => {
       const schemaTemplate = {
         ...mockTemplate,
         outputMode: 'structured_output' as const,
-        outputSchema: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' },
-            status: { type: 'string', enum: ['success', 'error'] },
-            count: { type: 'number' },
-          },
-          required: ['message', 'status'],
-        },
+        outputSchema: z.object({
+          message: z.string(),
+          status: z.enum(['success', 'error']),
+          count: z.number().optional(),
+        }),
         toolNames: ['set_output', 'end_turn'],
       }
 
@@ -889,7 +886,7 @@ describe('runProgrammaticStep', () => {
         ...mockParams,
         template: schemaTemplate,
         localAgentTemplates: { 'test-agent': schemaTemplate },
-      } as any)
+      })
 
       expect(result.endTurn).toBe(true)
       expect(result.agentState.output).toEqual({
@@ -904,14 +901,10 @@ describe('runProgrammaticStep', () => {
       const schemaTemplate = {
         ...mockTemplate,
         outputMode: 'structured_output' as const,
-        outputSchema: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' },
-            status: { type: 'string', enum: ['success', 'error'] },
-          },
-          required: ['message', 'status'],
-        },
+        outputSchema: z.object({
+          message: z.string(),
+          status: z.enum(['success', 'error']),
+        }),
         toolNames: ['set_output', 'end_turn'],
       }
 
@@ -939,7 +932,7 @@ describe('runProgrammaticStep', () => {
         ...mockParams,
         template: schemaTemplate,
         localAgentTemplates: { 'test-agent': schemaTemplate },
-      } as any)
+      })
 
       // Should end turn (validation may fail but execution continues)
       expect(result.endTurn).toBe(true)
@@ -1413,8 +1406,23 @@ describe('runProgrammaticStep', () => {
           if (options.toolName === 'set_output') {
             options.agentState.output = options.input
           } else if (options.toolName === 'add_subgoal') {
-            options.agentState.agentContext[options.input.id as any] = {
-              ...options.input,
+            const id = options.input['id']
+            const objective = options.input['objective']
+            const plan = options.input['plan']
+            const status = options.input['status']
+
+            if (typeof id !== 'string') return
+
+            options.agentState.agentContext[id] = {
+              objective: typeof objective === 'string' ? objective : undefined,
+              plan: typeof plan === 'string' ? plan : undefined,
+              status:
+                status === 'NOT_STARTED' ||
+                status === 'IN_PROGRESS' ||
+                status === 'COMPLETE' ||
+                status === 'ABORTED'
+                  ? status
+                  : undefined,
               logs: [],
             }
           }
@@ -1446,9 +1454,10 @@ describe('runProgrammaticStep', () => {
 
   describe('yield value validation', () => {
     it('should reject invalid yield values', async () => {
-      const mockGenerator = (function* () {
-        yield { invalid: 'value' } as any
-      })() as StepGenerator
+      const mockGenerator = (function* (): StepGenerator {
+        // @ts-expect-error - intentionally invalid yield value to test runtime validation
+        yield { invalid: 'value' }
+      })()
 
       mockTemplate.handleSteps = () => mockGenerator
 
@@ -1464,9 +1473,10 @@ describe('runProgrammaticStep', () => {
     })
 
     it('should reject yield values with wrong types', async () => {
-      const mockGenerator = (function* () {
-        yield { type: 'STEP_TEXT', text: 123 } as any // text should be string
-      })() as StepGenerator
+      const mockGenerator = (function* (): StepGenerator {
+        // @ts-expect-error - text should be string to satisfy schema
+        yield { type: 'STEP_TEXT', text: 123 }
+      })()
 
       mockTemplate.handleSteps = () => mockGenerator
 
@@ -1481,10 +1491,11 @@ describe('runProgrammaticStep', () => {
       )
     })
 
-    it('should reject GENERATE_N with non-positive n', async () => {
-      const mockGenerator = (function* () {
-        yield { type: 'GENERATE_N', n: 0 } as any
-      })() as StepGenerator
+	    it('should reject GENERATE_N with non-positive n', async () => {
+	      const mockGenerator = (function* (): StepGenerator {
+	        // Intentionally invalid per runtime schema: n must be positive
+	        yield { type: 'GENERATE_N', n: 0 }
+	      })()
 
       mockTemplate.handleSteps = () => mockGenerator
 
@@ -1499,10 +1510,11 @@ describe('runProgrammaticStep', () => {
       )
     })
 
-    it('should reject GENERATE_N with negative n', async () => {
-      const mockGenerator = (function* () {
-        yield { type: 'GENERATE_N', n: -5 } as any
-      })() as StepGenerator
+	    it('should reject GENERATE_N with negative n', async () => {
+	      const mockGenerator = (function* (): StepGenerator {
+	        // Intentionally invalid per runtime schema: n must be positive
+	        yield { type: 'GENERATE_N', n: -5 }
+	      })()
 
       mockTemplate.handleSteps = () => mockGenerator
 
@@ -1607,9 +1619,10 @@ describe('runProgrammaticStep', () => {
     })
 
     it('should reject random string values', async () => {
-      const mockGenerator = (function* () {
-        yield 'INVALID_STEP' as any
-      })() as StepGenerator
+      const mockGenerator = (function* (): StepGenerator {
+        // @ts-expect-error - intentionally invalid yield value to test runtime validation
+        yield 'INVALID_STEP'
+      })()
 
       mockTemplate.handleSteps = () => mockGenerator
 
@@ -1622,9 +1635,10 @@ describe('runProgrammaticStep', () => {
     })
 
     it('should reject null yield values', async () => {
-      const mockGenerator = (function* () {
-        yield null as any
-      })() as StepGenerator
+      const mockGenerator = (function* (): StepGenerator {
+        // @ts-expect-error - intentionally invalid yield value to test runtime validation
+        yield null
+      })()
 
       mockTemplate.handleSteps = () => mockGenerator
 
@@ -1637,9 +1651,10 @@ describe('runProgrammaticStep', () => {
     })
 
     it('should reject undefined yield values', async () => {
-      const mockGenerator = (function* () {
-        yield undefined as any
-      })() as StepGenerator
+      const mockGenerator = (function* (): StepGenerator {
+        // @ts-expect-error - intentionally invalid yield value to test runtime validation
+        yield undefined
+      })()
 
       mockTemplate.handleSteps = () => mockGenerator
 
@@ -1652,9 +1667,10 @@ describe('runProgrammaticStep', () => {
     })
 
     it('should reject tool call without toolName', async () => {
-      const mockGenerator = (function* () {
-        yield { input: { paths: ['test.txt'] } } as any
-      })() as StepGenerator
+      const mockGenerator = (function* (): StepGenerator {
+        // @ts-expect-error - tool calls must include toolName
+        yield { input: { paths: ['test.txt'] } }
+      })()
 
       mockTemplate.handleSteps = () => mockGenerator
 
@@ -1667,9 +1683,10 @@ describe('runProgrammaticStep', () => {
     })
 
     it('should reject tool call without input', async () => {
-      const mockGenerator = (function* () {
-        yield { toolName: 'read_files' } as any
-      })() as StepGenerator
+      const mockGenerator = (function* (): StepGenerator {
+        // @ts-expect-error - tool calls must include input
+        yield { toolName: 'read_files' }
+      })()
 
       mockTemplate.handleSteps = () => mockGenerator
 

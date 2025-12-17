@@ -5,41 +5,35 @@ import { describe, expect, it, beforeEach, afterEach, spyOn } from 'bun:test'
 
 import { codeSearchWithSpawn, type SpawnFn } from '../tools/code-search'
 
-import type { ChildProcessByStdio } from 'child_process'
 import type { Readable } from 'stream'
 
-// Helper to create a mock child process with proper ChildProcess shape
-function createMockChildProcess(): ChildProcessByStdio<null, Readable, Readable> {
-  const proc = new EventEmitter() as unknown as ChildProcessByStdio<
-    null,
-    Readable,
-    Readable
-  >
-  const stdout: Readable = new PassThrough()
-  const stderr: Readable = new PassThrough()
-  
-  Object.defineProperty(proc, 'stdout', { value: stdout, writable: false })
-  Object.defineProperty(proc, 'stderr', { value: stderr, writable: false })
-  Object.defineProperty(proc, 'stdin', { value: null, writable: false })
-  Object.defineProperty(proc, 'stdio', {
-    value: [null, stdout, stderr, undefined, undefined],
-    writable: false,
-  })
-  Object.defineProperty(proc, 'pid', { value: 12345, writable: false })
-  Object.defineProperty(proc, 'killed', { value: false, writable: true })
-  Object.defineProperty(proc, 'connected', { value: false, writable: false })
-  ;(proc as any).kill = () => true
-  ;(proc as any).disconnect = () => {}
-  ;(proc as any).unref = () => proc
-  ;(proc as any).ref = () => proc
-  
-  return proc
+class MockSpawnedProcess extends EventEmitter {
+  stdout: Readable
+  stderr: Readable
+
+  constructor() {
+    super()
+    this.stdout = new PassThrough()
+    this.stderr = new PassThrough()
+  }
+
+  kill(_signal?: NodeJS.Signals | number): boolean {
+    return true
+  }
+}
+
+function createMockChildProcess() {
+  return new MockSpawnedProcess()
 }
 
 /** Creates a typed mock spawn function that captures calls and returns controlled processes */
 function createMockSpawn() {
   let currentProcess = createMockChildProcess()
-  const calls: Array<{ command: string; args: string[]; options: any }> = []
+  const calls: Array<{
+    command: Parameters<SpawnFn>[0]
+    args: string[]
+    options: Parameters<SpawnFn>[2]
+  }> = []
   
   const spawn: SpawnFn = (command, args, options) => {
     calls.push({ command, args: [...args], options })
@@ -90,6 +84,27 @@ function createRgJsonContext(
 describe('codeSearch', () => {
   let mockSpawn: ReturnType<typeof createMockSpawn>
 
+  type CodeSearchOutput = Awaited<ReturnType<typeof codeSearchWithSpawn>>
+  type CodeSearchValue = CodeSearchOutput[0]['value']
+
+  function assertHasStdout(
+    value: CodeSearchValue,
+  ): asserts value is Extract<CodeSearchValue, { stdout: string }> {
+    if (!('stdout' in value)) {
+      throw new Error(
+        `Expected stdout but got errorMessage: ${value.errorMessage}`,
+      )
+    }
+  }
+
+  function assertHasErrorMessage(
+    value: CodeSearchValue,
+  ): asserts value is Extract<CodeSearchValue, { errorMessage: string }> {
+    if (!('errorMessage' in value)) {
+      throw new Error('Expected errorMessage')
+    }
+  }
+
   beforeEach(() => {
     mockSpawn = createMockSpawn()
   })
@@ -110,12 +125,13 @@ describe('codeSearch', () => {
         createRgJsonMatch('file2.ts', 10, 'import React from "react"'),
       ].join('\n')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       expect(result[0].type).toBe('json')
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
       expect(value.stdout).toContain('file1.ts:')
       expect(value.stdout).toContain('file2.ts:')
     })
@@ -139,12 +155,13 @@ describe('codeSearch', () => {
         createRgJsonContext('other.ts', 7, 'const port = env.PORT'),
       ].join('\n')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       expect(result[0].type).toBe('json')
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Should contain match lines
       expect(value.stdout).toContain('import { env } from "./config"')
@@ -174,11 +191,12 @@ describe('codeSearch', () => {
         createRgJsonMatch('utils.ts', 10, 'export function helper() {}'),
       ].join('\n')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Should contain match lines
       expect(value.stdout).toContain('export const main = () => {}')
@@ -204,11 +222,12 @@ describe('codeSearch', () => {
         createRgJsonContext('code.ts', 7, '  return null'),
       ].join('\n')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Should contain match line
       expect(value.stdout).toContain('TODO: implement this')
@@ -232,11 +251,12 @@ describe('codeSearch', () => {
         createRgJsonContext('file.ts', 4, ''),
       ].join('\n')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Should contain all matches
       expect(value.stdout).toContain('import foo from "foo"')
@@ -256,11 +276,12 @@ describe('codeSearch', () => {
       // First line match has no before context
       const output = createRgJsonMatch('file.ts', 1, 'import foo from "foo"')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Should still work with match at file start
       expect(value.stdout).toContain('import foo from "foo"')
@@ -278,11 +299,12 @@ describe('codeSearch', () => {
         createRgJsonMatch('file2.ts', 5, 'another test'),
       ].join('\n')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Should not contain '--' separator
       expect(value.stdout).not.toContain('--')
@@ -302,11 +324,12 @@ describe('codeSearch', () => {
         createRgJsonMatch('other-file.ts', 5, 'import bar'),
       ].join('\n')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Files are formatted with filename on its own line followed by content
       expect(value.stdout).toContain('my-file.ts:')
@@ -328,11 +351,12 @@ describe('codeSearch', () => {
         'test content',
       )
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Should parse correctly despite multiple hyphens in filename
       expect(value.stdout).toContain('my-complex_file-name.ts:')
@@ -352,11 +376,12 @@ describe('codeSearch', () => {
         createRgJsonMatch('other.ts', 1, 'import env'),
       ].join('\n')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Output should be reasonably sized, not including entire file
       expect(value.stdout.length).toBeLessThan(2000)
@@ -387,11 +412,12 @@ describe('codeSearch', () => {
         createRgJsonContext('file.ts', 16, 'context 4'),
       ].join('\n')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Should be limited to 2 match results per file (context lines don't count toward limit)
       // Count how many 'test' matches are in the output
@@ -427,11 +453,12 @@ describe('codeSearch', () => {
         createRgJsonContext('file2.ts', 6, 'context 4'),
       ].join('\n')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Should be limited globally to 3 match results (context lines don't count)
       const matches = (value.stdout.match(/test \d/g) || []).length
@@ -459,11 +486,12 @@ describe('codeSearch', () => {
         createRgJsonContext('file.ts', 5, 'context after 2'),
       ].join('\n')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Should include the match
       expect(value.stdout).toContain('match line')
@@ -489,11 +517,12 @@ describe('codeSearch', () => {
         createRgJsonMatch('file.ts', 2, 'another valid line'),
       ].join('\n')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Should still process valid lines
       expect(value.stdout).toContain('valid line')
@@ -506,11 +535,12 @@ describe('codeSearch', () => {
         pattern: 'nonexistent',
       })
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(''))
+      mockSpawn.process.stdout.emit('data', Buffer.from(''))
       mockSpawn.process.emit('close', 1)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // formatCodeSearchOutput returns 'No results' for empty input
       expect(value.stdout).toBe('No results')
@@ -528,11 +558,12 @@ describe('codeSearch', () => {
 
       const output = createRgJsonMatch('file.ts', 1, 'const x = -foo')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       expect(value.stdout).toContain('file.ts:')
       expect(value.stdout).toContain('-foo')
@@ -556,11 +587,12 @@ describe('codeSearch', () => {
         },
       })
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Should not have double newlines or blank lines
       expect(value.stdout).not.toContain('\n\n\n')
@@ -583,11 +615,12 @@ describe('codeSearch', () => {
       // Send as one chunk without trailing newline to simulate remainder scenario
       const output = `${match1}\n${match2}\n${match3}`
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // All three matches should be processed
       expect(value.stdout).toContain('file1.ts:')
@@ -613,12 +646,13 @@ describe('codeSearch', () => {
       }
       const output = matches.join('\n')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       // Process won't get to close because it should kill early
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Should have stopped early and included size limit message
       expect(value.stdout).toContain('Output size limit reached')
@@ -643,11 +677,12 @@ describe('codeSearch', () => {
         },
       })
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
 
       // Should handle path.bytes
       expect(value.stdout).toContain('file-with-bytes.ts:')
@@ -668,12 +703,13 @@ describe('codeSearch', () => {
         createRgJsonMatch('file.ts', 5, 'import { baz } from "qux"'),
       ].join('\n')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       expect(result[0].type).toBe('json')
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
       expect(value.stdout).toContain('file.ts:')
 
       // Verify the args passed to spawn include the glob flag correctly
@@ -692,12 +728,13 @@ describe('codeSearch', () => {
 
       const output = createRgJsonMatch('file.tsx', 1, 'import React from "react"')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
       expect(result[0].type).toBe('json')
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasStdout(value)
       expect(value.stdout).toContain('file.tsx:')
 
       // Verify both glob patterns are passed correctly
@@ -720,7 +757,7 @@ describe('codeSearch', () => {
 
       const output = createRgJsonMatch('file.tsx', 1, 'import React from "react"')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       await searchPromise
@@ -755,7 +792,8 @@ describe('codeSearch', () => {
       mockSpawn.process.emit('close', null)
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasErrorMessage(value)
 
       expect(value.errorMessage).toContain('timed out')
     })
@@ -771,14 +809,12 @@ describe('codeSearch', () => {
 
       const output = createRgJsonMatch('file.ts', 1, 'test content')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
-
-      // Should work correctly and not have an error
-      expect(value.errorMessage).toBeUndefined()
+      const value = result[0].value
+      assertHasStdout(value)
       expect(value.stdout).toContain('file.ts:')
       expect(value.stdout).toContain('test content')
 
@@ -798,13 +834,12 @@ describe('codeSearch', () => {
 
       const output = createRgJsonMatch('file.ts', 1, 'test content')
 
-      mockSpawn.process.stdout!.emit('data', Buffer.from(output))
+      mockSpawn.process.stdout.emit('data', Buffer.from(output))
       mockSpawn.process.emit('close', 0)
 
       const result = await searchPromise
-      const value = result[0].value as any
-
-      expect(value.errorMessage).toBeUndefined()
+      const value = result[0].value
+      assertHasStdout(value)
       expect(value.stdout).toContain('file.ts:')
 
       // Verify spawn was called with correct cwd
@@ -821,7 +856,8 @@ describe('codeSearch', () => {
       })
 
       const result = await searchPromise
-      const value = result[0].value as any
+      const value = result[0].value
+      assertHasErrorMessage(value)
 
       expect(value.errorMessage).toContain('outside the project directory')
     })

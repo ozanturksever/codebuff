@@ -45,6 +45,16 @@ const mockGrants: OrgBillingGrant[] = [
 
 const logger = testLogger
 
+class PgUniqueViolationError extends Error {
+  code = '23505'
+  constraint: string
+
+  constructor(message: string, constraint: string) {
+    super(message)
+    this.constraint = constraint
+  }
+}
+
 describe('Organization Billing', () => {
   afterEach(() => {
     mock.restore()
@@ -216,10 +226,10 @@ describe('Organization Billing', () => {
         grants: mockGrants,
         insert: () => ({
           values: () => {
-            const error = new Error('Duplicate key')
-            ;(error as any).code = '23505'
-            ;(error as any).constraint = 'credit_ledger_pkey'
-            throw error
+            throw new PgUniqueViolationError(
+              'Duplicate key',
+              'credit_ledger_pkey',
+            )
           },
         }),
       })

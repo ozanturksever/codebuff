@@ -54,6 +54,7 @@ export {
   createMockFetchPartial,
   wrapMockAsFetch,
   type FetchFn,
+  type FetchCallFn,
   type MockFetchFn,
   type MockFetchResponseConfig,
 } from './fetch'

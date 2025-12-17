@@ -1,4 +1,4 @@
-import { wrapMockAsFetch } from '@codebuff/common/testing/fixtures'
+import { wrapMockAsFetch, type FetchCallFn } from '@codebuff/common/testing/fixtures'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import {
@@ -12,7 +12,7 @@ import {
 } from 'bun:test'
 import React from 'react'
 
-import type { ClientEnv } from '@codebuff/common/types/contracts/env'
+import type { Logger } from '@codebuff/common/types/contracts/logger'
 
 import { useChatStore } from '../../state/chat-store'
 import * as authModule from '../../utils/auth'
@@ -46,7 +46,7 @@ describe('fetchUsageData', () => {
     }
 
     globalThis.fetch = wrapMockAsFetch(
-      mock(
+      mock<FetchCallFn>(
         async () =>
           new Response(JSON.stringify(mockResponse), {
             status: 200,
@@ -62,17 +62,17 @@ describe('fetchUsageData', () => {
 
   test('should throw error on failed request', async () => {
     globalThis.fetch = wrapMockAsFetch(
-      mock(async () => new Response('Error', { status: 500 })),
+      mock<FetchCallFn>(async () => new Response('Error', { status: 500 })),
     )
-    const mockLogger = {
-      error: mock(() => {}),
-      warn: mock(() => {}),
-      info: mock(() => {}),
-      debug: mock(() => {}),
+    const mockLogger: Logger = {
+      error: mock<Logger['error']>(() => {}),
+      warn: mock<Logger['warn']>(() => {}),
+      info: mock<Logger['info']>(() => {}),
+      debug: mock<Logger['debug']>(() => {}),
     }
 
     await expect(
-      fetchUsageData({ authToken: 'test-token', logger: mockLogger as any }),
+      fetchUsageData({ authToken: 'test-token', logger: mockLogger }),
     ).rejects.toThrow('Failed to fetch usage: 500')
   })
 
@@ -80,9 +80,7 @@ describe('fetchUsageData', () => {
     await expect(
       fetchUsageData({
         authToken: 'test-token',
-        clientEnv: {
-          NEXT_PUBLIC_CODEBUFF_APP_URL: undefined,
-        } as unknown as ClientEnv,
+        clientEnv: { NEXT_PUBLIC_CODEBUFF_APP_URL: undefined },
       }),
     ).rejects.toThrow('NEXT_PUBLIC_CODEBUFF_APP_URL is not set')
   })
@@ -131,7 +129,7 @@ describe('useUsageQuery', () => {
     }
 
     globalThis.fetch = wrapMockAsFetch(
-      mock(
+      mock<FetchCallFn>(
         async () =>
           new Response(JSON.stringify(mockResponse), {
             status: 200,
@@ -153,7 +151,7 @@ describe('useUsageQuery', () => {
     getAuthTokenSpy = spyOn(authModule, 'getAuthToken').mockReturnValue(
       'test-token',
     )
-    const fetchMock = mock(async () => new Response('{}'))
+    const fetchMock = mock<FetchCallFn>(async () => new Response('{}'))
     globalThis.fetch = wrapMockAsFetch(fetchMock)
 
     const { result } = renderHook(() => useUsageQuery({ enabled: false }), {
@@ -170,7 +168,7 @@ describe('useUsageQuery', () => {
     getAuthTokenSpy = spyOn(authModule, 'getAuthToken').mockReturnValue(
       undefined,
     )
-    const fetchMock = mock(async () => new Response('{}'))
+    const fetchMock = mock<FetchCallFn>(async () => new Response('{}'))
     globalThis.fetch = wrapMockAsFetch(fetchMock)
 
     renderHook(() => useUsageQuery(), {
@@ -200,8 +198,7 @@ describe('useRefreshUsage', () => {
   })
 
   test.skip('should invalidate usage queries', async () => {
-    const invalidateSpy = mock(queryClient.invalidateQueries.bind(queryClient))
-    queryClient.invalidateQueries = invalidateSpy as any
+    const invalidateSpy = spyOn(queryClient, 'invalidateQueries')
 
     const { result } = renderHook(() => useRefreshUsage(), {
       wrapper: createWrapper(),

@@ -14,12 +14,21 @@ import { mock } from 'bun:test'
 export type FetchFn = typeof globalThis.fetch
 
 /**
+ * Call signature for fetch without additional properties (e.g. `preconnect`).
+ * This is the type `bun:test` can easily mock.
+ */
+export type FetchCallFn = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Response>
+
+/**
  * Type for a mock fetch function that can be used in place of globalThis.fetch.
  * Includes the mock utilities from bun:test.
  */
 export type MockFetchFn = FetchFn & {
   mock: {
-    calls: Array<[RequestInfo | URL, RequestInit | undefined]>
+    calls: Array<Parameters<FetchCallFn>>
   }
 }
 
@@ -55,6 +64,13 @@ const DEFAULT_STATUS_TEXT: Record<number, string> = {
   503: 'Service Unavailable',
 }
 
+function withPreconnect(
+  mockFn: ReturnType<typeof mock<FetchCallFn>>,
+): MockFetchFn {
+  const preconnect: FetchFn['preconnect'] = () => {}
+  return Object.assign(mockFn, { preconnect })
+}
+
 /**
  * Creates a typed mock fetch function that returns a configured Response.
  *
@@ -76,7 +92,9 @@ const DEFAULT_STATUS_TEXT: Record<number, string> = {
  * agentRuntimeImpl.fetch = mockFetch
  * ```
  */
-export function createMockFetch(config: MockFetchResponseConfig = {}): FetchFn {
+export function createMockFetch(
+  config: MockFetchResponseConfig = {},
+): MockFetchFn {
   const {
     status = 200,
     statusText = DEFAULT_STATUS_TEXT[status] ?? '',
@@ -94,23 +112,15 @@ export function createMockFetch(config: MockFetchResponseConfig = {}): FetchFn {
     responseHeaders['Content-Type'] = 'application/json'
   }
 
-  const mockFn = mock(
-    (_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> => {
-      return Promise.resolve(
-        new Response(responseBody, {
-          status,
-          statusText,
-          headers: responseHeaders,
-        }),
-      )
-    },
+  return withPreconnect(
+    mock<FetchCallFn>(async () => {
+      return new Response(responseBody, {
+        status,
+        statusText,
+        headers: responseHeaders,
+      })
+    }),
   )
-
-  // Add preconnect stub to match fetch interface
-  const fetchFn = mockFn as unknown as FetchFn
-  fetchFn.preconnect = () => {}
-
-  return fetchFn
 }
 
 /**
@@ -123,18 +133,12 @@ export function createMockFetch(config: MockFetchResponseConfig = {}): FetchFn {
  * agentRuntimeImpl.fetch = mockFetch
  * ```
  */
-export function createMockFetchError(error: Error): FetchFn {
-  const mockFn = mock(
-    (_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> => {
-      return Promise.reject(error)
-    },
+export function createMockFetchError(error: Error): MockFetchFn {
+  return withPreconnect(
+    mock<FetchCallFn>(async () => {
+      throw error
+    }),
   )
-
-  // Add preconnect stub to match fetch interface
-  const fetchFn = mockFn as unknown as FetchFn
-  fetchFn.preconnect = () => {}
-
-  return fetchFn
 }
 
 /**
@@ -155,14 +159,8 @@ export function createMockFetchError(error: Error): FetchFn {
  */
 export function createMockFetchCustom(
   implementation: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
-): FetchFn {
-  const mockFn = mock(implementation)
-
-  // Add preconnect stub to match fetch interface
-  const fetchFn = mockFn as unknown as FetchFn
-  fetchFn.preconnect = () => {}
-
-  return fetchFn
+): MockFetchFn {
+  return withPreconnect(mock<FetchCallFn>(implementation))
 }
 
 /**
@@ -172,26 +170,37 @@ export function createMockFetchCustom(
  * @example
  * ```ts
  * const mockFetch = createMockFetchPartial({
- *   ok: true,
  *   status: 200,
  *   json: () => Promise.resolve({ id: 'test' }),
  * })
  * ```
  */
 export function createMockFetchPartial(
-  response: Partial<Response> & { ok: boolean; status: number },
-): FetchFn {
-  const mockFn = mock(
-    (_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> => {
-      return Promise.resolve(response as Response)
-    },
+  response: {
+    status: number
+    statusText?: string
+    headers?: HeadersInit
+    body?: BodyInit | null
+    json?: Response['json']
+    text?: Response['text']
+  },
+): MockFetchFn {
+  const { status, statusText, headers, body } = response
+  const json = response.json
+  const text = response.text
+
+  return withPreconnect(
+    mock<FetchCallFn>(async () => {
+      const res = new Response(body ?? '', { status, statusText, headers })
+      if (json) {
+        Object.defineProperty(res, 'json', { value: json })
+      }
+      if (text) {
+        Object.defineProperty(res, 'text', { value: text })
+      }
+      return res
+    }),
   )
-
-  // Add preconnect stub to match fetch interface
-  const fetchFn = mockFn as unknown as FetchFn
-  fetchFn.preconnect = () => {}
-
-  return fetchFn
 }
 
 /**
@@ -200,15 +209,15 @@ export function createMockFetchPartial(
  *
  * @example
  * ```ts
- * const mockFn = mock(() => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) } as Response))
+ * const mockFn = mock<FetchCallFn>(() =>
+ *   Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) } as Response),
+ * )
  * const typedFetch = wrapMockAsFetch(mockFn)
  * // Now you can use typedFetch without casting and still access mockFn.mock.calls
  * ```
  */
 export function wrapMockAsFetch(
-  mockFn: ReturnType<typeof mock>,
-): FetchFn {
-  const fetchFn = mockFn as unknown as FetchFn
-  fetchFn.preconnect = () => {}
-  return fetchFn
+  mockFn: ReturnType<typeof mock<FetchCallFn>>,
+): MockFetchFn {
+  return withPreconnect(mockFn)
 }
