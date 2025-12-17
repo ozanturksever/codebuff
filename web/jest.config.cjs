@@ -15,6 +15,7 @@ const config = {
     '^@codebuff/internal/xml-parser$': '<rootDir>/src/test-stubs/xml-parser.ts',
     '^react$': '<rootDir>/node_modules/react',
     '^react-dom$': '<rootDir>/node_modules/react-dom',
+    '^bun:test$': '<rootDir>/src/test-stubs/bun-test.ts',
   },
   testPathIgnorePatterns: [
     '<rootDir>/src/__tests__/e2e',
