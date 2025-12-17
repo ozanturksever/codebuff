@@ -21,6 +21,7 @@ const config = {
     '<rootDir>/src/__tests__/e2e',
     '<rootDir>/src/app/api/v1/.*/__tests__',
     '<rootDir>/src/app/api/agents/publish/__tests__',
+    '<rootDir>/src/app/api/agents/\\[publisherId\\]/.*/__tests__',
   ],
 }
 
