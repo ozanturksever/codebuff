@@ -20,16 +20,19 @@ import type {
 describe('/api/v1/chat/completions POST endpoint', () => {
   const mockUserData: Record<
     string,
-    NonNullable<Awaited<GetUserInfoFromApiKeyOutput<'id'>>>
+    { id: string; banned: boolean }
   > = {
     'test-api-key-123': {
       id: 'user-123',
+      banned: false,
     },
     'test-api-key-no-credits': {
       id: 'user-no-credits',
+      banned: false,
     },
     'test-api-key-blocked': {
-      id: '5e5aa538-92c8-4051-b0ec-5f75dbd69767',
+      id: 'banned-user-id',
+      banned: true,
     },
   }
 
@@ -40,7 +43,7 @@ describe('/api/v1/chat/completions POST endpoint', () => {
     if (!userData) {
       return null
     }
-    return { id: userData.id } as any
+    return { id: userData.id, banned: userData.banned } as any
   }
 
   let mockLogger: Logger
@@ -351,8 +354,8 @@ describe('/api/v1/chat/completions POST endpoint', () => {
     })
   })
 
-  describe('Blocked users', () => {
-    it('returns 503 with cryptic error for blocked user IDs', async () => {
+  describe('Banned users', () => {
+    it('returns 403 with clear message for banned users', async () => {
       const req = new NextRequest(
         'http://localhost:3000/api/v1/chat/completions',
         {
@@ -377,12 +380,11 @@ describe('/api/v1/chat/completions POST endpoint', () => {
         loggerWithContext: mockLoggerWithContext,
       })
 
-      expect(response.status).toBe(503)
+      expect(response.status).toBe(403)
       const body = await response.json()
-      expect(body).toEqual({
-        error: 'upstream_timeout',
-        message: 'Overloaded. Request could not be processed',
-      })
+      expect(body.error).toBe('account_suspended')
+      expect(body.message).toContain('Your account has been suspended due to billing issues')
+      expect(body.message).toContain('to resolve this')
     })
   })
 
