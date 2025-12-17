@@ -1,10 +1,24 @@
-import { mock } from 'bun:test'
-
 import type {
   TestableDb,
   TestableDbWhereResult,
 } from '@codebuff/common/types/contracts/database'
 import type { Logger } from '@codebuff/common/types/contracts/logger'
+
+// Compatibility layer: use bun:test mock when available, otherwise identity function
+// This allows the utilities to work in both Bun and Jest environments
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
+const mock: <T extends (...args: any[]) => any>(fn: T) => T = (() => {
+  if (typeof globalThis.Bun !== 'undefined') {
+    try {
+      return require('bun:test').mock
+    } catch {
+      // Fall through to identity function
+    }
+  }
+  // Identity function for Jest or when bun:test is not available
+  return <T extends (...args: any[]) => any>(fn: T) => fn
+})()
+/* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
 
 // ============================================================================
 // Types
