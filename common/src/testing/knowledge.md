@@ -4,7 +4,17 @@ Mock database objects for testing. No real database needed.
 
 ## DbOperations
 
-`DbOperations` is a minimal interface in `@codebuff/common/testing/mock-db`. Both the real `CodebuffPgDatabase` and these mocks satisfy it, so you can pass mocks directly to functions without `as any`.
+`DbOperations` is a minimal interface defined in `@codebuff/common/types/contracts/database`. Both the real `CodebuffPgDatabase` and test mocks satisfy it, enabling dependency injection without `as any` casts.
+
+**Production code** should import from the contracts location:
+```ts
+import type { DbOperations } from '@codebuff/common/types/contracts/database'
+```
+
+**Test code** can import from either location (mock-db re-exports the interface for convenience):
+```ts
+import { createMockDb, type DbOperations } from '@codebuff/common/testing/mock-db'
+```
 
 ## Utilities
 

@@ -1,6 +1,51 @@
 import type { AgentTemplate } from '@codebuff/common/types/agent-template'
 import type { Logger } from '@codebuff/common/types/contracts/logger'
 
+// ============================================================================
+// Database Operations Interface
+// ============================================================================
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * Minimal database interface for dependency injection in API routes.
+ * Both the real CodebuffPgDatabase and test mocks can satisfy this interface.
+ *
+ * Uses `any` for table/column parameters to be compatible with Drizzle ORM's
+ * specific table types while remaining flexible for mocks.
+ */
+export interface DbOperations {
+  insert: (table: any) => {
+    values: (data: any) => PromiseLike<any>
+  }
+  update: (table: any) => {
+    set: (data: any) => {
+      where: (condition: any) => PromiseLike<any>
+    }
+  }
+  select: (columns?: any) => {
+    from: (table: any) => {
+      where: (condition: any) => DbWhereResult
+    }
+  }
+}
+
+/**
+ * Result type for where() that supports multiple query patterns:
+ * - .limit(n) for simple queries
+ * - .orderBy(...).limit(n) for sorted queries
+ * - .then() for promise-like resolution
+ */
+export interface DbWhereResult {
+  then: <TResult = any[]>(
+    onfulfilled?: ((value: any[]) => TResult | PromiseLike<TResult>) | null | undefined,
+  ) => PromiseLike<TResult>
+  limit: (n: number) => PromiseLike<any[]>
+  orderBy: (...columns: any[]) => {
+    limit: (n: number) => PromiseLike<any[]>
+  }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 type User = {
   id: string
   email: string

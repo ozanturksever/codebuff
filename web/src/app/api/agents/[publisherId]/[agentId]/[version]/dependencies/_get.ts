@@ -152,8 +152,13 @@ function createBatchingAgentLookup(
   return async function lookupAgent(
     publisher: string,
     agentId: string,
-    version: string,
+    version: string | null,
   ): Promise<AgentLookupResult | null> {
+    // Can't look up an agent without a version
+    if (version === null) {
+      return null
+    }
+
     const cacheKey = `${publisher}/${agentId}@${version}`
 
     // Return from cache if available
