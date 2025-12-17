@@ -1,4 +1,3 @@
-import { TEST_USER_ID } from '@codebuff/common/old-constants'
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 import { NextRequest } from 'next/server'
 
@@ -25,14 +24,6 @@ describe('agentRunsStepsPost', () => {
           fields.map((field) => [
             field,
             field === 'id' ? 'user-123' : undefined,
-          ]),
-        ) as any
-      }
-      if (apiKey === 'test-key') {
-        return Object.fromEntries(
-          fields.map((field) => [
-            field,
-            field === 'id' ? TEST_USER_ID : undefined,
           ]),
         ) as any
       }
@@ -234,31 +225,6 @@ describe('agentRunsStepsPost', () => {
     expect(response.status).toBe(403)
     const json = await response.json()
     expect(json.error).toBe('Unauthorized to add steps to this run')
-  })
-
-  test('returns test step ID for test user', async () => {
-    const req = new NextRequest(
-      'http://localhost/api/v1/agent-runs/run-123/steps',
-      {
-        method: 'POST',
-        headers: { Authorization: 'Bearer test-key' },
-        body: JSON.stringify({ stepNumber: 1 }),
-      },
-    )
-
-    const response = await postAgentRunsSteps({
-      req,
-      runId: 'run-123',
-      getUserInfoFromApiKey: mockGetUserInfoFromApiKey,
-      logger: mockLogger,
-      loggerWithContext: mockLoggerWithContext,
-      trackEvent: mockTrackEvent,
-      db: mockDb,
-    })
-
-    expect(response.status).toBe(200)
-    const json = await response.json()
-    expect(json.stepId).toBe('test-step-id')
   })
 
   test('successfully adds agent step', async () => {

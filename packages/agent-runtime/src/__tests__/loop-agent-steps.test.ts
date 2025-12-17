@@ -1,5 +1,5 @@
 import * as analytics from '@codebuff/common/analytics'
-import { TEST_USER_ID } from '@codebuff/common/old-constants'
+import { TEST_USER_ID } from '@codebuff/common/testing/constants'
 import {
   mockAnalytics,
   mockBigQuery,

@@ -14,7 +14,6 @@ import {
 import {
   finetunedVertexModels,
   models,
-  TEST_USER_ID,
 } from '@codebuff/common/old-constants'
 import { userMessage } from '@codebuff/common/util/messages'
 import { generateCompactId } from '@codebuff/common/util/string'
@@ -61,6 +60,7 @@ export async function GET(req: NextRequest) {
   if (authResult instanceof NextResponse) {
     return authResult
   }
+  const adminUser = authResult
 
   const userId = req.nextUrl.searchParams.get('userId')
   if (!userId) {
@@ -96,6 +96,7 @@ export async function POST(req: NextRequest) {
   if (authResult instanceof NextResponse) {
     return authResult
   }
+  const adminUser = authResult
 
   const userId = req.nextUrl.searchParams.get('userId')
   if (!userId) {
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
     const results = await relabelUserTraces({
       userId,
       limit,
-      promptContext: buildPromptContext(apiKey),
+      promptContext: buildPromptContext({ apiKey, adminUserId: adminUser.id }),
     })
 
     return NextResponse.json({
@@ -519,14 +520,15 @@ function extractQueryFromMessages(messages: unknown): string {
   return match?.[1] ?? 'Unknown query'
 }
 
-function buildPromptContext(apiKey: string) {
+function buildPromptContext(params: { apiKey: string; adminUserId: string }) {
+  const { apiKey, adminUserId } = params
   return {
     apiKey,
     runId: `admin-relabel-${Date.now()}`,
     clientSessionId: STATIC_SESSION_ID,
     fingerprintId: STATIC_SESSION_ID,
     userInputId: STATIC_SESSION_ID,
-    userId: TEST_USER_ID,
+    userId: adminUserId,
     sendAction: async () => {},
     trackEvent: async () => {},
     logger,

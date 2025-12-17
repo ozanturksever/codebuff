@@ -311,8 +311,6 @@ export function supportsCacheControl(model: Model): boolean {
   return !nonCacheableModels.includes(model)
 }
 
-export const TEST_USER_ID = 'test-user-id'
-
 export function getModelFromShortName(
   modelName: string | undefined,
 ): Model | undefined {

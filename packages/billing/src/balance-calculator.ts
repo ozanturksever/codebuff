@@ -1,4 +1,3 @@
-import { TEST_USER_ID } from '@codebuff/common/old-constants'
 import { GrantTypeValues } from '@codebuff/common/types/grant'
 import { failure, getErrorObject, success } from '@codebuff/common/util/error'
 import db from '@codebuff/internal/db'
@@ -496,9 +495,6 @@ export async function consumeCreditsAndAddAgentStep(params: {
               tx,
             })
 
-            if (userId === TEST_USER_ID) {
-              return { ...result, agentStepId: 'test-step-id' }
-            }
           }
 
           try {

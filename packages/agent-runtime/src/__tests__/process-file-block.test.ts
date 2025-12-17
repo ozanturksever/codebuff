@@ -1,4 +1,4 @@
-import { TEST_USER_ID } from '@codebuff/common/old-constants'
+import { TEST_USER_ID } from '@codebuff/common/testing/constants'
 import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
 import { cleanMarkdownCodeBlock } from '@codebuff/common/util/file'
 import { beforeEach, describe, expect, it } from 'bun:test'
