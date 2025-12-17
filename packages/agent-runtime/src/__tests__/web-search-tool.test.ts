@@ -1,6 +1,5 @@
 import * as bigquery from '@codebuff/bigquery'
 import * as analytics from '@codebuff/common/analytics'
-import { TEST_USER_ID } from '@codebuff/common/testing/constants'
 import {
   mockAnalytics,
   mockBigQuery,
@@ -77,7 +76,7 @@ describe('web_search tool with researcher agent (via web API facade)', () => {
       spawnParams: undefined,
       system: 'Test system prompt',
       tools: {},
-      userId: TEST_USER_ID,
+      userId: 'user-123',
       userInputId: 'test-input',
     }
 

@@ -1,5 +1,4 @@
 import * as analytics from '@codebuff/common/analytics'
-import { TEST_USER_ID } from '@codebuff/common/testing/constants'
 import {
   mockAnalytics,
   mockRandomUUID,
@@ -123,7 +122,7 @@ describe('runProgrammaticStep', () => {
       template: mockTemplate,
       prompt: 'Test prompt',
       toolCallParams: { testParam: 'value' },
-      userId: TEST_USER_ID,
+      userId: 'user-123',
       userInputId: 'test-user-input',
       clientSessionId: 'test-session',
       fingerprintId: 'test-fingerprint',

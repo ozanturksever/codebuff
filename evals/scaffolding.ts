@@ -7,7 +7,6 @@ import { assembleLocalAgentTemplates } from '@codebuff/agent-runtime/templates/a
 import { getFileTokenScores } from '@codebuff/code-map/parse'
 import { clientToolCallSchema } from '@codebuff/common/tools/list'
 import { API_KEY_ENV_VAR } from '@codebuff/common/old-constants'
-import { TEST_USER_ID } from '@codebuff/common/testing/constants'
 import { generateCompactId } from '@codebuff/common/util/string'
 import { getSystemInfo } from '@codebuff/common/util/system-info'
 import { ToolHelpers } from '@codebuff/sdk'
@@ -257,7 +256,7 @@ export async function runAgentStepScaffolding(
     spawnParams: undefined,
     system: 'Test system prompt',
     tools: {},
-    userId: TEST_USER_ID,
+    userId: 'user-123',
     userInputId: generateCompactId(),
   })
 

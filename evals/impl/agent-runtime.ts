@@ -33,7 +33,7 @@ export const EVALS_AGENT_RUNTIME_IMPL = Object.freeze<AgentRuntimeDeps>({
 
   // Database
   getUserInfoFromApiKey: async () => ({
-    id: 'test-user-id',
+    id: 'user-123',
     email: 'test-email',
     discord_id: 'test-discord-id',
     referral_code: 'ref-test-code',

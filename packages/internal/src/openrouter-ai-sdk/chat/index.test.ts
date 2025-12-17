@@ -572,7 +572,7 @@ describe('doGenerate', () => {
         logitBias: { 50256: -100 },
         logprobs: 2,
         parallelToolCalls: false,
-        user: 'test-user-id',
+        user: 'user-123',
       })
       .doGenerate({
         prompt: TEST_PROMPT,
@@ -585,7 +585,7 @@ describe('doGenerate', () => {
       top_logprobs: 2,
       logit_bias: { 50256: -100 },
       parallel_tool_calls: false,
-      user: 'test-user-id',
+      user: 'user-123',
     })
   })
 

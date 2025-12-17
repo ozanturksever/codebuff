@@ -1,4 +1,3 @@
-import { TEST_USER_ID } from '@codebuff/common/testing/constants'
 import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
 import { getInitialSessionState } from '@codebuff/common/types/session-state'
 import {
@@ -69,7 +68,7 @@ describe('Spawn Agents Message History', () => {
       signal: new AbortController().signal,
       system: 'Test system prompt',
       tools: {},
-      userId: TEST_USER_ID,
+      userId: 'user-123',
       userInputId: 'test-input',
       writeToClient: () => {},
     }

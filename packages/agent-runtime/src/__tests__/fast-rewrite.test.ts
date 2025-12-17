@@ -1,6 +1,5 @@
 import path from 'path'
 
-import { TEST_USER_ID } from '@codebuff/common/testing/constants'
 import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
 import { afterAll, beforeEach, describe, expect, it } from 'bun:test'
 import { createPatch } from 'diff'
@@ -34,7 +33,7 @@ describe.skip('rewriteWithOpenAI', () => {
       clientSessionId: 'clientSessionId',
       fingerprintId: 'fingerprintId',
       userInputId: 'userInputId',
-      userId: TEST_USER_ID,
+      userId: 'user-123',
       runId: 'test-run-id',
     })
 

@@ -1,4 +1,3 @@
-import { TEST_USER_ID } from '@codebuff/common/testing/constants'
 import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
 import { getInitialSessionState } from '@codebuff/common/types/session-state'
 import { assistantMessage, userMessage } from '@codebuff/common/util/messages'
@@ -131,7 +130,7 @@ describe('Prompt Caching for Subagents with inheritParentSystemPrompt', () => {
       fingerprintId: 'test-fingerprint',
       fileContext: mockFileContext,
       localAgentTemplates: mockLocalAgentTemplates,
-      userId: TEST_USER_ID,
+      userId: 'user-123',
       clientSessionId: 'test-session',
       ancestorRunIds: [],
       onResponseChunk: () => {},

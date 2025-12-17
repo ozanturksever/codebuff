@@ -1,6 +1,5 @@
 import * as bigquery from '@codebuff/bigquery'
 import * as analytics from '@codebuff/common/analytics'
-import { TEST_USER_ID } from '@codebuff/common/testing/constants'
 import {
   mockAnalytics,
   mockBigQuery,
@@ -97,7 +96,7 @@ describe('mainPrompt', () => {
       ...TEST_AGENT_RUNTIME_IMPL,
       repoId: undefined,
       repoUrl: undefined,
-      userId: TEST_USER_ID,
+      userId: 'user-123',
       clientSessionId: 'test-session',
       onResponseChunk: () => {},
       localAgentTemplates: mockLocalAgentTemplates,
@@ -414,7 +413,7 @@ describe('mainPrompt', () => {
       repoId: undefined,
       repoUrl: undefined,
       action,
-      userId: TEST_USER_ID,
+      userId: 'user-123',
       clientSessionId: 'test-session',
       onResponseChunk: () => {},
       localAgentTemplates: mockLocalAgentTemplates,

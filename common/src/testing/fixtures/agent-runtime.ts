@@ -63,7 +63,7 @@ export const TEST_AGENT_RUNTIME_IMPL = Object.freeze<
     fields,
   }: GetUserInfoFromApiKeyInput<T>) => {
     const user = {
-      id: 'test-user-id',
+      id: 'user-123',
       email: 'test-email',
       discord_id: 'test-discord-id',
       referral_code: 'ref-test-code',

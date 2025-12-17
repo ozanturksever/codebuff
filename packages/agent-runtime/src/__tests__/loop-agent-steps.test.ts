@@ -1,5 +1,4 @@
 import * as analytics from '@codebuff/common/analytics'
-import { TEST_USER_ID } from '@codebuff/common/testing/constants'
 import {
   mockAnalytics,
   mockBigQuery,
@@ -113,7 +112,7 @@ describe('loopAgentSteps - runAgentStep vs runProgrammaticStep behavior', () => 
       spawnParams: undefined,
       fingerprintId: 'test-fingerprint',
       fileContext: mockFileContext,
-      userId: TEST_USER_ID,
+      userId: 'user-123',
       clientSessionId: 'test-session',
       ancestorRunIds: [],
       onResponseChunk: () => {},
