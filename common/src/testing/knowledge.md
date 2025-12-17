@@ -2,9 +2,9 @@
 
 Mock database objects for testing. No real database needed.
 
-## TestableDb
+## DbOperations
 
-`TestableDb` is a minimal interface in `@codebuff/common/types/contracts/database`. Both the real `CodebuffPgDatabase` and these mocks satisfy it, so you can pass mocks directly to functions without `as any`.
+`DbOperations` is a minimal interface in `@codebuff/common/testing/mock-db`. Both the real `CodebuffPgDatabase` and these mocks satisfy it, so you can pass mocks directly to functions without `as any`.
 
 ## Utilities
 
@@ -83,7 +83,7 @@ const mockLogger = createMockLogger()
 
 1. Import from `@codebuff/common/testing/mock-db`
 2. Create in `beforeEach()` for fresh state
-3. Pass to functions that take `TestableDb`
+3. Pass to functions that take `DbOperations`
 
 ## Query patterns
 
