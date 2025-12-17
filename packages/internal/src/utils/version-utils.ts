@@ -2,7 +2,7 @@ import { and, desc, eq } from 'drizzle-orm'
 
 import * as schema from '@codebuff/internal/db/schema'
 
-import type { TestableDb } from '@codebuff/common/types/contracts/database'
+import type { TestableDb } from '@codebuff/common/testing/mock-db'
 
 export type Version = { major: number; minor: number; patch: number }
 

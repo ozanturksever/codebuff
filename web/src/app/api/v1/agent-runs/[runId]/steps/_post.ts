@@ -7,10 +7,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import type { TrackEventFn } from '@codebuff/common/types/contracts/analytics'
-import type {
-  GetUserInfoFromApiKeyFn,
-  TestableDb,
-} from '@codebuff/common/types/contracts/database'
+import type { GetUserInfoFromApiKeyFn } from '@codebuff/common/types/contracts/database'
+import type { TestableDb } from '@codebuff/common/testing/mock-db'
 import type {
   Logger,
   LoggerWithContextFn,
