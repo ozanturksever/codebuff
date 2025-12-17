@@ -4,7 +4,7 @@
  * Re-exports all test fixtures for cleaner imports:
  * @example
  * ```ts
- * import { testLogger, createMockFetch, createGrantCreditsDbMock } from '@codebuff/common/testing/fixtures'
+ * import { testLogger, createMockFetch, createGrantCreditsStoreMock } from '@codebuff/common/testing/fixtures'
  * ```
  */
 
@@ -22,21 +22,20 @@ export {
 
 // Billing database mock fixtures
 export {
-  createGrantCreditsDbMock,
-  createOrgBillingDbMock,
-  createOrgBillingTransactionMock,
-  createCreditDelegationDbMock,
+  createGrantCreditsStoreMock,
+  createOrgBillingStoreMock,
+  createCreditDelegationStoreMock,
   type GrantCreditsMockOptions,
-  type GrantCreditsDbConn,
-  type GrantCreditsTx,
+  type GrantCreditsStore,
+  type GrantCreditsTxStore,
   type OrgBillingGrant,
   type OrgBillingMockOptions,
-  type OrgBillingDbConn,
-  type OrgBillingWithTransactionFn,
+  type OrgBillingStore,
+  type OrgBillingTxStore,
   type UserOrganization,
   type OrgRepo,
   type CreditDelegationMockOptions,
-  type CreditDelegationDbConn,
+  type CreditDelegationStore,
 } from './billing'
 
 // Database mock fixtures

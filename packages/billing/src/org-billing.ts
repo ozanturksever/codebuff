@@ -7,22 +7,7 @@ import { env } from '@codebuff/internal/env'
 import { stripeServer } from '@codebuff/internal/util/stripe'
 import { and, asc, gt, isNull, or, eq } from 'drizzle-orm'
 
-import { consumeFromOrderedGrants } from './balance-calculator'
-
-// Minimal structural type for database connection
-// This type is intentionally permissive to allow mock injection in tests
-export type OrgBillingDbConn = {
-  select: (fields?: any) => any
-  insert: (table?: any) => any
-  update: (table?: any) => any
-}
-
-// Type for transaction wrapper function (permissive for mock injection in tests)
-export type WithTransactionFn = <T>(params: {
-  callback: (tx: OrgBillingDbConn) => Promise<T>
-  context: Record<string, unknown>
-  logger: Logger
-}) => Promise<T>
+import { consumeFromOrderedGrantsWithUpdater } from './balance-calculator'
 
 import type {
   CreditBalance,
@@ -33,8 +18,73 @@ import type { Logger } from '@codebuff/common/types/contracts/logger'
 import type { OptionalFields } from '@codebuff/common/types/function-params'
 import type { GrantType } from '@codebuff/internal/db/schema'
 
-// Minimal structural type that both `db` and `tx` satisfy (permissive for mock injection)
-type DbConn = OrgBillingDbConn
+type OrgBillingDbClient = Pick<typeof db, 'select' | 'insert' | 'update'>
+
+export interface OrgBillingTxStore {
+  listOrderedActiveOrganizationGrants(params: {
+    organizationId: string
+    now: Date
+  }): Promise<(typeof schema.creditLedger.$inferSelect)[]>
+  insertCreditLedgerEntry(
+    values: typeof schema.creditLedger.$inferInsert,
+  ): Promise<void>
+  updateCreditLedgerBalance(params: {
+    operationId: string
+    balance: number
+  }): Promise<void>
+}
+
+export interface OrgBillingStore extends OrgBillingTxStore {
+  withTransaction<T>(params: {
+    callback: (tx: OrgBillingTxStore) => Promise<T>
+    context: Record<string, unknown>
+    logger: Logger
+  }): Promise<T>
+}
+
+function createOrgBillingTxStore(conn: OrgBillingDbClient): OrgBillingTxStore {
+  return {
+    listOrderedActiveOrganizationGrants: async ({ organizationId, now }) =>
+      conn
+        .select()
+        .from(schema.creditLedger)
+        .where(
+          and(
+            eq(schema.creditLedger.org_id, organizationId),
+            or(
+              isNull(schema.creditLedger.expires_at),
+              gt(schema.creditLedger.expires_at, now),
+            ),
+          ),
+        )
+        .orderBy(
+          asc(schema.creditLedger.priority),
+          asc(schema.creditLedger.expires_at),
+          asc(schema.creditLedger.created_at),
+        ),
+    insertCreditLedgerEntry: async (values) => {
+      await conn.insert(schema.creditLedger).values(values)
+    },
+    updateCreditLedgerBalance: async ({ operationId, balance }) => {
+      await conn
+        .update(schema.creditLedger)
+        .set({ balance })
+        .where(eq(schema.creditLedger.operation_id, operationId))
+    },
+  }
+}
+
+const DEFAULT_TX_STORE = createOrgBillingTxStore(db)
+
+const DEFAULT_STORE: OrgBillingStore = {
+  ...DEFAULT_TX_STORE,
+  withTransaction: async ({ callback, context, logger }) =>
+    withSerializableTransaction({
+      callback: (tx) => callback(createOrgBillingTxStore(tx)),
+      context,
+      logger,
+    }),
+}
 
 /**
  * Syncs organization billing cycle with Stripe subscription and returns the current cycle start date.
@@ -147,31 +197,13 @@ export async function getOrderedActiveOrganizationGrants(
     {
       organizationId: string
       now: Date
-      conn: DbConn
+      store: OrgBillingTxStore
     },
-    'conn'
+    'store'
   >,
 ) {
-  const withDefaults = { conn: db, ...params }
-  const { organizationId, now, conn } = withDefaults
-
-  return conn
-    .select()
-    .from(schema.creditLedger)
-    .where(
-      and(
-        eq(schema.creditLedger.org_id, organizationId),
-        or(
-          isNull(schema.creditLedger.expires_at),
-          gt(schema.creditLedger.expires_at, now),
-        ),
-      ),
-    )
-    .orderBy(
-      asc(schema.creditLedger.priority),
-      asc(schema.creditLedger.expires_at),
-      asc(schema.creditLedger.created_at),
-    )
+  const { store = DEFAULT_STORE, organizationId, now } = params
+  return store.listOrderedActiveOrganizationGrants({ organizationId, now })
 }
 
 /**
@@ -183,18 +215,18 @@ export async function calculateOrganizationUsageAndBalance(
       organizationId: string
       quotaResetDate: Date
       now: Date
-      conn: DbConn
+      store: OrgBillingTxStore
       logger: Logger
     },
-    'conn' | 'now'
+    'store' | 'now'
   >,
 ): Promise<CreditUsageAndBalance> {
   const withDefaults = {
     now: new Date(),
-    conn: db,
+    store: DEFAULT_STORE,
     ...params,
   }
-  const { organizationId, quotaResetDate, now, conn, logger } = withDefaults
+  const { organizationId, quotaResetDate, now, store, logger } = withDefaults
 
   // Get all relevant grants for the organization
   const grants = await getOrderedActiveOrganizationGrants(withDefaults)
@@ -288,21 +320,20 @@ export async function consumeOrganizationCredits(
       organizationId: string
       creditsToConsume: number
       logger: Logger
-      withTransaction: WithTransactionFn
+      store: OrgBillingStore
     },
-    'withTransaction'
+    'store'
   >,
 ): Promise<CreditConsumptionResult> {
-  const { withTransaction = withSerializableTransaction, ...rest } = params
-  const { organizationId, creditsToConsume, logger } = rest
+  const { store = DEFAULT_STORE, organizationId, creditsToConsume, logger } =
+    params
 
-  return await withTransaction({
-    callback: async (tx) => {
+  return await store.withTransaction({
+    callback: async (txStore) => {
       const now = new Date()
-      const activeGrants = await getOrderedActiveOrganizationGrants({
-        ...rest,
+      const activeGrants = await txStore.listOrderedActiveOrganizationGrants({
+        organizationId,
         now,
-        conn: tx,
       })
 
       if (activeGrants.length === 0) {
@@ -313,12 +344,16 @@ export async function consumeOrganizationCredits(
         throw new Error('No active organization grants found')
       }
 
-      const result = await consumeFromOrderedGrants({
+      const result = await consumeFromOrderedGrantsWithUpdater({
         userId: organizationId,
         creditsToConsume,
         grants: activeGrants,
-        tx,
         logger,
+        updateGrantBalance: ({ grant, newBalance }) =>
+          txStore.updateCreditLedgerBalance({
+            operationId: grant.operation_id,
+            balance: newBalance,
+          }),
       })
 
       return result
@@ -341,15 +376,15 @@ export async function grantOrganizationCredits(
       description: string
       expiresAt: Date | null
       logger: Logger
-      conn: OrgBillingDbConn
+      store: OrgBillingTxStore
     },
-    'description' | 'expiresAt' | 'conn'
+    'description' | 'expiresAt' | 'store'
   >,
 ): Promise<void> {
   const withDefaults = {
     description: 'Organization credit purchase',
     expiresAt: null,
-    conn: db,
+    store: DEFAULT_STORE,
     ...params,
   }
   const {
@@ -360,13 +395,13 @@ export async function grantOrganizationCredits(
     description,
     expiresAt,
     logger,
-    conn,
+    store,
   } = withDefaults
 
   const now = new Date()
 
   try {
-    await conn.insert(schema.creditLedger).values({
+    await store.insertCreditLedgerEntry({
       operation_id: operationId,
       user_id: userId,
       org_id: organizationId,

@@ -16,17 +16,122 @@ import type { Logger } from '@codebuff/common/types/contracts/logger'
 import type { GrantType } from '@codebuff/internal/db/schema'
 
 type CreditGrantSelect = typeof schema.creditLedger.$inferSelect
-type DbTransaction = Parameters<typeof db.transaction>[0] extends (
-  tx: infer T,
-) => any
-  ? T
-  : never
 
-// Minimal structural type for database connection
-// This type is intentionally permissive to allow mock injection in tests
-export type BillingDbConn = {
-  transaction: <T>(callback: (tx: any) => Promise<T>) => Promise<T>
-  select: (fields?: any) => any
+type MonthlyResetUserRow = {
+  next_quota_reset: Date | null
+  auto_topup_enabled: boolean | null
+}
+
+type GrantCreditsTxClient = Pick<typeof db, 'select' | 'insert' | 'update' | 'query'>
+
+export interface GrantCreditsTxStore {
+  getMonthlyResetUser(params: { userId: string }): Promise<MonthlyResetUserRow | null>
+  updateUserNextQuotaReset(params: {
+    userId: string
+    nextQuotaReset: Date
+  }): Promise<void>
+  getMostRecentExpiredFreeGrantPrincipal(params: {
+    userId: string
+    now: Date
+  }): Promise<number | null>
+  getTotalReferralBonusCredits(params: { userId: string }): Promise<number>
+  listActiveCreditGrants(params: {
+    userId: string
+    now: Date
+  }): Promise<CreditGrantSelect[]>
+  updateCreditLedgerBalance(params: {
+    operationId: string
+    balance: number
+  }): Promise<void>
+  insertCreditLedgerEntry(
+    values: typeof schema.creditLedger.$inferInsert,
+  ): Promise<void>
+}
+
+export interface GrantCreditsStore extends GrantCreditsTxStore {
+  withTransaction<T>(callback: (tx: GrantCreditsTxStore) => Promise<T>): Promise<T>
+}
+
+function createGrantCreditsTxStore(conn: GrantCreditsTxClient): GrantCreditsTxStore {
+  return {
+    getMonthlyResetUser: async ({ userId }) =>
+      (await conn.query.user.findFirst({
+        where: eq(schema.user.id, userId),
+        columns: {
+          next_quota_reset: true,
+          auto_topup_enabled: true,
+        },
+      })) ?? null,
+    updateUserNextQuotaReset: async ({ userId, nextQuotaReset }) => {
+      await conn
+        .update(schema.user)
+        .set({ next_quota_reset: nextQuotaReset })
+        .where(eq(schema.user.id, userId))
+    },
+    getMostRecentExpiredFreeGrantPrincipal: async ({ userId, now }) => {
+      const result = await conn
+        .select({
+          principal: schema.creditLedger.principal,
+        })
+        .from(schema.creditLedger)
+        .where(
+          and(
+            eq(schema.creditLedger.user_id, userId),
+            eq(schema.creditLedger.type, 'free'),
+            lte(schema.creditLedger.expires_at, now),
+          ),
+        )
+        .orderBy(desc(schema.creditLedger.expires_at))
+        .limit(1)
+
+      return result[0]?.principal ?? null
+    },
+    getTotalReferralBonusCredits: async ({ userId }) => {
+      const result = await conn
+        .select({
+          totalCredits: sql<string>`COALESCE(SUM(${schema.referral.credits}), 0)`,
+        })
+        .from(schema.referral)
+        .where(
+          or(
+            eq(schema.referral.referrer_id, userId),
+            eq(schema.referral.referred_id, userId),
+          ),
+        )
+
+      return parseInt(result[0]?.totalCredits ?? '0')
+    },
+    listActiveCreditGrants: async ({ userId, now }) =>
+      conn
+        .select()
+        .from(schema.creditLedger)
+        .where(
+          and(
+            eq(schema.creditLedger.user_id, userId),
+            or(
+              isNull(schema.creditLedger.expires_at),
+              gt(schema.creditLedger.expires_at, now),
+            ),
+          ),
+        ),
+    updateCreditLedgerBalance: async ({ operationId, balance }) => {
+      await conn
+        .update(schema.creditLedger)
+        .set({ balance })
+        .where(eq(schema.creditLedger.operation_id, operationId))
+    },
+    insertCreditLedgerEntry: async (values) => {
+      await conn.insert(schema.creditLedger).values(values)
+    },
+  }
+}
+
+const DEFAULT_TX_STORE = createGrantCreditsTxStore(db)
+
+const DEFAULT_STORE: GrantCreditsStore = {
+  ...DEFAULT_TX_STORE,
+  withTransaction: async (callback) =>
+    db.transaction((tx) => callback(createGrantCreditsTxStore(tx))),
 }
 
 /**
@@ -43,32 +148,17 @@ export async function getPreviousFreeGrantAmount(
     {
       userId: string
       logger: Logger
-      conn: BillingDbConn
+      store: GrantCreditsTxStore
     },
-    'conn'
+    'store'
   >,
 ): Promise<number> {
-  const { conn = db, ...rest } = params
-  const { userId, logger } = rest
+  const { store = DEFAULT_STORE, userId, logger } = params
 
   const now = new Date()
-  const lastExpiredFreeGrant = await conn
-    .select({
-      principal: schema.creditLedger.principal,
-    })
-    .from(schema.creditLedger)
-    .where(
-      and(
-        eq(schema.creditLedger.user_id, userId),
-        eq(schema.creditLedger.type, 'free'),
-        lte(schema.creditLedger.expires_at, now), // Grant has expired
-      ),
-    )
-    .orderBy(desc(schema.creditLedger.expires_at)) // Most recent expiry first
-    .limit(1)
+  const amount = await store.getMostRecentExpiredFreeGrantPrincipal({ userId, now })
 
-  if (lastExpiredFreeGrant.length > 0) {
-    const amount = lastExpiredFreeGrant[0].principal
+  if (amount !== null) {
     logger.debug(
       { userId, amount },
       'Found previous expired free grant amount.',
@@ -94,28 +184,15 @@ export async function calculateTotalReferralBonus(
     {
       userId: string
       logger: Logger
-      conn: BillingDbConn
+      store: GrantCreditsTxStore
     },
-    'conn'
+    'store'
   >,
 ): Promise<number> {
-  const { conn = db, ...rest } = params
-  const { userId, logger } = rest
+  const { store = DEFAULT_STORE, userId, logger } = params
 
   try {
-    const result = await conn
-      .select({
-        totalCredits: sql<string>`COALESCE(SUM(${schema.referral.credits}), 0)`,
-      })
-      .from(schema.referral)
-      .where(
-        or(
-          eq(schema.referral.referrer_id, userId),
-          eq(schema.referral.referred_id, userId),
-        ),
-      )
-
-    const totalBonus = parseInt(result[0]?.totalCredits ?? '0')
+    const totalBonus = await store.getTotalReferralBonusCredits({ userId })
     logger.debug({ userId, totalBonus }, 'Calculated total referral bonus.')
     return totalBonus
   } catch (error) {
@@ -137,7 +214,8 @@ export async function grantCreditOperation(params: {
   description: string
   expiresAt: Date | null
   operationId: string
-  tx?: DbTransaction
+  tx?: GrantCreditsTxClient
+  store?: GrantCreditsTxStore
   logger: Logger
 }) {
   const {
@@ -148,10 +226,12 @@ export async function grantCreditOperation(params: {
     expiresAt,
     operationId,
     tx,
+    store,
     logger,
   } = params
 
-  const dbClient = tx || db
+  const effectiveStore =
+    store ?? (tx ? createGrantCreditsTxStore(tx) : DEFAULT_STORE)
 
   const now = new Date()
 
@@ -165,19 +245,9 @@ export async function grantCreditOperation(params: {
   }
 
   // First check for any negative balances
-  const negativeGrants = await dbClient
-    .select()
-    .from(schema.creditLedger)
-    .where(
-      and(
-        eq(schema.creditLedger.user_id, userId),
-        or(
-          isNull(schema.creditLedger.expires_at),
-          gt(schema.creditLedger.expires_at, now),
-        ),
-      ),
-    )
-    .then((grants) => grants.filter((g) => g.balance < 0))
+  const negativeGrants = (
+    await effectiveStore.listActiveCreditGrants({ userId, now })
+  ).filter((grant) => grant.balance < 0)
 
   if (negativeGrants.length > 0) {
     const totalDebt = negativeGrants.reduce(
@@ -185,15 +255,15 @@ export async function grantCreditOperation(params: {
       0,
     )
     for (const grant of negativeGrants) {
-      await dbClient
-        .update(schema.creditLedger)
-        .set({ balance: 0 })
-        .where(eq(schema.creditLedger.operation_id, grant.operation_id))
+      await effectiveStore.updateCreditLedgerBalance({
+        operationId: grant.operation_id,
+        balance: 0,
+      })
     }
     const remainingAmount = Math.max(0, amount - totalDebt)
     if (remainingAmount > 0) {
       try {
-        await dbClient.insert(schema.creditLedger).values({
+        await effectiveStore.insertCreditLedgerEntry({
           operation_id: operationId,
           user_id: userId,
           principal: amount,
@@ -221,7 +291,7 @@ export async function grantCreditOperation(params: {
   } else {
     // No debt - create grant normally
     try {
-      await dbClient.insert(schema.creditLedger).values({
+      await effectiveStore.insertCreditLedgerEntry({
         operation_id: operationId,
         user_id: userId,
         principal: amount,
@@ -380,25 +450,18 @@ export async function triggerMonthlyResetAndGrant(
     {
       userId: string
       logger: Logger
-      conn: BillingDbConn
+      store: GrantCreditsStore
     },
-    'conn'
+    'store'
   >,
 ): Promise<MonthlyResetResult> {
-  const { conn = db, ...rest } = params
-  const { userId, logger } = rest
+  const { store = DEFAULT_STORE, userId, logger } = params
 
-  return await conn.transaction(async (tx) => {
+  return await store.withTransaction(async (txStore) => {
     const now = new Date()
 
     // Get user's current reset date and auto top-up status
-    const user = await tx.query.user.findFirst({
-      where: eq(schema.user.id, userId),
-      columns: {
-        next_quota_reset: true,
-        auto_topup_enabled: true,
-      },
-    })
+    const user = await txStore.getMonthlyResetUser({ userId })
 
     if (!user) {
       throw new Error(`User ${userId} not found`)
@@ -417,8 +480,8 @@ export async function triggerMonthlyResetAndGrant(
 
     // Calculate grant amounts separately
     const [freeGrantAmount, referralBonus] = await Promise.all([
-      getPreviousFreeGrantAmount({ ...rest, conn }),
-      calculateTotalReferralBonus({ ...rest, conn }),
+      getPreviousFreeGrantAmount({ userId, logger, store: txStore }),
+      calculateTotalReferralBonus({ userId, logger, store: txStore }),
     ])
 
     // Generate a deterministic operation ID based on userId and reset date to minute precision
@@ -427,32 +490,34 @@ export async function triggerMonthlyResetAndGrant(
     const referralOperationId = `referral-${userId}-${timestamp}`
 
     // Update the user's next reset date
-    await tx
-      .update(schema.user)
-      .set({ next_quota_reset: newResetDate })
-      .where(eq(schema.user.id, userId))
+    await txStore.updateUserNextQuotaReset({
+      userId,
+      nextQuotaReset: newResetDate,
+    })
 
     // Always grant free credits - use grantCreditOperation with tx to keep everything in the same transaction
     await grantCreditOperation({
-      ...rest,
       amount: freeGrantAmount,
       type: 'free',
       description: 'Monthly free credits',
       expiresAt: newResetDate, // Free credits expire at next reset
       operationId: freeOperationId,
-      tx,
+      userId,
+      logger,
+      store: txStore,
     })
 
     // Only grant referral credits if there are any
     if (referralBonus > 0) {
       await grantCreditOperation({
-        ...rest,
         amount: referralBonus,
         type: 'referral',
         description: 'Monthly referral bonus',
         expiresAt: newResetDate, // Referral credits expire at next reset
         operationId: referralOperationId,
-        tx,
+        userId,
+        logger,
+        store: txStore,
       })
     }
 

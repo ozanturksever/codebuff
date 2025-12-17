@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 
 import {
-  createOrgBillingDbMock,
-  createOrgBillingTransactionMock,
+  createOrgBillingStoreMock,
   testLogger,
   type OrgBillingGrant,
 } from '@codebuff/common/testing/fixtures'
@@ -20,7 +19,7 @@ const mockGrants: OrgBillingGrant[] = [
   {
     operation_id: 'org-grant-1',
     user_id: '',
-    organization_id: 'org-123',
+    org_id: 'org-123',
     principal: 1000,
     balance: 800,
     type: 'organization',
@@ -32,7 +31,7 @@ const mockGrants: OrgBillingGrant[] = [
   {
     operation_id: 'org-grant-2',
     user_id: '',
-    organization_id: 'org-123',
+    org_id: 'org-123',
     principal: 500,
     balance: -100, // Debt
     type: 'organization',
@@ -62,7 +61,7 @@ describe('Organization Billing', () => {
 
   describe('calculateOrganizationUsageAndBalance', () => {
     it('should calculate balance correctly with positive and negative balances', async () => {
-      const mockDb = createOrgBillingDbMock({ grants: mockGrants })
+      const mockStore = createOrgBillingStoreMock({ grants: mockGrants })
       const organizationId = 'org-123'
       const quotaResetDate = new Date('2024-01-01')
       const now = new Date('2024-06-01')
@@ -72,7 +71,7 @@ describe('Organization Billing', () => {
         quotaResetDate,
         now,
         logger,
-        conn: mockDb,
+        store: mockStore,
       })
 
       // Total positive balance: 800
@@ -88,7 +87,7 @@ describe('Organization Billing', () => {
 
     it('should handle organization with no grants', async () => {
       // Mock empty grants
-      const mockDb = createOrgBillingDbMock({ grants: [] })
+      const mockStore = createOrgBillingStoreMock({ grants: [] })
 
       const organizationId = 'org-empty'
       const quotaResetDate = new Date('2024-01-01')
@@ -99,7 +98,7 @@ describe('Organization Billing', () => {
         quotaResetDate,
         now,
         logger,
-        conn: mockDb,
+        store: mockStore,
       })
 
       expect(result.balance.totalRemaining).toBe(0)
@@ -178,8 +177,7 @@ describe('Organization Billing', () => {
 
   describe('consumeOrganizationCredits', () => {
     it('should consume credits from organization grants', async () => {
-      const mockDb = createOrgBillingDbMock({ grants: mockGrants })
-      const mockWithTransaction = createOrgBillingTransactionMock(mockDb)
+      const mockStore = createOrgBillingStoreMock({ grants: mockGrants })
 
       const organizationId = 'org-123'
       const creditsToConsume = 100
@@ -188,7 +186,7 @@ describe('Organization Billing', () => {
         organizationId,
         creditsToConsume,
         logger,
-        withTransaction: mockWithTransaction,
+        store: mockStore,
       })
 
       expect(result.consumed).toBe(100)
@@ -198,7 +196,7 @@ describe('Organization Billing', () => {
 
   describe('grantOrganizationCredits', () => {
     it('should create organization credit grant', async () => {
-      const mockDb = createOrgBillingDbMock({ grants: mockGrants })
+      const mockStore = createOrgBillingStoreMock({ grants: mockGrants })
 
       const organizationId = 'org-123'
       const userId = 'user-123'
@@ -215,23 +213,18 @@ describe('Organization Billing', () => {
           operationId,
           description,
           logger,
-          conn: mockDb,
+          store: mockStore,
         }),
       ).resolves.toBeUndefined()
     })
 
     it('should handle duplicate operation IDs gracefully', async () => {
       // Mock database constraint error
-      const mockDb = createOrgBillingDbMock({
+      const mockStore = createOrgBillingStoreMock({
         grants: mockGrants,
-        insert: () => ({
-          values: () => {
-            throw new PgUniqueViolationError(
-              'Duplicate key',
-              'credit_ledger_pkey',
-            )
-          },
-        }),
+        insertCreditLedgerEntry: async () => {
+          throw new PgUniqueViolationError('Duplicate key', 'credit_ledger_pkey')
+        },
       })
 
       const organizationId = 'org-123'
@@ -249,7 +242,7 @@ describe('Organization Billing', () => {
           operationId,
           description,
           logger,
-          conn: mockDb,
+          store: mockStore,
         }),
       ).resolves.toBeUndefined()
     })

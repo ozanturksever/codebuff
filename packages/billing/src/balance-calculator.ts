@@ -102,21 +102,25 @@ export async function updateGrantBalance(params: {
   // )
 }
 
+type UpdateGrantBalanceFn = (params: {
+  userId: string
+  grant: typeof schema.creditLedger.$inferSelect
+  consumed: number
+  newBalance: number
+}) => Promise<void>
+
 /**
  * Consumes credits from a list of ordered grants.
+ * Allows callers to provide a custom balance update implementation (e.g. for dependency injection).
  */
-export async function consumeFromOrderedGrants(
-  params: {
-    userId: string
-    creditsToConsume: number
-    grants: (typeof schema.creditLedger.$inferSelect)[]
-    logger: Logger
-  } & ParamsExcluding<
-    typeof updateGrantBalance,
-    'grant' | 'consumed' | 'newBalance'
-  >,
-): Promise<CreditConsumptionResult> {
-  const { userId, creditsToConsume, grants, logger } = params
+export async function consumeFromOrderedGrantsWithUpdater(params: {
+  userId: string
+  creditsToConsume: number
+  grants: (typeof schema.creditLedger.$inferSelect)[]
+  logger: Logger
+  updateGrantBalance: UpdateGrantBalanceFn
+}): Promise<CreditConsumptionResult> {
+  const { userId, creditsToConsume, grants, logger, updateGrantBalance } = params
 
   let remainingToConsume = creditsToConsume
   let consumed = 0
@@ -132,7 +136,7 @@ export async function consumeFromOrderedGrants(
       consumed += repayAmount
 
       await updateGrantBalance({
-        ...params,
+        userId,
         grant,
         consumed: -repayAmount,
         newBalance,
@@ -161,7 +165,7 @@ export async function consumeFromOrderedGrants(
     }
 
     await updateGrantBalance({
-      ...params,
+      userId,
       grant,
       consumed: consumeFromThisGrant,
       newBalance,
@@ -175,7 +179,7 @@ export async function consumeFromOrderedGrants(
     if (lastGrant.balance <= 0) {
       const newBalance = lastGrant.balance - remainingToConsume
       await updateGrantBalance({
-        ...params,
+        userId,
         grant: lastGrant,
         consumed: remainingToConsume,
         newBalance,
@@ -196,6 +200,31 @@ export async function consumeFromOrderedGrants(
   }
 
   return { consumed, fromPurchased }
+}
+
+/**
+ * Consumes credits from a list of ordered grants.
+ */
+export async function consumeFromOrderedGrants(
+  params: {
+    userId: string
+    creditsToConsume: number
+    grants: (typeof schema.creditLedger.$inferSelect)[]
+    logger: Logger
+  } & ParamsExcluding<
+    typeof updateGrantBalance,
+    'grant' | 'consumed' | 'newBalance'
+  >,
+): Promise<CreditConsumptionResult> {
+  const { userId, creditsToConsume, grants, tx, logger } = params
+  return consumeFromOrderedGrantsWithUpdater({
+    userId,
+    creditsToConsume,
+    grants,
+    logger,
+    updateGrantBalance: ({ userId, grant, consumed, newBalance }) =>
+      updateGrantBalance({ userId, grant, consumed, newBalance, tx, logger }),
+  })
 }
 
 /**

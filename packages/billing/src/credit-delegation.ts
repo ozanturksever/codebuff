@@ -11,11 +11,59 @@ import {
   extractOwnerAndRepo,
 } from './org-billing'
 
-// Minimal structural type for database connection
-// This type is intentionally permissive to allow mock injection in tests
-export type CreditDelegationDbConn = {
-  select: (fields?: any) => any
+type UserOrganizationRow = {
+  orgId: string
+  orgName: string
+  orgSlug: string
 }
+
+type OrganizationRepoRow = {
+  repoUrl: string
+  repoName: string
+  isActive: boolean
+}
+
+/**
+ * Minimal data access interface for this module.
+ * Keeps production code well-typed without exposing Drizzle internals to callers/tests.
+ */
+export interface CreditDelegationStore {
+  listUserOrganizations(params: { userId: string }): Promise<UserOrganizationRow[]>
+  listActiveOrganizationRepos(params: {
+    organizationId: string
+  }): Promise<OrganizationRepoRow[]>
+}
+
+function createCreditDelegationStore(conn: typeof db): CreditDelegationStore {
+  return {
+    listUserOrganizations: async ({ userId }) =>
+      conn
+        .select({
+          orgId: schema.orgMember.org_id,
+          orgName: schema.org.name,
+          orgSlug: schema.org.slug,
+        })
+        .from(schema.orgMember)
+        .innerJoin(schema.org, eq(schema.orgMember.org_id, schema.org.id))
+        .where(eq(schema.orgMember.user_id, userId)),
+    listActiveOrganizationRepos: async ({ organizationId }) =>
+      conn
+        .select({
+          repoUrl: schema.orgRepo.repo_url,
+          repoName: schema.orgRepo.repo_name,
+          isActive: schema.orgRepo.is_active,
+        })
+        .from(schema.orgRepo)
+        .where(
+          and(
+            eq(schema.orgRepo.org_id, organizationId),
+            eq(schema.orgRepo.is_active, true),
+          ),
+        ),
+  }
+}
+
+const DEFAULT_STORE = createCreditDelegationStore(db)
 
 import type { ConsumeCreditsWithFallbackFn } from '@codebuff/common/types/contracts/billing'
 import type { Logger } from '@codebuff/common/types/contracts/logger'
@@ -46,12 +94,12 @@ export async function findOrganizationForRepository(
       userId: string
       repositoryUrl: string
       logger: Logger
-      conn: CreditDelegationDbConn
+      store: CreditDelegationStore
     },
-    'conn'
+    'store'
   >,
 ): Promise<OrganizationLookupResult> {
-  const { conn = db, ...rest } = params
+  const { store = DEFAULT_STORE, ...rest } = params
   const { userId, repositoryUrl, logger } = rest
 
   try {
@@ -67,15 +115,7 @@ export async function findOrganizationForRepository(
     }
 
     // First, check if user is a member of any organizations
-    const userOrganizations = await conn
-      .select({
-        orgId: schema.orgMember.org_id,
-        orgName: schema.org.name,
-        orgSlug: schema.org.slug, // Select the slug
-      })
-      .from(schema.orgMember)
-      .innerJoin(schema.org, eq(schema.orgMember.org_id, schema.org.id))
-      .where(eq(schema.orgMember.user_id, userId))
+    const userOrganizations = await store.listUserOrganizations({ userId })
 
     if (userOrganizations.length === 0) {
       logger.debug(
@@ -87,19 +127,9 @@ export async function findOrganizationForRepository(
 
     // Check each organization for matching repositories
     for (const userOrg of userOrganizations) {
-      const orgRepos = await conn
-        .select({
-          repoUrl: schema.orgRepo.repo_url,
-          repoName: schema.orgRepo.repo_name,
-          isActive: schema.orgRepo.is_active,
-        })
-        .from(schema.orgRepo)
-        .where(
-          and(
-            eq(schema.orgRepo.org_id, userOrg.orgId),
-            eq(schema.orgRepo.is_active, true),
-          ),
-        )
+      const orgRepos = await store.listActiveOrganizationRepos({
+        organizationId: userOrg.orgId,
+      })
 
       // Check if any repository in this organization matches
       for (const orgRepo of orgRepos) {
@@ -163,12 +193,12 @@ export async function consumeCreditsWithDelegation(
       repositoryUrl: string | null
       creditsToConsume: number
       logger: Logger
-      conn: CreditDelegationDbConn
+      store: CreditDelegationStore
     },
-    'conn'
+    'store'
   >,
 ): Promise<CreditDelegationResult> {
-  const { conn = db, ...rest } = params
+  const { store = DEFAULT_STORE, ...rest } = params
   const { userId, repositoryUrl, creditsToConsume, logger } = rest
 
   // If no repository URL, fall back to personal credits
@@ -180,11 +210,14 @@ export async function consumeCreditsWithDelegation(
     return { success: false, error: 'No repository URL provided' }
   }
 
-  const withRepoUrl = { ...rest, repositoryUrl, conn }
-
   try {
     // Find organization for this repository
-    const orgLookup = await findOrganizationForRepository(withRepoUrl)
+    const orgLookup = await findOrganizationForRepository({
+      userId,
+      repositoryUrl,
+      logger,
+      store,
+    })
 
     if (!orgLookup.found || !orgLookup.organizationId) {
       logger.debug(

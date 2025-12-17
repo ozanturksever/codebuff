@@ -10,30 +10,6 @@ import type { Logger } from '../../types/contracts/logger'
 // Re-export the test logger for convenience
 export { testLogger } from './agent-runtime'
 
-/**
- * Chainable query builder mock - matches Drizzle's query builder pattern
- */
-type ChainableQuery<TResult> = {
-  from: () => ChainableQuery<TResult>
-  where: () => ChainableQuery<TResult>
-  orderBy: () => ChainableQuery<TResult>
-  limit: () => TResult
-  innerJoin: () => ChainableQuery<TResult>
-  then: <TNext>(cb: (result: TResult) => TNext) => TNext
-}
-
-function createChainableQuery<TResult>(result: TResult): ChainableQuery<TResult> {
-  const chain: ChainableQuery<TResult> = {
-    from: () => chain,
-    where: () => chain,
-    orderBy: () => chain,
-    limit: () => result,
-    innerJoin: () => chain,
-    then: (cb) => cb(result),
-  }
-  return chain
-}
-
 // ============================================================================
 // Grant Credits Mock (packages/billing/src/grant-credits.ts)
 // ============================================================================
@@ -43,69 +19,95 @@ export interface GrantCreditsMockOptions {
     next_quota_reset: Date | null
     auto_topup_enabled: boolean | null
   } | null
+  previousExpiredFreeGrantPrincipal?: number | null
+  totalReferralBonusCredits?: number
+}
+
+export interface CreditLedgerGrant {
+  type: 'free' | 'referral' | 'purchase' | 'admin' | 'organization'
+  created_at: Date
+  expires_at: Date | null
+  operation_id: string
+  user_id: string
+  principal: number
+  balance: number
+  description: string | null
+  priority: number
+  org_id: string | null
 }
 
 /**
- * Database connection shape for grant-credits module.
- * Structurally matches BillingDbConn from grant-credits.ts
+ * Minimal data access interface for grant-credits module.
+ * Structurally matches GrantCreditsStore from packages/billing/src/grant-credits.ts
  */
-export interface GrantCreditsDbConn {
-  transaction: <T>(callback: (tx: GrantCreditsTx) => Promise<T>) => Promise<T>
-  select: () => ChainableQuery<never[]>
-}
-
-export interface GrantCreditsTx {
-  query: {
-    user: {
-      findFirst: () => Promise<GrantCreditsMockOptions['user']>
-    }
-  }
-  update: () => { set: () => { where: () => Promise<void> } }
-  insert: () => { values: () => Promise<void> }
-  select: () => ChainableQuery<never[]>
+export interface GrantCreditsTxStore {
+  getMonthlyResetUser(params: { userId: string }): Promise<GrantCreditsMockOptions['user']>
+  updateUserNextQuotaReset(params: {
+    userId: string
+    nextQuotaReset: Date
+  }): Promise<void>
+  getMostRecentExpiredFreeGrantPrincipal(params: {
+    userId: string
+    now: Date
+  }): Promise<number | null>
+  getTotalReferralBonusCredits(params: { userId: string }): Promise<number>
+  listActiveCreditGrants(params: {
+    userId: string
+    now: Date
+  }): Promise<CreditLedgerGrant[]>
+  updateCreditLedgerBalance(params: {
+    operationId: string
+    balance: number
+  }): Promise<void>
+  insertCreditLedgerEntry(values: Record<string, unknown>): Promise<void>
 }
 
 /**
- * Creates a typed mock database for grant-credits tests.
+ * Store interface for grant-credits.
+ */
+export interface GrantCreditsStore extends GrantCreditsTxStore {
+  withTransaction<T>(callback: (tx: GrantCreditsTxStore) => Promise<T>): Promise<T>
+}
+
+/**
+ * Creates a typed mock store for grant-credits tests.
  *
  * @example
  * ```ts
- * const mockDb = createGrantCreditsDbMock({
+ * const mockStore = createGrantCreditsStoreMock({
  *   user: { next_quota_reset: futureDate, auto_topup_enabled: true },
  * })
  *
  * const result = await triggerMonthlyResetAndGrant({
  *   userId: 'user-123',
  *   logger,
- *   conn: mockDb,
+ *   store: mockStore,
  * })
  * ```
  */
-export function createGrantCreditsDbMock(
+export function createGrantCreditsStoreMock(
   options: GrantCreditsMockOptions,
-): GrantCreditsDbConn {
-  const { user } = options
+): GrantCreditsStore {
+  const {
+    user,
+    previousExpiredFreeGrantPrincipal = null,
+    totalReferralBonusCredits = 0,
+  } = options
 
-  const createTx = (): GrantCreditsTx => ({
-    query: {
-      user: {
-        findFirst: async () => user,
-      },
-    },
-    update: () => ({
-      set: () => ({
-        where: () => Promise.resolve(),
-      }),
-    }),
-    insert: () => ({
-      values: () => Promise.resolve(),
-    }),
-    select: () => createChainableQuery<never[]>([]),
-  })
+  const txStore: GrantCreditsTxStore = {
+    getMonthlyResetUser: async () => user,
+    updateUserNextQuotaReset: async () => {},
+    getMostRecentExpiredFreeGrantPrincipal: async () =>
+      previousExpiredFreeGrantPrincipal,
+    getTotalReferralBonusCredits: async () => totalReferralBonusCredits,
+    listActiveCreditGrants: async () => [],
+    updateCreditLedgerBalance: async () => {},
+    insertCreditLedgerEntry: async () => {},
+  }
 
   return {
-    transaction: async (callback) => callback(createTx()),
-    select: () => createChainableQuery<never[]>([]),
+    ...txStore,
+    withTransaction: async (callback) => callback(txStore),
   }
 }
 
@@ -116,7 +118,7 @@ export function createGrantCreditsDbMock(
 export interface OrgBillingGrant {
   operation_id: string
   user_id: string
-  organization_id: string
+  org_id: string
   principal: number
   balance: number
   type: 'organization'
@@ -128,99 +130,79 @@ export interface OrgBillingGrant {
 
 export interface OrgBillingMockOptions {
   grants?: OrgBillingGrant[]
-  insert?: () => { values: () => Promise<unknown> }
-  update?: () => { set: () => { where: () => Promise<unknown> } }
+  insertCreditLedgerEntry?: (values: Record<string, unknown>) => Promise<void>
+  updateCreditLedgerBalance?: (params: {
+    operationId: string
+    balance: number
+  }) => Promise<void>
 }
 
 /**
- * Database connection shape for org-billing module.
- * Structurally matches OrgBillingDbConn from org-billing.ts
+ * Transaction store interface for org-billing.
+ * Structurally matches OrgBillingTxStore from packages/billing/src/org-billing.ts
  */
-export interface OrgBillingDbConn {
-  select: () => {
-    from: () => {
-      where: () => {
-        orderBy: () => OrgBillingGrant[]
-      }
-    }
-  }
-  insert: () => { values: () => Promise<unknown> }
-  update: () => { set: () => { where: () => Promise<unknown> } }
+export interface OrgBillingTxStore {
+  listOrderedActiveOrganizationGrants(params: {
+    organizationId: string
+    now: Date
+  }): Promise<OrgBillingGrant[]>
+  insertCreditLedgerEntry(values: Record<string, unknown>): Promise<void>
+  updateCreditLedgerBalance(params: {
+    operationId: string
+    balance: number
+  }): Promise<void>
 }
 
 /**
- * Transaction wrapper function type for org-billing.
+ * Store interface for org-billing.
+ * Structurally matches OrgBillingStore from packages/billing/src/org-billing.ts
  */
-export type OrgBillingWithTransactionFn = <T>(params: {
-  callback: (tx: OrgBillingDbConn) => Promise<T>
-  context: Record<string, unknown>
-  logger: Logger
-}) => Promise<T>
+export interface OrgBillingStore extends OrgBillingTxStore {
+  withTransaction<T>(params: {
+    callback: (tx: OrgBillingTxStore) => Promise<T>
+    context: Record<string, unknown>
+    logger: Logger
+  }): Promise<T>
+}
 
 /**
- * Creates a typed mock database for org-billing tests.
+ * Creates a typed mock store for org-billing tests.
  *
  * @example
  * ```ts
- * const mockDb = createOrgBillingDbMock({ grants: mockGrants })
+ * const mockStore = createOrgBillingStoreMock({ grants: mockGrants })
  *
  * const result = await calculateOrganizationUsageAndBalance({
  *   organizationId: 'org-123',
  *   quotaResetDate: new Date(),
  *   now: new Date(),
  *   logger,
- *   conn: mockDb,
+ *   store: mockStore,
  * })
  * ```
  */
-export function createOrgBillingDbMock(
+export function createOrgBillingStoreMock(
   options?: OrgBillingMockOptions,
-): OrgBillingDbConn {
-  const { grants = [], insert, update } = options ?? {}
+): OrgBillingStore {
+  const { grants = [], insertCreditLedgerEntry, updateCreditLedgerBalance } =
+    options ?? {}
+
+  const txStore: OrgBillingTxStore = {
+    listOrderedActiveOrganizationGrants: async () => grants,
+    insertCreditLedgerEntry:
+      insertCreditLedgerEntry ??
+      (async () => {
+        return
+      }),
+    updateCreditLedgerBalance: async (params) => {
+      await updateCreditLedgerBalance?.(params)
+    },
+  }
 
   return {
-    select: () => ({
-      from: () => ({
-        where: () => ({
-          orderBy: () => grants,
-        }),
-      }),
-    }),
-    insert:
-      insert ??
-      (() => ({
-        values: () => Promise.resolve(),
-      })),
-    update:
-      update ??
-      (() => ({
-        set: () => ({
-          where: () => Promise.resolve(),
-        }),
-      })),
+    ...txStore,
+    withTransaction: async ({ callback }) => callback(txStore),
   }
-}
-
-/**
- * Creates a mock transaction wrapper that immediately calls the callback.
- *
- * @example
- * ```ts
- * const mockDb = createOrgBillingDbMock({ grants: mockGrants })
- * const mockWithTransaction = createOrgBillingTransactionMock(mockDb)
- *
- * await consumeOrganizationCredits({
- *   organizationId: 'org-123',
- *   creditsToConsume: 100,
- *   logger,
- *   withTransaction: mockWithTransaction,
- * })
- * ```
- */
-export function createOrgBillingTransactionMock(
-  mockDb: OrgBillingDbConn,
-): OrgBillingWithTransactionFn {
-  return async ({ callback }) => callback(mockDb)
 }
 
 // ============================================================================
@@ -245,27 +227,22 @@ export interface CreditDelegationMockOptions {
 }
 
 /**
- * Database connection shape for credit-delegation module.
- * Structurally matches CreditDelegationDbConn from credit-delegation.ts
+ * Minimal data access interface for credit-delegation module.
+ * Structurally matches CreditDelegationStore from packages/billing/src/credit-delegation.ts
  */
-export interface CreditDelegationDbConn {
-  select: (fields: Record<string, unknown>) => {
-    from: () => {
-      innerJoin?: () => {
-        where: () => Promise<UserOrganization[]>
-      }
-      where: () => Promise<OrgRepo[]>
-    }
-  }
+export interface CreditDelegationStore {
+  listUserOrganizations(params: { userId: string }): Promise<UserOrganization[]>
+  listActiveOrganizationRepos(params: {
+    organizationId: string
+  }): Promise<OrgRepo[]>
 }
 
 /**
- * Creates a typed mock database for credit-delegation tests.
- * The select function inspects the fields to determine which data to return.
+ * Creates a typed mock data store for credit-delegation tests.
  *
  * @example
  * ```ts
- * const mockDb = createCreditDelegationDbMock({
+ * const mockStore = createCreditDelegationStoreMock({
  *   userOrganizations: [{ orgId: 'org-123', orgName: 'Test Org', orgSlug: 'test-org' }],
  *   orgRepos: [{ repoUrl: 'https://github.com/test/repo', repoName: 'repo', isActive: true }],
  * })
@@ -274,44 +251,17 @@ export interface CreditDelegationDbConn {
  *   userId: 'user-123',
  *   repositoryUrl: 'https://github.com/test/repo',
  *   logger,
- *   conn: mockDb,
+ *   store: mockStore,
  * })
  * ```
  */
-export function createCreditDelegationDbMock(
+export function createCreditDelegationStoreMock(
   options?: CreditDelegationMockOptions,
-): CreditDelegationDbConn {
+): CreditDelegationStore {
   const { userOrganizations = [], orgRepos = [] } = options ?? {}
 
   return {
-    select: (fields: Record<string, unknown>) => {
-      // Return user organizations when querying for orgId/orgName fields
-      if ('orgId' in fields && 'orgName' in fields) {
-        return {
-          from: () => ({
-            innerJoin: () => ({
-              where: () => Promise.resolve(userOrganizations),
-            }),
-            where: () => Promise.resolve<OrgRepo[]>([]),
-          }),
-        }
-      }
-
-      // Return org repos when querying for repoUrl field
-      if ('repoUrl' in fields) {
-        return {
-          from: () => ({
-            where: () => Promise.resolve(orgRepos),
-          }),
-        }
-      }
-
-      // Default: return empty array
-      return {
-        from: () => ({
-          where: () => Promise.resolve<OrgRepo[]>([]),
-        }),
-      }
-    },
+    listUserOrganizations: async () => userOrganizations,
+    listActiveOrganizationRepos: async () => orgRepos.filter((repo) => repo.isActive),
   }
 }

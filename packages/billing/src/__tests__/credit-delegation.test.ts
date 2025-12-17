@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 
 import {
-  createCreditDelegationDbMock,
+  createCreditDelegationStoreMock,
   testLogger,
 } from '@codebuff/common/testing/fixtures'
 
@@ -19,7 +19,7 @@ describe('Credit Delegation', () => {
 
   describe('findOrganizationForRepository', () => {
     it('should find organization for matching repository', async () => {
-      const mockDb = createCreditDelegationDbMock({
+      const mockStore = createCreditDelegationStoreMock({
         userOrganizations: [
           {
             orgId: 'org-123',
@@ -43,7 +43,7 @@ describe('Credit Delegation', () => {
         userId,
         repositoryUrl,
         logger,
-        conn: mockDb,
+        store: mockStore,
       })
 
       expect(result.found).toBe(true)
@@ -52,7 +52,7 @@ describe('Credit Delegation', () => {
     })
 
     it('should return not found for non-matching repository', async () => {
-      const mockDb = createCreditDelegationDbMock({
+      const mockStore = createCreditDelegationStoreMock({
         userOrganizations: [
           {
             orgId: 'org-123',
@@ -76,14 +76,14 @@ describe('Credit Delegation', () => {
         userId,
         repositoryUrl,
         logger,
-        conn: mockDb,
+        store: mockStore,
       })
 
       expect(result.found).toBe(false)
     })
 
     it('should return not found when user has no organizations', async () => {
-      const mockDb = createCreditDelegationDbMock({
+      const mockStore = createCreditDelegationStoreMock({
         userOrganizations: [],
         orgRepos: [],
       })
@@ -95,7 +95,7 @@ describe('Credit Delegation', () => {
         userId,
         repositoryUrl,
         logger,
-        conn: mockDb,
+        store: mockStore,
       })
 
       expect(result.found).toBe(false)
@@ -104,7 +104,7 @@ describe('Credit Delegation', () => {
 
   describe('consumeCreditsWithDelegation', () => {
     it('should fail when no repository URL provided', async () => {
-      const mockDb = createCreditDelegationDbMock()
+      const mockStore = createCreditDelegationStoreMock()
 
       const userId = 'user-123'
       const repositoryUrl = null
@@ -115,7 +115,7 @@ describe('Credit Delegation', () => {
         repositoryUrl,
         creditsToConsume,
         logger,
-        conn: mockDb,
+        store: mockStore,
       })
 
       expect(result.success).toBe(false)
@@ -123,7 +123,7 @@ describe('Credit Delegation', () => {
     })
 
     it('should fail when no organization found for repository', async () => {
-      const mockDb = createCreditDelegationDbMock({
+      const mockStore = createCreditDelegationStoreMock({
         userOrganizations: [],
         orgRepos: [],
       })
@@ -137,7 +137,7 @@ describe('Credit Delegation', () => {
         repositoryUrl,
         creditsToConsume,
         logger,
-        conn: mockDb,
+        store: mockStore,
       })
 
       expect(result.success).toBe(false)
