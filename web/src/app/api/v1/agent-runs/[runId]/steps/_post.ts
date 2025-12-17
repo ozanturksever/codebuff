@@ -8,7 +8,7 @@ import { z } from 'zod'
 
 import type { TrackEventFn } from '@codebuff/common/types/contracts/analytics'
 import type { GetUserInfoFromApiKeyFn } from '@codebuff/common/types/contracts/database'
-import type { TestableDb } from '@codebuff/common/testing/mock-db'
+import type { DbOperations } from '@codebuff/common/testing/mock-db'
 import type {
   Logger,
   LoggerWithContextFn,
@@ -34,7 +34,7 @@ export async function postAgentRunsSteps(params: {
   logger: Logger
   loggerWithContext: LoggerWithContextFn
   trackEvent: TrackEventFn
-  db: TestableDb
+  db: DbOperations
 }) {
   const {
     req,

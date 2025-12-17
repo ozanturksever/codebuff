@@ -1,7 +1,7 @@
 import type { Logger } from '@codebuff/common/types/contracts/logger'
 
 // ============================================================================
-// Testable Database Interface
+// Database Operations Interface
 // ============================================================================
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -9,11 +9,10 @@ import type { Logger } from '@codebuff/common/types/contracts/logger'
  * Minimal database interface for dependency injection in API routes.
  * Both the real CodebuffPgDatabase and test mocks can satisfy this interface.
  *
- * This allows tests to provide mock implementations without type casting.
  * Uses `any` for table/column parameters to be compatible with Drizzle ORM's
  * specific table types while remaining flexible for mocks.
  */
-export interface TestableDb {
+export interface DbOperations {
   insert: (table: any) => {
     values: (data: any) => PromiseLike<any>
   }
@@ -24,7 +23,7 @@ export interface TestableDb {
   }
   select: (columns?: any) => {
     from: (table: any) => {
-      where: (condition: any) => TestableDbWhereResult
+      where: (condition: any) => DbWhereResult
     }
   }
 }
@@ -35,7 +34,7 @@ export interface TestableDb {
  * - .orderBy(...).limit(n) for sorted queries
  * - .then() for promise-like resolution
  */
-export interface TestableDbWhereResult {
+export interface DbWhereResult {
   then: <TResult = any[]>(
     onfulfilled?: ((value: any[]) => TResult | PromiseLike<TResult>) | null | undefined,
   ) => PromiseLike<TResult>
@@ -364,9 +363,9 @@ export interface MockDbFactoryConfig {
 
 /**
  * Return type of createMockDb - a complete mock database object.
- * Implements TestableDb for type-safe dependency injection in tests.
+ * Implements DbOperations for type-safe dependency injection in tests.
  */
-export type MockDb = TestableDb
+export type MockDb = DbOperations
 
 /**
  * Creates a complete mock database object with insert, update, and select operations.
@@ -393,13 +392,13 @@ export type MockDb = TestableDb
  * })
  * ```
  */
-export function createMockDb(config: MockDbFactoryConfig = {}): TestableDb {
-  // Use type assertion since Mock types don't perfectly match TestableDb
+export function createMockDb(config: MockDbFactoryConfig = {}): DbOperations {
+  // Use type assertion since Mock types don't perfectly match DbOperations
   // but the runtime behavior is correct
   return {
     insert: createMockDbInsert(config.insert),
     update: createMockDbUpdate(config.update),
-    select: createMockDbSimpleSelect(config.select) as TestableDb['select'],
+    select: createMockDbSimpleSelect(config.select) as DbOperations['select'],
   }
 }
 
@@ -421,10 +420,10 @@ export function createMockDbWithErrors(config: {
   selectError?: Error
   /** Results to return from select queries (before any error is thrown) */
   selectResults?: unknown[]
-} = {}): TestableDb {
+} = {}): DbOperations {
   const { insertError, updateError, selectError, selectResults = [] } = config
 
-  // Use type assertion since Mock types don't perfectly match TestableDb
+  // Use type assertion since Mock types don't perfectly match DbOperations
   // but the runtime behavior is correct
   return {
     insert: mock(() => ({
@@ -466,7 +465,7 @@ export function createMockDbWithErrors(config: {
           return cb?.(selectResults) ?? selectResults
         }),
       })),
-    })) as TestableDb['select'],
+    })) as DbOperations['select'],
   }
 }
 
@@ -494,8 +493,8 @@ export function createMockDbWithErrors(config: {
  * })
  * ```
  */
-export function createSelectOnlyMockDb(selectResults: unknown[]): TestableDb {
-  const createWhereResult = (): TestableDbWhereResult => ({
+export function createSelectOnlyMockDb(selectResults: unknown[]): DbOperations {
+  const createWhereResult = (): DbWhereResult => ({
     then: <TResult = unknown[]>(
       onfulfilled?:
         | ((value: unknown[]) => TResult | PromiseLike<TResult>)

@@ -8,7 +8,7 @@ import { z } from 'zod'
 
 import type { TrackEventFn } from '@codebuff/common/types/contracts/analytics'
 import type { GetUserInfoFromApiKeyFn } from '@codebuff/common/types/contracts/database'
-import type { TestableDb } from '@codebuff/common/testing/mock-db'
+import type { DbOperations } from '@codebuff/common/testing/mock-db'
 import type {
   Logger,
   LoggerWithContextFn,
@@ -43,7 +43,7 @@ async function handleStartAction(params: {
   userId: string
   logger: Logger
   trackEvent: TrackEventFn
-  db: TestableDb
+  db: DbOperations
 }) {
   const { data, userId, logger, trackEvent, db } = params
   const { agentId, ancestorRunIds } = data
@@ -105,7 +105,7 @@ async function handleFinishAction(params: {
   userId: string
   logger: Logger
   trackEvent: TrackEventFn
-  db: TestableDb
+  db: DbOperations
 }) {
   const { data, userId, logger, trackEvent, db } = params
   const {
@@ -174,7 +174,7 @@ export async function postAgentRuns(params: {
   logger: Logger
   loggerWithContext: LoggerWithContextFn
   trackEvent: TrackEventFn
-  db: TestableDb
+  db: DbOperations
 }) {
   const { req, getUserInfoFromApiKey, loggerWithContext, trackEvent, db } =
     params
