@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test'
 
-// Disable JS to validate pure SSR HTML
-test.use({ javaScriptEnabled: false })
+test.describe('Store SSR', () => {
+  // Disable JS to validate pure SSR HTML
+  test.use({ javaScriptEnabled: false })
 
-test('SSR HTML contains at least one agent card', async ({ page }) => {
+  test('SSR HTML contains at least one agent card', async ({ page }) => {
   const agents = [
     {
       id: 'base',
@@ -48,4 +49,5 @@ test('SSR HTML contains at least one agent card', async ({ page }) => {
   // Validate SSR output contains agent content (publisher + id)
   expect(html).toContain('@codebuff')
   expect(html).toContain('>base<')
+  })
 })
