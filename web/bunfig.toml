@@ -1,0 +1,5 @@
+[test]
+# Exclude Playwright e2e tests from Bun's test runner
+# These should be run via `bun run e2e` (which uses Playwright's runner)
+# E2E tests use .e2e.ts extension which Bun doesn't pick up by default
+root = "./src"
