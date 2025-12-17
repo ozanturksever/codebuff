@@ -33,16 +33,3 @@ export const isCI = (): boolean => {
   const env = getCiEnv()
   return env.CI === 'true' || env.CI === '1' || env.GITHUB_ACTIONS === 'true'
 }
-
-/**
- * Create a test CiEnv with optional overrides.
- */
-export const createTestCiEnv = (overrides: Partial<CiEnv> = {}): CiEnv => ({
-  CI: undefined,
-  GITHUB_ACTIONS: undefined,
-  RENDER: undefined,
-  IS_PULL_REQUEST: undefined,
-  CODEBUFF_GITHUB_TOKEN: undefined,
-  CODEBUFF_API_KEY: 'test-api-key',
-  ...overrides,
-})

@@ -187,9 +187,7 @@ const getModuleSpecifierText = (
   moduleSpecifier: ts.Expression | ts.ModuleReference | undefined,
 ): string | null => {
   if (!moduleSpecifier) return null
-  if (ts.isStringLiteral(moduleSpecifier as any)) {
-    return (moduleSpecifier as ts.StringLiteral).text
-  }
+  if (ts.isStringLiteral(moduleSpecifier)) return moduleSpecifier.text
   return null
 }
 
@@ -204,10 +202,7 @@ const isDynamicImportCall = (
   return true
 }
 
-/**
- * Detect if a file is an "env helper" by checking if it imports getBaseEnv or createTestBaseEnv
- * from @codebuff/common/env-process. These files are the designated entry points for env access.
- */
+/** Detect if a file is an "env helper" by checking if it imports getBaseEnv. */
 const isEnvHelperFile = (sourceFile: ts.SourceFile): boolean => {
   for (const stmt of sourceFile.statements) {
     if (!ts.isImportDeclaration(stmt)) continue
@@ -216,12 +211,7 @@ const isEnvHelperFile = (sourceFile: ts.SourceFile): boolean => {
 
     if (info.kind === 'named') {
       for (const spec of info.named) {
-        if (
-          spec.imported === 'getBaseEnv' ||
-          spec.imported === 'createTestBaseEnv'
-        ) {
-          return true
-        }
+        if (spec.imported === 'getBaseEnv') return true
       }
     }
   }
@@ -471,7 +461,7 @@ for (const config of packageConfigs) {
       }
 
       if (ts.isExportDeclaration(node)) {
-        const spec = getModuleSpecifierText(node.moduleSpecifier as any)
+        const spec = getModuleSpecifierText(node.moduleSpecifier)
         if (spec && isInternalImport(spec)) {
           internalImportLines.push(
             getLine(sourceFile, node.getStart(sourceFile)),
@@ -542,7 +532,7 @@ for (const config of packageConfigs) {
       }
 
       if (ts.isExportDeclaration(node)) {
-        const spec = getModuleSpecifierText(node.moduleSpecifier as any)
+        const spec = getModuleSpecifierText(node.moduleSpecifier)
         if (spec && spec === INTERNAL_ENV_MODULE) {
           internalEnvImportLines.push(
             getLine(sourceFile, node.getStart(sourceFile)),

@@ -4,6 +4,14 @@ import unusedImports from 'eslint-plugin-unused-imports'
 import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
+const restrictedTestingImportPatterns = [
+  {
+    group: ['@codebuff/*/testing/**', '**/testing/**'],
+    message:
+      'Do not import test-only modules from production code. Keep these imports in tests (or move shared code into non-testing modules).',
+  },
+]
+
 export default tseslint.config(
   // Global ignores
   {
@@ -13,6 +21,26 @@ export default tseslint.config(
       '**/.contentlayer/*',
       '**/node_modules/*',
     ],
+  },
+
+  // Prevent production code from importing test-only modules
+  {
+    files: ['**/*.{js,mjs,cjs,ts,tsx}'],
+    ignores: [
+      '**/__tests__/**',
+      '**/*.test.*',
+      '**/*.spec.*',
+      '**/testing/**',
+      '**/e2e/**',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: restrictedTestingImportPatterns,
+        },
+      ],
+    },
   },
 
   // CLI package: enforce using CliProcessEnv instead of ProcessEnv
@@ -43,6 +71,41 @@ export default tseslint.config(
     },
   },
 
+  // CLI package (non-test): prevent importing test-only modules
+  {
+    files: ['cli/src/**/*.{ts,tsx}'],
+    ignores: [
+      'cli/src/**/__tests__/**',
+      'cli/src/**/*.test.*',
+      'cli/src/**/*.spec.*',
+      'cli/src/testing/**',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@codebuff/common/env-process',
+              importNames: ['getProcessEnv', 'processEnv'],
+              message:
+                'CLI should use getCliEnv() from "../utils/env" or "./env" instead of getProcessEnv() from common. This ensures CLI uses CliEnv type.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['@codebuff/common/types/contracts/env'],
+              importNames: ['ProcessEnv'],
+              message:
+                'CLI should use CliEnv from "../types/env" instead of ProcessEnv from common.',
+            },
+            ...restrictedTestingImportPatterns,
+          ],
+        },
+      ],
+    },
+  },
+
   // SDK package: enforce using SdkProcessEnv instead of ProcessEnv
   {
     files: ['sdk/src/**/*.{ts,tsx}'],
@@ -65,6 +128,41 @@ export default tseslint.config(
               message:
                 'SDK should use SdkEnv from "./types/env" instead of ProcessEnv from common.',
             },
+          ],
+        },
+      ],
+    },
+  },
+
+  // SDK package (non-test): prevent importing test-only modules
+  {
+    files: ['sdk/src/**/*.{ts,tsx}'],
+    ignores: [
+      'sdk/src/**/__tests__/**',
+      'sdk/src/**/*.test.*',
+      'sdk/src/**/*.spec.*',
+      'sdk/src/testing/**',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@codebuff/common/env-process',
+              importNames: ['getProcessEnv', 'processEnv'],
+              message:
+                'SDK should use getSdkEnv() from "./env" instead of getProcessEnv() from common. This ensures SDK uses SdkEnv type.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['@codebuff/common/types/contracts/env'],
+              importNames: ['ProcessEnv'],
+              message:
+                'SDK should use SdkEnv from "./types/env" instead of ProcessEnv from common.',
+            },
+            ...restrictedTestingImportPatterns,
           ],
         },
       ],
