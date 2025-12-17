@@ -2,7 +2,7 @@ import { and, desc, eq } from 'drizzle-orm'
 
 import * as schema from '@codebuff/internal/db/schema'
 
-import type { CodebuffPgDatabase } from '../db/types'
+import type { TestableDb } from '@codebuff/common/types/contracts/database'
 
 export type Version = { major: number; minor: number; patch: number }
 
@@ -54,7 +54,7 @@ export function isGreater(v1: Version, v2: Version): boolean {
 export async function getLatestAgentVersion(params: {
   agentId: string
   publisherId: string
-  db: CodebuffPgDatabase
+  db: TestableDb
 }): Promise<Version> {
   const { agentId, publisherId, db } = params
 
@@ -96,7 +96,7 @@ export async function determineNextVersion(params: {
   agentId: string
   publisherId: string
   providedVersion?: string
-  db: CodebuffPgDatabase
+  db: TestableDb
 }): Promise<Version> {
   const { agentId, publisherId, providedVersion, db } = params
 
@@ -137,7 +137,7 @@ export async function versionExists(params: {
   agentId: string
   version: Version
   publisherId: string
-  db: CodebuffPgDatabase
+  db: TestableDb
 }): Promise<boolean> {
   const { agentId, version, publisherId, db } = params
 

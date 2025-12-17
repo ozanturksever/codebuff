@@ -92,3 +92,49 @@ export type AddAgentStepFn = (params: {
 }) => Promise<string | null>
 
 export type DatabaseAgentCache = Map<string, AgentTemplate | null>
+
+// ============================================================================
+// Testable Database Interface
+// ============================================================================
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * Minimal database interface for dependency injection in API routes.
+ * Both the real CodebuffPgDatabase and test mocks can satisfy this interface.
+ *
+ * This allows tests to provide mock implementations without type casting.
+ * Uses `any` for table/column parameters to be compatible with Drizzle ORM's
+ * specific table types while remaining flexible for mocks.
+ */
+export interface TestableDb {
+  insert: (table: any) => {
+    values: (data: any) => PromiseLike<any>
+  }
+  update: (table: any) => {
+    set: (data: any) => {
+      where: (condition: any) => PromiseLike<any>
+    }
+  }
+  select: (columns?: any) => {
+    from: (table: any) => {
+      where: (condition: any) => TestableDbWhereResult
+    }
+  }
+}
+
+/**
+ * Result type for where() that supports multiple query patterns:
+ * - .limit(n) for simple queries
+ * - .orderBy(...).limit(n) for sorted queries
+ * - .then() for promise-like resolution
+ */
+export interface TestableDbWhereResult {
+  then: <TResult = any[]>(
+    onfulfilled?: ((value: any[]) => TResult | PromiseLike<TResult>) | null | undefined,
+  ) => PromiseLike<TResult>
+  limit: (n: number) => PromiseLike<any[]>
+  orderBy: (...columns: any[]) => {
+    limit: (n: number) => PromiseLike<any[]>
+  }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */

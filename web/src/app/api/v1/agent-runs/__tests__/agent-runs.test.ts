@@ -5,6 +5,12 @@ import { NextRequest } from 'next/server'
 
 import { postAgentRuns } from '../_post'
 
+import {
+  createMockDb,
+  createMockDbWithErrors,
+  createMockLogger,
+} from '@codebuff/common/testing/mock-db'
+
 import type { TrackEventFn } from '@codebuff/common/types/contracts/analytics'
 import type {
   GetUserInfoFromApiKeyFn,
@@ -44,29 +50,15 @@ describe('/api/v1/agent-runs POST endpoint', () => {
   let mockLogger: Logger
   let mockLoggerWithContext: LoggerWithContextFn
   let mockTrackEvent: TrackEventFn
-  let mockDb: any
+  let mockDb: ReturnType<typeof createMockDb>
 
   beforeEach(() => {
-    mockLogger = {
-      error: mock(() => {}),
-      warn: mock(() => {}),
-      info: mock(() => {}),
-      debug: mock(() => {}),
-    }
+    mockLogger = createMockLogger()
     mockLoggerWithContext = mock(() => mockLogger)
 
     mockTrackEvent = mock(() => {})
 
-    mockDb = {
-      insert: mock(() => ({
-        values: mock(async () => {}),
-      })),
-      update: mock(() => ({
-        set: mock(() => ({
-          where: mock(async () => {}),
-        })),
-      })),
-    }
+    mockDb = createMockDb()
   })
 
   afterEach(() => {
@@ -392,11 +384,9 @@ describe('/api/v1/agent-runs POST endpoint', () => {
     })
 
     test('returns 500 when database insertion fails', async () => {
-      mockDb.insert = mock(() => ({
-        values: mock(async () => {
-          throw new Error('Database error')
-        }),
-      }))
+      const errorDb = createMockDbWithErrors({
+        insertError: new Error('Database error'),
+      })
 
       const req = new NextRequest('http://localhost:3000/api/v1/agent-runs', {
         method: 'POST',
@@ -413,7 +403,7 @@ describe('/api/v1/agent-runs POST endpoint', () => {
         logger: mockLogger,
         loggerWithContext: mockLoggerWithContext,
         trackEvent: mockTrackEvent,
-        db: mockDb,
+        db: errorDb,
       })
 
       expect(response.status).toBe(500)
@@ -699,13 +689,9 @@ describe('/api/v1/agent-runs POST endpoint', () => {
     })
 
     test('returns 500 when database update fails', async () => {
-      mockDb.update = mock(() => ({
-        set: mock(() => ({
-          where: mock(async () => {
-            throw new Error('Database update error')
-          }),
-        })),
-      }))
+      const errorDb = createMockDbWithErrors({
+        updateError: new Error('Database update error'),
+      })
 
       const req = new NextRequest('http://localhost:3000/api/v1/agent-runs', {
         method: 'POST',
@@ -726,7 +712,7 @@ describe('/api/v1/agent-runs POST endpoint', () => {
         logger: mockLogger,
         loggerWithContext: mockLoggerWithContext,
         trackEvent: mockTrackEvent,
-        db: mockDb,
+        db: errorDb,
       })
 
       expect(response.status).toBe(500)

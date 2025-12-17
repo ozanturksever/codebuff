@@ -4,6 +4,12 @@ import { NextRequest } from 'next/server'
 
 import { postAgentRunsSteps } from '../_post'
 
+import {
+  createMockDb,
+  createMockDbWithErrors,
+  createMockLogger,
+} from '@codebuff/common/testing/mock-db'
+
 import type { TrackEventFn } from '@codebuff/common/types/contracts/analytics'
 import type { GetUserInfoFromApiKeyFn } from '@codebuff/common/types/contracts/database'
 import type {
@@ -16,7 +22,7 @@ describe('agentRunsStepsPost', () => {
   let mockLogger: Logger
   let mockLoggerWithContext: LoggerWithContextFn
   let mockTrackEvent: TrackEventFn
-  let mockDb: any
+  let mockDb: ReturnType<typeof createMockDb>
 
   beforeEach(() => {
     mockGetUserInfoFromApiKey = async ({ apiKey, fields }) => {
@@ -39,30 +45,16 @@ describe('agentRunsStepsPost', () => {
       return null
     }
 
-    mockLogger = {
-      error: () => {},
-      warn: () => {},
-      info: () => {},
-      debug: () => {},
-    }
+    mockLogger = createMockLogger()
 
     mockLoggerWithContext = mock(() => mockLogger)
 
     mockTrackEvent = () => {}
 
     // Default mock DB with successful operations
-    mockDb = {
-      select: () => ({
-        from: () => ({
-          where: () => ({
-            limit: () => [{ user_id: 'user-123' }],
-          }),
-        }),
-      }),
-      insert: () => ({
-        values: async () => {},
-      }),
-    }
+    mockDb = createMockDb({
+      select: { results: [{ user_id: 'user-123' }] },
+    })
   })
 
   test('returns 401 when no API key provided', async () => {
@@ -165,16 +157,9 @@ describe('agentRunsStepsPost', () => {
   })
 
   test('returns 404 when agent run does not exist', async () => {
-    const dbWithNoRun = {
-      ...mockDb,
-      select: () => ({
-        from: () => ({
-          where: () => ({
-            limit: () => [], // Empty array = not found
-          }),
-        }),
-      }),
-    } as any
+    const dbWithNoRun = createMockDb({
+      select: { results: [] }, // Empty array = not found
+    })
 
     const req = new NextRequest(
       'http://localhost/api/v1/agent-runs/run-123/steps',
@@ -201,16 +186,9 @@ describe('agentRunsStepsPost', () => {
   })
 
   test('returns 403 when run belongs to different user', async () => {
-    const dbWithDifferentUser = {
-      ...mockDb,
-      select: () => ({
-        from: () => ({
-          where: () => ({
-            limit: () => [{ user_id: 'other-user' }],
-          }),
-        }),
-      }),
-    } as any
+    const dbWithDifferentUser = createMockDb({
+      select: { results: [{ user_id: 'other-user' }] },
+    })
 
     const req = new NextRequest(
       'http://localhost/api/v1/agent-runs/run-123/steps',
@@ -294,21 +272,10 @@ describe('agentRunsStepsPost', () => {
   })
 
   test('handles database errors gracefully', async () => {
-    const dbWithError = {
-      ...mockDb,
-      select: () => ({
-        from: () => ({
-          where: () => ({
-            limit: () => [{ user_id: 'user-123' }],
-          }),
-        }),
-      }),
-      insert: () => ({
-        values: async () => {
-          throw new Error('DB error')
-        },
-      }),
-    } as any
+    const dbWithError = createMockDbWithErrors({
+      insertError: new Error('DB error'),
+      selectResults: [{ user_id: 'user-123' }],
+    })
 
     const req = new NextRequest(
       'http://localhost/api/v1/agent-runs/run-123/steps',

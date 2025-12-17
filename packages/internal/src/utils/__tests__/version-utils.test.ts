@@ -1,8 +1,8 @@
 import { describe, expect, it, afterEach, mock } from 'bun:test'
 
-import * as versionUtils from '../version-utils'
+import { createSelectOnlyMockDb } from '@codebuff/common/testing/mock-db'
 
-import type { CodebuffPgDatabase } from '../../db/types'
+import * as versionUtils from '../version-utils'
 
 const {
   versionOne,
@@ -124,18 +124,7 @@ describe('version-utils', () => {
 
   describe('getLatestAgentVersion', () => {
     it('should return version 0.0.0 when no agent exists', async () => {
-      // Mock the database to return empty result
-      const mockDb = {
-        select: mock(() => ({
-          from: mock(() => ({
-            where: mock(() => ({
-              orderBy: mock(() => ({
-                limit: mock(() => Promise.resolve([])),
-              })),
-            })),
-          })),
-        })),
-      } as unknown as CodebuffPgDatabase
+      const mockDb = createSelectOnlyMockDb([])
 
       const result = await getLatestAgentVersion({
         agentId: 'test-agent',
@@ -146,20 +135,7 @@ describe('version-utils', () => {
     })
 
     it('should return latest version when agent exists', async () => {
-      // Mock the database to return a version
-      const mockDb = {
-        select: mock(() => ({
-          from: mock(() => ({
-            where: mock(() => ({
-              orderBy: mock(() => ({
-                limit: mock(() =>
-                  Promise.resolve([{ major: 1, minor: 2, patch: 3 }]),
-                ),
-              })),
-            })),
-          })),
-        })),
-      } as unknown as CodebuffPgDatabase
+      const mockDb = createSelectOnlyMockDb([{ major: 1, minor: 2, patch: 3 }])
 
       const result = await getLatestAgentVersion({
         agentId: 'test-agent',
@@ -170,20 +146,7 @@ describe('version-utils', () => {
     })
 
     it('should handle null values in database response', async () => {
-      // Mock the database to return null values
-      const mockDb = {
-        select: mock(() => ({
-          from: mock(() => ({
-            where: mock(() => ({
-              orderBy: mock(() => ({
-                limit: mock(() =>
-                  Promise.resolve([{ major: null, minor: null, patch: null }]),
-                ),
-              })),
-            })),
-          })),
-        })),
-      } as unknown as CodebuffPgDatabase
+      const mockDb = createSelectOnlyMockDb([{ major: null, minor: null, patch: null }])
 
       const result = await getLatestAgentVersion({
         agentId: 'test-agent',
@@ -196,19 +159,7 @@ describe('version-utils', () => {
 
   describe('determineNextVersion', () => {
     it('should increment patch of latest version when no version provided', async () => {
-      const mockDb = {
-        select: mock(() => ({
-          from: mock(() => ({
-            where: mock(() => ({
-              orderBy: mock(() => ({
-                limit: mock(() =>
-                  Promise.resolve([{ major: 1, minor: 2, patch: 3 }]),
-                ),
-              })),
-            })),
-          })),
-        })),
-      } as unknown as CodebuffPgDatabase
+      const mockDb = createSelectOnlyMockDb([{ major: 1, minor: 2, patch: 3 }])
 
       const result = await determineNextVersion({
         agentId: 'test-agent',
@@ -219,17 +170,7 @@ describe('version-utils', () => {
     })
 
     it('should use provided version when higher than latest', async () => {
-      const mockDb = {
-        select: mock(() => ({
-          from: mock(() => ({
-            where: mock(() => ({
-              orderBy: mock(() => ({
-                limit: mock(() => Promise.resolve([])),
-              })),
-            })),
-          })),
-        })),
-      } as unknown as CodebuffPgDatabase
+      const mockDb = createSelectOnlyMockDb([])
 
       const result = await determineNextVersion({
         agentId: 'test-agent',
@@ -241,19 +182,7 @@ describe('version-utils', () => {
     })
 
     it('should throw error when provided version is not greater than latest', async () => {
-      const mockDb = {
-        select: mock(() => ({
-          from: mock(() => ({
-            where: mock(() => ({
-              orderBy: mock(() => ({
-                limit: mock(() =>
-                  Promise.resolve([{ major: 2, minor: 0, patch: 0 }]),
-                ),
-              })),
-            })),
-          })),
-        })),
-      } as unknown as CodebuffPgDatabase
+      const mockDb = createSelectOnlyMockDb([{ major: 2, minor: 0, patch: 0 }])
 
       await expect(
         determineNextVersion({
@@ -268,19 +197,7 @@ describe('version-utils', () => {
     })
 
     it('should throw error when provided version equals latest', async () => {
-      const mockDb = {
-        select: mock(() => ({
-          from: mock(() => ({
-            where: mock(() => ({
-              orderBy: mock(() => ({
-                limit: mock(() =>
-                  Promise.resolve([{ major: 1, minor: 5, patch: 0 }]),
-                ),
-              })),
-            })),
-          })),
-        })),
-      } as unknown as CodebuffPgDatabase
+      const mockDb = createSelectOnlyMockDb([{ major: 1, minor: 5, patch: 0 }])
 
       await expect(
         determineNextVersion({
@@ -295,17 +212,7 @@ describe('version-utils', () => {
     })
 
     it('should throw error for invalid provided version', async () => {
-      const mockDb = {
-        select: mock(() => ({
-          from: mock(() => ({
-            where: mock(() => ({
-              orderBy: mock(() => ({
-                limit: mock(() => Promise.resolve([])),
-              })),
-            })),
-          })),
-        })),
-      } as unknown as CodebuffPgDatabase
+      const mockDb = createSelectOnlyMockDb([])
 
       await expect(
         determineNextVersion({
@@ -322,14 +229,7 @@ describe('version-utils', () => {
 
   describe('versionExists', () => {
     it('should return true when version exists', async () => {
-      // Mock the database to return a result
-      const mockDb = {
-        select: mock(() => ({
-          from: mock(() => ({
-            where: mock(() => Promise.resolve([{ id: 'test-agent' }])),
-          })),
-        })),
-      } as unknown as CodebuffPgDatabase
+      const mockDb = createSelectOnlyMockDb([{ id: 'test-agent' }])
 
       const result = await versionExists({
         agentId: 'test-agent',
@@ -341,14 +241,7 @@ describe('version-utils', () => {
     })
 
     it('should return false when version does not exist', async () => {
-      // Mock the database to return empty result
-      const mockDb = {
-        select: mock(() => ({
-          from: mock(() => ({
-            where: mock(() => Promise.resolve([])),
-          })),
-        })),
-      } as unknown as CodebuffPgDatabase
+      const mockDb = createSelectOnlyMockDb([])
 
       const result = await versionExists({
         agentId: 'test-agent',

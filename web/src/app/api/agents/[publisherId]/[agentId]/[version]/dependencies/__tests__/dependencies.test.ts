@@ -6,7 +6,7 @@ import {
   createMockDbSelect,
   createMockLogger,
   mockDbSchema,
-} from '@/testing/mock-db'
+} from '@codebuff/common/testing/mock-db'
 
 // Mock the db module
 const mockDbSelect = mock(() => ({}))

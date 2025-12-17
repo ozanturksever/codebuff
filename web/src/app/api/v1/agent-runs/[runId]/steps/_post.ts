@@ -7,12 +7,14 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import type { TrackEventFn } from '@codebuff/common/types/contracts/analytics'
-import type { GetUserInfoFromApiKeyFn } from '@codebuff/common/types/contracts/database'
+import type {
+  GetUserInfoFromApiKeyFn,
+  TestableDb,
+} from '@codebuff/common/types/contracts/database'
 import type {
   Logger,
   LoggerWithContextFn,
 } from '@codebuff/common/types/contracts/logger'
-import type { CodebuffPgDatabase } from '@codebuff/internal/db/types'
 import type { NextRequest } from 'next/server'
 
 import { extractApiKeyFromHeader } from '@/util/auth'
@@ -34,7 +36,7 @@ export async function postAgentRunsSteps(params: {
   logger: Logger
   loggerWithContext: LoggerWithContextFn
   trackEvent: TrackEventFn
-  db: CodebuffPgDatabase
+  db: TestableDb
 }) {
   const {
     req,
