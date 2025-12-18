@@ -83,11 +83,7 @@ const ManageCreditsCard = ({ isLoading = false }: { isLoading?: boolean }) => {
             isPurchasePending={buyCreditsMutation.isPending}
             showAutoTopup={true}
             isLoading={isLoading}
-            billingPortalUrl={
-              env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL
-                ? `${env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL}?prefilled_email=${email}`
-                : undefined
-            }
+            billingPortalUrl={`${env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL}?prefilled_email=${email}`}
           />
         </div>
       </CardContent>

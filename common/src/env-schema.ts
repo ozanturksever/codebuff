@@ -9,13 +9,13 @@ export const clientEnvSchema = z.object({
     .email()
     .min(1)
     .default('support@codebuff.com'),
-  NEXT_PUBLIC_POSTHOG_API_KEY: z.string().min(1).optional(),
+  NEXT_PUBLIC_POSTHOG_API_KEY: z.string().min(1),
   NEXT_PUBLIC_POSTHOG_HOST_URL: z
     .url()
     .min(1)
     .default('https://us.i.posthog.com'),
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().min(1),
-  NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL: z.url().min(1).optional(),
+  NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL: z.url().min(1),
   NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION_ID: z.string().optional(),
   NEXT_PUBLIC_WEB_PORT: z.coerce.number().min(1000).default(3000),
 } satisfies Record<`${typeof CLIENT_ENV_PREFIX}${string}`, any>)
