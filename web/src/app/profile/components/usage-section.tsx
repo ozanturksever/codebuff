@@ -38,6 +38,15 @@ const ManageCreditsCard = ({ isLoading = false }: { isLoading?: boolean }) => {
     },
     onSuccess: async (data) => {
       if (data.sessionId) {
+        if (!env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
+          toast({
+            title: 'Error',
+            description: 'Stripe publishable key is not configured.',
+            variant: 'destructive',
+          })
+          return
+        }
+
         const stripePromise = loadStripe(env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
         const stripe = await stripePromise
         if (!stripe) {
@@ -83,7 +92,11 @@ const ManageCreditsCard = ({ isLoading = false }: { isLoading?: boolean }) => {
             isPurchasePending={buyCreditsMutation.isPending}
             showAutoTopup={true}
             isLoading={isLoading}
-            billingPortalUrl={`${env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL}?prefilled_email=${email}`}
+            billingPortalUrl={
+              env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL
+                ? `${env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL}?prefilled_email=${email}`
+                : undefined
+            }
           />
         </div>
       </CardContent>
