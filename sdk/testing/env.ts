@@ -4,7 +4,7 @@
 
 import { createTestBaseEnv } from '@codebuff/common/testing/env-process'
 
-import type { SdkEnv } from '../types/env'
+import type { SdkEnv } from '../src/types/env'
 
 /**
  * Create a test SdkEnv with optional overrides.
@@ -24,4 +24,3 @@ export const createTestSdkEnv = (
   OVERRIDE_ARCH: undefined,
   ...overrides,
 })
-

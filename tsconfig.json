@@ -4,6 +4,7 @@
     "noEmit": true, // don't place JS everywhere while hacking
     "baseUrl": ".", // Bun & editors see the aliases
     "paths": {
+      "@codebuff/common/testing/*": ["./common/testing/*"],
       "@codebuff/common/*": ["./common/src/*"],
       "@codebuff/web/*": ["./web/src/*"],
       "@codebuff/evals/*": ["./evals/*"],

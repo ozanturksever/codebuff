@@ -4,7 +4,7 @@
 
 import { createTestBaseEnv } from '@codebuff/common/testing/env-process'
 
-import type { CliEnv } from '../types/env'
+import type { CliEnv } from '../src/types/env'
 
 /**
  * Create a test CliEnv with optional overrides.
@@ -45,4 +45,3 @@ export const createTestCliEnv = (overrides: Partial<CliEnv> = {}): CliEnv => ({
   CODEBUFF_SCROLL_MULTIPLIER: undefined,
   ...overrides,
 })
-

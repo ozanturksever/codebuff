@@ -5,7 +5,7 @@
  * These helpers create properly-typed mocks without requiring ugly `as unknown as` casts.
  */
 
-import type { Logger } from '../../types/contracts/logger'
+import type { Logger } from '../../src/types/contracts/logger'
 
 // Re-export the test logger for convenience
 export { testLogger } from './agent-runtime'

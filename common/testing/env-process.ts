@@ -2,7 +2,7 @@
  * Test-only ProcessEnv fixtures.
  */
 
-import type { BaseEnv, ProcessEnv } from '../types/contracts/env'
+import type { BaseEnv, ProcessEnv } from '../src/types/contracts/env'
 
 /**
  * Create test defaults for BaseEnv.
@@ -84,4 +84,3 @@ export const createTestProcessEnv = (
   OVERRIDE_ARCH: undefined,
   ...overrides,
 })
-

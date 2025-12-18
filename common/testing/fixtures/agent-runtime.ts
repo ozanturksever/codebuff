@@ -7,14 +7,17 @@
 
 import { spyOn } from 'bun:test'
 
-import type { AgentTemplate } from '../../types/agent-template'
+import type { AgentTemplate } from '../../src/types/agent-template'
 import type {
   AgentRuntimeDeps,
   AgentRuntimeScopedDeps,
-} from '../../types/contracts/agent-runtime'
-import type { GetUserInfoFromApiKeyInput, UserColumn } from '../../types/contracts/database'
-import type { ClientEnv, CiEnv } from '../../types/contracts/env'
-import type { Logger } from '../../types/contracts/logger'
+} from '../../src/types/contracts/agent-runtime'
+import type {
+  GetUserInfoFromApiKeyInput,
+  UserColumn,
+} from '../../src/types/contracts/database'
+import type { ClientEnv, CiEnv } from '../../src/types/contracts/env'
+import type { Logger } from '../../src/types/contracts/logger'
 
 export const testLogger: Logger = {
   debug: () => {},

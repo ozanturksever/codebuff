@@ -15,6 +15,7 @@
     "types": ["node", "bun-types"],
     "baseUrl": ".",
     "paths": {
+      "@codebuff/common/testing/*": ["../common/testing/*"],
       "@codebuff/common/*": ["../common/src/*"],
       "@codebuff/agent-runtime/*": ["../packages/agent-runtime/src/*"],
       "@codebuff/code-map": ["../packages/code-map/src/index.ts"],
@@ -22,5 +23,14 @@
     }
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/**/__tests__/**",
+    "src/**/__mocks__/**",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.spec.ts",
+    "src/**/*.spec.tsx"
+  ]
 }

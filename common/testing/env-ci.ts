@@ -2,7 +2,7 @@
  * Test-only CiEnv fixtures.
  */
 
-import type { CiEnv } from '../types/contracts/env'
+import type { CiEnv } from '../src/types/contracts/env'
 
 /**
  * Create a test CiEnv with optional overrides.
@@ -16,4 +16,3 @@ export const createTestCiEnv = (overrides: Partial<CiEnv> = {}): CiEnv => ({
   CODEBUFF_API_KEY: 'test-api-key',
   ...overrides,
 })
-
