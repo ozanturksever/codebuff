@@ -1,4 +1,4 @@
-import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
+import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/fixtures'
 import { describe, test, expect, beforeEach } from 'bun:test'
 import { NextRequest } from 'next/server'
 

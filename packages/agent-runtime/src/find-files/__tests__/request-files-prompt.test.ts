@@ -1,5 +1,5 @@
 import { finetunedVertexModels } from '@codebuff/common/old-constants'
-import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
+import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/fixtures'
 import { userMessage } from '@codebuff/common/util/messages'
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
 

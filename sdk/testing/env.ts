@@ -2,7 +2,7 @@
  * Test-only SDK env fixtures.
  */
 
-import { createTestBaseEnv } from '@codebuff/common/testing/env-process'
+import { createTestBaseEnv } from '@codebuff/common/testing/fixtures'
 
 import type { SdkEnv } from '../src/types/env'
 

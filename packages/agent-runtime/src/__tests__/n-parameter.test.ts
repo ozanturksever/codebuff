@@ -3,7 +3,7 @@ import {
   mockAnalytics,
   mockRandomUUID,
 } from '@codebuff/common/testing/fixtures'
-import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
+import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/fixtures'
 import { getInitialSessionState } from '@codebuff/common/types/session-state'
 import { assistantMessage, userMessage } from '@codebuff/common/util/messages'
 import {

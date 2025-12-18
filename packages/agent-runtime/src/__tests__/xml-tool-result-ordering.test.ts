@@ -1,4 +1,4 @@
-import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
+import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/fixtures'
 import { beforeEach, describe, expect, it } from 'bun:test'
 
 import { processStreamWithTools } from '../tool-stream-parser'

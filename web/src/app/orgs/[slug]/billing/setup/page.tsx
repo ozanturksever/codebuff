@@ -1,7 +1,6 @@
 'use client'
 
 import { env } from '@codebuff/common/env'
-import { loadStripe } from '@stripe/stripe-js'
 import { ArrowLeft, CreditCard, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
@@ -25,8 +24,6 @@ interface OrganizationDetails {
   slug: string
   userRole: 'owner' | 'admin' | 'member'
 }
-
-const stripePromise = loadStripe(env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
 export default function BillingSetupPage() {
   const { data: session, status } = useSession()
@@ -62,7 +59,11 @@ export default function BillingSetupPage() {
       const { sessionId } = await response.json()
 
       // Redirect to Stripe Checkout
-      const stripeInstance = await stripePromise
+      const stripe = (await import('@stripe/stripe-js')).loadStripe(
+        env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
+      )
+
+      const stripeInstance = await stripe
       if (stripeInstance) {
         const { error } = await stripeInstance.redirectToCheckout({
           sessionId,

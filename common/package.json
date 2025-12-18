@@ -22,30 +22,6 @@
       "import": "./testing/fixtures/*.ts",
       "types": "./testing/fixtures/*.ts",
       "default": "./testing/fixtures/*.ts"
-    },
-    "./testing/env-process": {
-      "bun": "./testing/env-process.ts",
-      "import": "./testing/env-process.ts",
-      "types": "./testing/env-process.ts",
-      "default": "./testing/env-process.ts"
-    },
-    "./testing/env-ci": {
-      "bun": "./testing/env-ci.ts",
-      "import": "./testing/env-ci.ts",
-      "types": "./testing/env-ci.ts",
-      "default": "./testing/env-ci.ts"
-    },
-    "./testing/mock-modules": {
-      "bun": "./testing/mock-modules.ts",
-      "import": "./testing/mock-modules.ts",
-      "types": "./testing/mock-modules.ts",
-      "default": "./testing/mock-modules.ts"
-    },
-    "./testing/impl/*": {
-      "bun": "./testing/impl/*.ts",
-      "import": "./testing/impl/*.ts",
-      "types": "./testing/impl/*.ts",
-      "default": "./testing/impl/*.ts"
     }
   },
   "scripts": {

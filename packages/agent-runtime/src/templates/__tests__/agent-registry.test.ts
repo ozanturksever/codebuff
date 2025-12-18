@@ -1,4 +1,4 @@
-import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
+import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/fixtures'
 import * as validationModule from '@codebuff/common/templates/agent-validation'
 import { getStubProjectFileContext } from '@codebuff/common/util/file'
 import {

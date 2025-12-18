@@ -93,7 +93,7 @@ export default function OrganizationPage() {
       const { sessionId } = await response.json()
 
       // Redirect to Stripe Checkout
-      const stripe = await loadStripe(env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
+      const stripe = await loadStripe(env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
 
       if (stripe) {
         const { error } = await stripe.redirectToCheckout({

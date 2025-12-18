@@ -57,3 +57,10 @@ export {
   type MockFetchFn,
   type MockFetchResponseConfig,
 } from './fetch'
+
+// Environment fixtures
+export { createTestBaseEnv, createTestProcessEnv } from './env-process'
+export { createTestCiEnv } from './env-ci'
+
+// Module mocking utilities
+export { mockModule, clearMockedModules, type MockResult } from './mock-modules'

@@ -2,7 +2,7 @@
  * Test-only CLI env fixtures.
  */
 
-import { createTestBaseEnv } from '@codebuff/common/testing/env-process'
+import { createTestBaseEnv } from '@codebuff/common/testing/fixtures'
 
 import type { CliEnv } from '../src/types/env'
 

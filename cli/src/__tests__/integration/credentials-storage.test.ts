@@ -5,7 +5,7 @@ import path from 'path'
 import {
   clearMockedModules,
   mockModule,
-} from '@codebuff/common/testing/mock-modules'
+} from '@codebuff/common/testing/fixtures'
 import {
   describe,
   test,
