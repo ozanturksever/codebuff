@@ -19,6 +19,7 @@ const config = {
   },
   testPathIgnorePatterns: [
     '<rootDir>/src/__tests__/e2e',
+    '<rootDir>/src/__tests__/playwright-runner.test.ts',
     '<rootDir>/src/lib/__tests__/ban-conditions\\.test\\.ts', // Uses bun:test mock.module() - run with bun test
     '<rootDir>/src/app/api/v1/.*/__tests__',
     '<rootDir>/src/app/api/agents/publish/__tests__',

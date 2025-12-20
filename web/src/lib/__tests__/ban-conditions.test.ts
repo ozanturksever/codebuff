@@ -1,65 +1,82 @@
-import { describe, it, expect, beforeEach, mock, spyOn } from 'bun:test'
+export {}
 
+import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test'
 import {
-  DISPUTE_THRESHOLD,
-  DISPUTE_WINDOW_DAYS,
-  evaluateBanConditions,
-  getUserByStripeCustomerId,
-  banUser,
-  type BanConditionContext,
-} from '../ban-conditions'
+  clearMockedModules,
+  mockModule,
+} from '@codebuff/common/testing/mock-modules'
 
-// Mock the database module
-const mockSelect = mock(() => ({
-  from: mock(() => ({
-    where: mock(() => ({
-      limit: mock(() => Promise.resolve([])),
+import type { BanConditionContext } from '../ban-conditions'
+
+let DISPUTE_THRESHOLD!: number
+let DISPUTE_WINDOW_DAYS!: number
+let banUser!: typeof import('../ban-conditions').banUser
+let evaluateBanConditions!: typeof import('../ban-conditions').evaluateBanConditions
+let getUserByStripeCustomerId!: typeof import('../ban-conditions').getUserByStripeCustomerId
+
+let mockSelect!: ReturnType<typeof mock>
+let mockUpdate!: ReturnType<typeof mock>
+let mockDisputesList!: ReturnType<typeof mock>
+
+const setupMocks = async () => {
+  mockSelect = mock(() => ({
+    from: mock(() => ({
+      where: mock(() => ({
+        limit: mock(() => Promise.resolve([])),
+      })),
     })),
-  })),
-}))
+  }))
 
-const mockUpdate = mock(() => ({
-  set: mock(() => ({
-    where: mock(() => Promise.resolve()),
-  })),
-}))
+  mockUpdate = mock(() => ({
+    set: mock(() => ({
+      where: mock(() => Promise.resolve()),
+    })),
+  }))
 
-mock.module('@codebuff/internal/db', () => ({
-  default: {
-    select: mockSelect,
-    update: mockUpdate,
-  },
-}))
+  mockDisputesList = mock(() =>
+    Promise.resolve({
+      data: [],
+    }),
+  )
 
-mock.module('@codebuff/internal/db/schema', () => ({
-  user: {
-    id: 'id',
-    banned: 'banned',
-    email: 'email',
-    name: 'name',
-    stripe_customer_id: 'stripe_customer_id',
-  },
-}))
-
-// Mock Stripe server
-const mockDisputesList = mock((): Promise<{ data: any[] }> =>
-  Promise.resolve({
-    data: [],
-  }),
-)
-
-mock.module('@codebuff/internal/util/stripe', () => ({
-  stripeServer: {
-    disputes: {
-      list: mockDisputesList,
+  await mockModule('@codebuff/internal/db', () => ({
+    default: {
+      select: mockSelect,
+      update: mockUpdate,
     },
-  },
-}))
+  }))
 
-// Mock drizzle-orm eq function
-mock.module('drizzle-orm', () => ({
-  eq: mock((a: any, b: any) => ({ column: a, value: b })),
-}))
+  await mockModule('@codebuff/internal/db/schema', () => ({
+    user: {
+      id: 'id',
+      banned: 'banned',
+      email: 'email',
+      name: 'name',
+      stripe_customer_id: 'stripe_customer_id',
+    },
+  }))
+
+  await mockModule('@codebuff/internal/util/stripe', () => ({
+    stripeServer: {
+      disputes: {
+        list: mockDisputesList,
+      },
+    },
+  }))
+
+  await mockModule('drizzle-orm', () => ({
+    eq: mock((a: any, b: any) => ({ column: a, value: b })),
+  }))
+
+  const module = await import('../ban-conditions')
+  DISPUTE_THRESHOLD = module.DISPUTE_THRESHOLD
+  DISPUTE_WINDOW_DAYS = module.DISPUTE_WINDOW_DAYS
+  banUser = module.banUser
+  evaluateBanConditions = module.evaluateBanConditions
+  getUserByStripeCustomerId = module.getUserByStripeCustomerId
+}
+
+await setupMocks()
 
 const createMockLogger = () => ({
   debug: mock(() => {}),
@@ -68,13 +85,17 @@ const createMockLogger = () => ({
   error: mock(() => {}),
 })
 
-describe('ban-conditions', () => {
-  beforeEach(() => {
-    mockDisputesList.mockClear()
-    mockSelect.mockClear()
-    mockUpdate.mockClear()
-  })
+beforeEach(() => {
+  mockDisputesList.mockClear()
+  mockSelect.mockClear()
+  mockUpdate.mockClear()
+})
 
+afterAll(() => {
+  clearMockedModules()
+})
+
+describe('ban-conditions', () => {
   describe('DISPUTE_THRESHOLD and DISPUTE_WINDOW_DAYS', () => {
     it('has expected default threshold', () => {
       expect(DISPUTE_THRESHOLD).toBe(5)
@@ -104,11 +125,14 @@ describe('ban-conditions', () => {
 
     it('returns shouldBan: false when disputes are below threshold', async () => {
       // Create disputes for the customer (below threshold)
-      const disputes = Array.from({ length: DISPUTE_THRESHOLD - 1 }, (_, i) => ({
-        id: `dp_${i}`,
-        charge: { customer: 'cus_123' },
-        created: Math.floor(Date.now() / 1000),
-      }))
+      const disputes = Array.from(
+        { length: DISPUTE_THRESHOLD - 1 },
+        (_, i) => ({
+          id: `dp_${i}`,
+          charge: { customer: 'cus_123' },
+          created: Math.floor(Date.now() / 1000),
+        }),
+      )
 
       mockDisputesList.mockResolvedValueOnce({ data: disputes })
 
@@ -151,11 +175,14 @@ describe('ban-conditions', () => {
 
     it('returns shouldBan: true when disputes exceed threshold', async () => {
       // Create disputes for the customer (above threshold)
-      const disputes = Array.from({ length: DISPUTE_THRESHOLD + 3 }, (_, i) => ({
-        id: `dp_${i}`,
-        charge: { customer: 'cus_123' },
-        created: Math.floor(Date.now() / 1000),
-      }))
+      const disputes = Array.from(
+        { length: DISPUTE_THRESHOLD + 3 },
+        (_, i) => ({
+          id: `dp_${i}`,
+          charge: { customer: 'cus_123' },
+          created: Math.floor(Date.now() / 1000),
+        }),
+      )
 
       mockDisputesList.mockResolvedValueOnce({ data: disputes })
 
@@ -176,13 +203,37 @@ describe('ban-conditions', () => {
       // Mix of disputes from different customers
       const disputes = [
         // Disputes for our customer
-        { id: 'dp_1', charge: { customer: 'cus_123' }, created: Math.floor(Date.now() / 1000) },
-        { id: 'dp_2', charge: { customer: 'cus_123' }, created: Math.floor(Date.now() / 1000) },
+        {
+          id: 'dp_1',
+          charge: { customer: 'cus_123' },
+          created: Math.floor(Date.now() / 1000),
+        },
+        {
+          id: 'dp_2',
+          charge: { customer: 'cus_123' },
+          created: Math.floor(Date.now() / 1000),
+        },
         // Disputes for other customers (should be ignored)
-        { id: 'dp_3', charge: { customer: 'cus_other' }, created: Math.floor(Date.now() / 1000) },
-        { id: 'dp_4', charge: { customer: 'cus_different' }, created: Math.floor(Date.now() / 1000) },
-        { id: 'dp_5', charge: { customer: 'cus_another' }, created: Math.floor(Date.now() / 1000) },
-        { id: 'dp_6', charge: { customer: 'cus_more' }, created: Math.floor(Date.now() / 1000) },
+        {
+          id: 'dp_3',
+          charge: { customer: 'cus_other' },
+          created: Math.floor(Date.now() / 1000),
+        },
+        {
+          id: 'dp_4',
+          charge: { customer: 'cus_different' },
+          created: Math.floor(Date.now() / 1000),
+        },
+        {
+          id: 'dp_5',
+          charge: { customer: 'cus_another' },
+          created: Math.floor(Date.now() / 1000),
+        },
+        {
+          id: 'dp_6',
+          charge: { customer: 'cus_more' },
+          created: Math.floor(Date.now() / 1000),
+        },
       ]
 
       mockDisputesList.mockResolvedValueOnce({ data: disputes })
@@ -259,16 +310,21 @@ describe('ban-conditions', () => {
       const afterCall = Math.floor(Date.now() / 1000)
 
       expect(mockDisputesList).toHaveBeenCalledTimes(1)
-      const callArgs = (mockDisputesList.mock.calls as any)[0]?.[0]
+      const callArgs = mockDisputesList.mock.calls[0]?.[0]
       expect(callArgs.limit).toBe(100)
       // Verify expand parameter is set to get full charge object
       expect(callArgs.expand).toEqual(['data.charge'])
 
       // Verify the created.gte is within the expected window
-      const expectedWindowStart = beforeCall - DISPUTE_WINDOW_DAYS * 24 * 60 * 60
+      const expectedWindowStart =
+        beforeCall - DISPUTE_WINDOW_DAYS * 24 * 60 * 60
       const windowTolerance = afterCall - beforeCall + 1 // Allow for time passing during test
-      expect(callArgs.created.gte).toBeGreaterThanOrEqual(expectedWindowStart - windowTolerance)
-      expect(callArgs.created.gte).toBeLessThanOrEqual(expectedWindowStart + windowTolerance)
+      expect(callArgs.created.gte).toBeGreaterThanOrEqual(
+        expectedWindowStart - windowTolerance,
+      )
+      expect(callArgs.created.gte).toBeLessThanOrEqual(
+        expectedWindowStart + windowTolerance,
+      )
     })
 
     // REGRESSION TEST: Without expand: ['data.charge'], dispute.charge is a string ID,
@@ -286,8 +342,8 @@ describe('ban-conditions', () => {
 
       await evaluateBanConditions(context)
 
-      const callArgs = (mockDisputesList.mock.calls as any)[0]?.[0]
-      
+      const callArgs = mockDisputesList.mock.calls[0]?.[0]
+
       // This is critical: without expand, dispute.charge is just a string ID like "ch_xxx"
       // and we cannot access dispute.charge.customer to filter by customer.
       // If this test fails, the ban condition will NEVER match any disputes.
