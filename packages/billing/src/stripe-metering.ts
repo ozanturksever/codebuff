@@ -8,24 +8,12 @@ import type { Logger } from '@codebuff/common/types/contracts/logger'
 
 const STRIPE_METER_EVENT_NAME = 'credits'
 const STRIPE_METER_REQUEST_TIMEOUT_MS = 10_000
-const STRIPE_METERING_SKIP_USER_IDS_ENV_VAR =
-  'CODEBUFF_STRIPE_METERING_SKIP_USER_IDS'
 
 function shouldAttemptStripeMetering(): boolean {
   // Avoid sending Stripe metering events in CI/tests, and when Stripe isn't configured.
   if (process.env.CI === 'true' || process.env.CI === '1') return false
   if (process.env.NODE_ENV === 'test') return false
   return Boolean(process.env.STRIPE_SECRET_KEY)
-}
-
-function shouldSkipStripeMeteringForUser(userId: string): boolean {
-  const rawIds = process.env[STRIPE_METERING_SKIP_USER_IDS_ENV_VAR]
-  if (!rawIds) return false
-  return rawIds
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .includes(userId)
 }
 
 export async function reportPurchasedCreditsToStripe(params: {
@@ -59,7 +47,6 @@ export async function reportPurchasedCreditsToStripe(params: {
   } = params
 
   if (purchasedCredits <= 0) return
-  if (shouldSkipStripeMeteringForUser(userId)) return
   if (!shouldAttemptStripeMetering()) return
 
   const logContext = { userId, purchasedCredits, eventId }
