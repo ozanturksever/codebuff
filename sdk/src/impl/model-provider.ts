@@ -105,6 +105,7 @@ function createAnthropicOAuthModel(
     headers.set('Authorization', `Bearer ${oauthToken}`)
 
     // Add required beta headers for OAuth (same as opencode)
+    // These beta headers are required to access Claude 4+ models with OAuth
     const existingBeta = headers.get('anthropic-beta') ?? ''
     const betaList = existingBeta.split(',').map((b) => b.trim()).filter(Boolean)
     const mergedBetas = [
@@ -118,9 +119,10 @@ function createAnthropicOAuthModel(
     ].join(',')
     headers.set('anthropic-beta', mergedBetas)
 
-    // Add Claude Code identification headers
-    headers.set('anthropic-dangerous-direct-browser-access', 'true')
-    headers.set('x-app', 'cli')
+    // Note: opencode does NOT include these headers, so we remove them:
+    // - anthropic-dangerous-direct-browser-access
+    // - x-app
+    // Only the oauth beta headers and authorization are needed
 
     return globalThis.fetch(input, {
       ...init,
