@@ -6,6 +6,8 @@ import { env } from '@codebuff/common/env'
 import { userSchema } from '@codebuff/common/util/credentials'
 import { z } from 'zod/v4'
 
+import { getClaudeOAuthTokenFromEnv } from './env'
+
 import type { ClientEnv } from '@codebuff/common/types/contracts/env'
 import type { User } from '@codebuff/common/util/credentials'
 
@@ -74,4 +76,138 @@ export const getUserCredentials = (clientEnv: ClientEnv = env): User | null => {
     console.error('Error reading credentials', error)
     return null
   }
+}
+
+/**
+ * Claude OAuth credentials stored in the credentials file.
+ */
+export interface ClaudeOAuthCredentials {
+  accessToken: string
+  refreshToken: string
+  expiresAt: number // Unix timestamp in milliseconds
+  connectedAt: number // Unix timestamp in milliseconds
+}
+
+/**
+ * Schema for Claude OAuth credentials in the credentials file.
+ */
+const claudeOAuthSchema = z.object({
+  accessToken: z.string(),
+  refreshToken: z.string(),
+  expiresAt: z.number(),
+  connectedAt: z.number(),
+})
+
+/**
+ * Extended credentials file schema that includes Claude OAuth.
+ */
+const extendedCredentialsSchema = z.object({
+  default: userSchema.optional(),
+  claudeOAuth: claudeOAuthSchema.optional(),
+}).catchall(z.unknown())
+
+/**
+ * Get Claude OAuth credentials from file or environment variable.
+ * Environment variable takes precedence.
+ * @returns OAuth credentials or null if not found
+ */
+export const getClaudeOAuthCredentials = (
+  clientEnv: ClientEnv = env,
+): ClaudeOAuthCredentials | null => {
+  // Check environment variable first
+  const envToken = getClaudeOAuthTokenFromEnv()
+  if (envToken) {
+    // Return a synthetic credentials object for env var tokens
+    // These tokens are assumed to be valid and non-expiring for simplicity
+    return {
+      accessToken: envToken,
+      refreshToken: '',
+      expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000, // 1 year from now
+      connectedAt: Date.now(),
+    }
+  }
+
+  const credentialsPath = getCredentialsPath(clientEnv)
+  if (!fs.existsSync(credentialsPath)) {
+    return null
+  }
+
+  try {
+    const credentialsFile = fs.readFileSync(credentialsPath, 'utf8')
+    const parsed = extendedCredentialsSchema.safeParse(JSON.parse(credentialsFile))
+    if (!parsed.success || !parsed.data.claudeOAuth) {
+      return null
+    }
+    return parsed.data.claudeOAuth
+  } catch (error) {
+    console.error('Error reading Claude OAuth credentials', error)
+    return null
+  }
+}
+
+/**
+ * Save Claude OAuth credentials to the credentials file.
+ * Preserves existing user credentials.
+ */
+export const saveClaudeOAuthCredentials = (
+  credentials: ClaudeOAuthCredentials,
+  clientEnv: ClientEnv = env,
+): void => {
+  const configDir = getConfigDir(clientEnv)
+  const credentialsPath = getCredentialsPath(clientEnv)
+
+  ensureDirectoryExistsSync(configDir)
+
+  let existingData: Record<string, unknown> = {}
+  if (fs.existsSync(credentialsPath)) {
+    try {
+      existingData = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'))
+    } catch {
+      // Ignore parse errors, start fresh
+    }
+  }
+
+  const updatedData = {
+    ...existingData,
+    claudeOAuth: credentials,
+  }
+
+  fs.writeFileSync(credentialsPath, JSON.stringify(updatedData, null, 2))
+}
+
+/**
+ * Clear Claude OAuth credentials from the credentials file.
+ * Preserves other credentials.
+ */
+export const clearClaudeOAuthCredentials = (
+  clientEnv: ClientEnv = env,
+): void => {
+  const credentialsPath = getCredentialsPath(clientEnv)
+  if (!fs.existsSync(credentialsPath)) {
+    return
+  }
+
+  try {
+    const existingData = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'))
+    delete existingData.claudeOAuth
+    fs.writeFileSync(credentialsPath, JSON.stringify(existingData, null, 2))
+  } catch {
+    // Ignore errors
+  }
+}
+
+/**
+ * Check if Claude OAuth credentials are valid (not expired).
+ * Returns true if credentials exist and haven't expired.
+ */
+export const isClaudeOAuthValid = (
+  clientEnv: ClientEnv = env,
+): boolean => {
+  const credentials = getClaudeOAuthCredentials(clientEnv)
+  if (!credentials) {
+    return false
+  }
+  // Add 5 minute buffer before expiry
+  const bufferMs = 5 * 60 * 1000
+  return credentials.expiresAt > Date.now() + bufferMs
 }

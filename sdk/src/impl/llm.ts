@@ -1,23 +1,13 @@
-import path from 'path'
-
 import {
   checkLiveUserInput,
   getLiveUserInputIds,
 } from '@codebuff/agent-runtime/live-user-inputs'
-import { getByokOpenrouterApiKeyFromEnv } from '../env'
-import {
-  BYOK_OPENROUTER_HEADER,
-} from '@codebuff/common/constants/byok'
 import { models, PROFIT_MARGIN } from '@codebuff/common/old-constants'
 import { buildArray } from '@codebuff/common/util/array'
 import { getErrorObject } from '@codebuff/common/util/error'
 import { convertCbToModelMessages } from '@codebuff/common/util/messages'
 import { isExplicitlyDefinedModel } from '@codebuff/common/util/model-utils'
 import { StopSequenceHandler } from '@codebuff/common/util/stop-sequence'
-import {
-  OpenAICompatibleChatLanguageModel,
-  VERSION,
-} from '@codebuff/internal/openai-compatible/index'
 import {
   streamText,
   generateText,
@@ -29,8 +19,8 @@ import {
   TypeValidationError,
 } from 'ai'
 
-import { WEBSITE_URL } from '../constants'
-import type { LanguageModelV2 } from '@ai-sdk/provider'
+import { getModelForRequest } from './model-provider'
+
 import type { OpenRouterProviderRoutingOptions } from '@codebuff/common/types/agent-template'
 import type {
   PromptAiSdkFn,
@@ -42,14 +32,6 @@ import type { ParamsOf } from '@codebuff/common/types/function-params'
 import type { JSONObject } from '@codebuff/common/types/json'
 import type { OpenRouterProviderOptions } from '@codebuff/internal/openrouter-ai-sdk'
 import type z from 'zod/v4'
-
-// Forked from https://github.com/OpenRouterTeam/ai-sdk-provider/
-type OpenRouterUsageAccounting = {
-  cost: number | null
-  costDetails: {
-    upstreamInferenceCost: number | null
-  }
-}
 
 // Provider routing documentation: https://openrouter.ai/docs/features/provider-routing
 const providerOrder = {
@@ -121,74 +103,12 @@ function getProviderOptions(params: {
   }
 }
 
-function getAiSdkModel(params: {
-  apiKey: string
-  model: string
-}): LanguageModelV2 {
-  const { apiKey, model } = params
-
-  const openrouterUsage: OpenRouterUsageAccounting = {
-    cost: null,
-    costDetails: {
-      upstreamInferenceCost: null,
-    },
+// Usage accounting type for OpenRouter/Codebuff backend responses
+type OpenRouterUsageAccounting = {
+  cost: number | null
+  costDetails: {
+    upstreamInferenceCost: number | null
   }
-
-  const openrouterApiKey = getByokOpenrouterApiKeyFromEnv()
-  const codebuffBackendModel = new OpenAICompatibleChatLanguageModel(model, {
-    provider: 'codebuff',
-    url: ({ path: endpoint }) =>
-      new URL(path.join('/api/v1', endpoint), WEBSITE_URL).toString(),
-    headers: () => ({
-      Authorization: `Bearer ${apiKey}`,
-      'user-agent': `ai-sdk/openai-compatible/${VERSION}/codebuff`,
-      ...(openrouterApiKey && { [BYOK_OPENROUTER_HEADER]: openrouterApiKey }),
-    }),
-    metadataExtractor: {
-      extractMetadata: async ({ parsedBody }: { parsedBody: any }) => {
-        if (openrouterApiKey !== undefined) {
-          return { codebuff: { usage: openrouterUsage } }
-        }
-
-        if (typeof parsedBody?.usage?.cost === 'number') {
-          openrouterUsage.cost = parsedBody.usage.cost
-        }
-        if (
-          typeof parsedBody?.usage?.cost_details?.upstream_inference_cost ===
-          'number'
-        ) {
-          openrouterUsage.costDetails.upstreamInferenceCost =
-            parsedBody.usage.cost_details.upstream_inference_cost
-        }
-        return { codebuff: { usage: openrouterUsage } }
-      },
-      createStreamExtractor: () => ({
-        processChunk: (parsedChunk: any) => {
-          if (openrouterApiKey !== undefined) {
-            return
-          }
-
-          if (typeof parsedChunk?.usage?.cost === 'number') {
-            openrouterUsage.cost = parsedChunk.usage.cost
-          }
-          if (
-            typeof parsedChunk?.usage?.cost_details?.upstream_inference_cost ===
-            'number'
-          ) {
-            openrouterUsage.costDetails.upstreamInferenceCost =
-              parsedChunk.usage.cost_details.upstream_inference_cost
-          }
-        },
-        buildMetadata: () => {
-          return { codebuff: { usage: openrouterUsage } }
-        },
-      }),
-    },
-    fetch: undefined,
-    includeUsage: undefined,
-    supportsStructuredOutputs: true,
-  })
-  return codebuffBackendModel
 }
 
 export async function* promptAiSdkStream(
@@ -212,7 +132,7 @@ export async function* promptAiSdkStream(
     return null
   }
 
-  let aiSDKModel = getAiSdkModel(params)
+  const { model: aiSDKModel, isClaudeOAuth } = getModelForRequest(params)
 
   const response = streamText({
     ...params,
@@ -455,27 +375,30 @@ export async function* promptAiSdkStream(
     }
   }
 
-  const providerMetadata = (await response.providerMetadata) ?? {}
-
-  let costOverrideDollars: number | undefined
-  if (providerMetadata.codebuff) {
-    if (providerMetadata.codebuff.usage) {
-      const openrouterUsage = providerMetadata.codebuff
-        .usage as OpenRouterUsageAccounting
-
-      costOverrideDollars =
-        (openrouterUsage.cost ?? 0) +
-        (openrouterUsage.costDetails?.upstreamInferenceCost ?? 0)
-    }
-  }
-
   const messageId = (await response.response).id
 
-  // Call the cost callback if provided
-  if (params.onCostCalculated && costOverrideDollars) {
-    await params.onCostCalculated(
-      calculateUsedCredits({ costDollars: costOverrideDollars }),
-    )
+  // Skip cost tracking for Claude OAuth (user is on their own subscription)
+  if (!isClaudeOAuth) {
+    const providerMetadata = (await response.providerMetadata) ?? {}
+
+    let costOverrideDollars: number | undefined
+    if (providerMetadata.codebuff) {
+      if (providerMetadata.codebuff.usage) {
+        const openrouterUsage = providerMetadata.codebuff
+          .usage as OpenRouterUsageAccounting
+
+        costOverrideDollars =
+          (openrouterUsage.cost ?? 0) +
+          (openrouterUsage.costDetails?.upstreamInferenceCost ?? 0)
+      }
+    }
+
+    // Call the cost callback if provided
+    if (params.onCostCalculated && costOverrideDollars) {
+      await params.onCostCalculated(
+        calculateUsedCredits({ costDollars: costOverrideDollars }),
+      )
+    }
   }
 
   return messageId
@@ -498,7 +421,7 @@ export async function promptAiSdk(
     return ''
   }
 
-  let aiSDKModel = getAiSdkModel(params)
+  const { model: aiSDKModel, isClaudeOAuth } = getModelForRequest(params)
 
   const response = await generateText({
     ...params,
@@ -512,24 +435,27 @@ export async function promptAiSdk(
   })
   const content = response.text
 
-  const providerMetadata = response.providerMetadata ?? {}
-  let costOverrideDollars: number | undefined
-  if (providerMetadata.codebuff) {
-    if (providerMetadata.codebuff.usage) {
-      const openrouterUsage = providerMetadata.codebuff
-        .usage as OpenRouterUsageAccounting
+  // Skip cost tracking for Claude OAuth (user is on their own subscription)
+  if (!isClaudeOAuth) {
+    const providerMetadata = response.providerMetadata ?? {}
+    let costOverrideDollars: number | undefined
+    if (providerMetadata.codebuff) {
+      if (providerMetadata.codebuff.usage) {
+        const openrouterUsage = providerMetadata.codebuff
+          .usage as OpenRouterUsageAccounting
 
-      costOverrideDollars =
-        (openrouterUsage.cost ?? 0) +
-        (openrouterUsage.costDetails?.upstreamInferenceCost ?? 0)
+        costOverrideDollars =
+          (openrouterUsage.cost ?? 0) +
+          (openrouterUsage.costDetails?.upstreamInferenceCost ?? 0)
+      }
     }
-  }
 
-  // Call the cost callback if provided
-  if (params.onCostCalculated && costOverrideDollars) {
-    await params.onCostCalculated(
-      calculateUsedCredits({ costDollars: costOverrideDollars }),
-    )
+    // Call the cost callback if provided
+    if (params.onCostCalculated && costOverrideDollars) {
+      await params.onCostCalculated(
+        calculateUsedCredits({ costDollars: costOverrideDollars }),
+      )
+    }
   }
 
   return content
@@ -551,7 +477,7 @@ export async function promptAiSdkStructured<T>(
     )
     return {} as T
   }
-  let aiSDKModel = getAiSdkModel(params)
+  const { model: aiSDKModel, isClaudeOAuth } = getModelForRequest(params)
 
   const response = await generateObject<z.ZodType<T>, 'object'>({
     ...params,
@@ -567,24 +493,27 @@ export async function promptAiSdkStructured<T>(
 
   const content = response.object
 
-  const providerMetadata = response.providerMetadata ?? {}
-  let costOverrideDollars: number | undefined
-  if (providerMetadata.codebuff) {
-    if (providerMetadata.codebuff.usage) {
-      const openrouterUsage = providerMetadata.codebuff
-        .usage as OpenRouterUsageAccounting
+  // Skip cost tracking for Claude OAuth (user is on their own subscription)
+  if (!isClaudeOAuth) {
+    const providerMetadata = response.providerMetadata ?? {}
+    let costOverrideDollars: number | undefined
+    if (providerMetadata.codebuff) {
+      if (providerMetadata.codebuff.usage) {
+        const openrouterUsage = providerMetadata.codebuff
+          .usage as OpenRouterUsageAccounting
 
-      costOverrideDollars =
-        (openrouterUsage.cost ?? 0) +
-        (openrouterUsage.costDetails?.upstreamInferenceCost ?? 0)
+        costOverrideDollars =
+          (openrouterUsage.cost ?? 0) +
+          (openrouterUsage.costDetails?.upstreamInferenceCost ?? 0)
+      }
     }
-  }
 
-  // Call the cost callback if provided
-  if (params.onCostCalculated && costOverrideDollars) {
-    await params.onCostCalculated(
-      calculateUsedCredits({ costDollars: costOverrideDollars }),
-    )
+    // Call the cost callback if provided
+    if (params.onCostCalculated && costOverrideDollars) {
+      await params.onCostCalculated(
+        calculateUsedCredits({ costDollars: costOverrideDollars }),
+      )
+    }
   }
 
   return content

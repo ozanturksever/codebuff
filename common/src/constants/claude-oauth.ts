@@ -1,0 +1,105 @@
+/**
+ * Claude Code OAuth constants for connecting to user's Claude Pro/Max subscription.
+ * These are used by the CLI for the OAuth PKCE flow and by the SDK for direct Anthropic API calls.
+ */
+
+// OAuth client ID used by Claude Code and third-party apps like opencode
+export const CLAUDE_OAUTH_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
+
+// Anthropic OAuth endpoints
+export const CLAUDE_OAUTH_AUTHORIZE_URL = 'https://console.anthropic.com/oauth/authorize'
+export const CLAUDE_OAUTH_TOKEN_URL = 'https://console.anthropic.com/oauth/token'
+
+// Anthropic API endpoint for direct calls
+export const ANTHROPIC_API_BASE_URL = 'https://api.anthropic.com'
+
+// Environment variable for OAuth token override
+export const CLAUDE_OAUTH_TOKEN_ENV_VAR = 'CODEBUFF_CLAUDE_OAUTH_TOKEN'
+
+// Required Anthropic API version header
+export const ANTHROPIC_API_VERSION = '2023-06-01'
+
+/**
+ * Model ID mapping from OpenRouter format to Anthropic format.
+ * OpenRouter uses prefixed IDs like "anthropic/claude-sonnet-4",
+ * while Anthropic uses versioned IDs like "claude-3-5-haiku-20241022".
+ *
+ * IMPORTANT: Claude 4.x models (Sonnet 4, Opus 4, etc.) are restricted by Anthropic
+ * to only work with the official Claude Code CLI. Third-party OAuth only works with
+ * Claude 3.x models (Haiku 3.5, etc.).
+ */
+export const OPENROUTER_TO_ANTHROPIC_MODEL_MAP: Record<string, string> = {
+  // Claude 3.x models - WORK with third-party OAuth
+  'anthropic/claude-3.5-haiku-20241022': 'claude-3-5-haiku-20241022',
+  'anthropic/claude-3.5-haiku': 'claude-3-5-haiku-20241022',
+  'anthropic/claude-3-5-haiku': 'claude-3-5-haiku-20241022',
+  'anthropic/claude-3-haiku': 'claude-3-haiku-20240307',
+  'anthropic/claude-3-opus': 'claude-3-opus-20240229',
+  'claude-3.5-haiku': 'claude-3-5-haiku-20241022',
+  'claude-3-5-haiku': 'claude-3-5-haiku-20241022',
+  'claude-3-haiku': 'claude-3-haiku-20240307',
+  'claude-3-opus': 'claude-3-opus-20240229',
+
+  // Claude 4.x models - RESTRICTED to Claude Code only (will fail with OAuth)
+  // Keeping these mappings for future compatibility if Anthropic lifts restrictions
+  'anthropic/claude-sonnet-4.5': 'claude-sonnet-4-5-20250929',
+  'anthropic/claude-sonnet-4': 'claude-sonnet-4-20250514',
+  'anthropic/claude-opus-4.5': 'claude-opus-4-5-20251101',
+  'anthropic/claude-opus-4.1': 'claude-opus-4-1-20250805',
+  'anthropic/claude-opus-4': 'claude-opus-4-1-20250805',
+  'claude-sonnet-4.5': 'claude-sonnet-4-5-20250929',
+  'claude-sonnet-4': 'claude-sonnet-4-20250514',
+  'claude-opus-4.5': 'claude-opus-4-5-20251101',
+  'claude-opus-4.1': 'claude-opus-4-1-20250805',
+  'claude-opus-4': 'claude-opus-4-1-20250805',
+}
+
+/**
+ * Models that are known to work with third-party OAuth.
+ * Claude 4.x models are restricted to Claude Code only.
+ */
+export const OAUTH_COMPATIBLE_MODELS = new Set([
+  'claude-3-5-haiku-20241022',
+  'claude-3-haiku-20240307',
+  'claude-3-opus-20240229',
+])
+
+/**
+ * Check if a model is compatible with third-party OAuth.
+ * Returns false for Claude 4.x models which are restricted to Claude Code.
+ */
+export function isOAuthCompatibleModel(model: string): boolean {
+  const anthropicModelId = toAnthropicModelId(model)
+  return OAUTH_COMPATIBLE_MODELS.has(anthropicModelId)
+}
+
+/**
+ * Check if a model is a Claude/Anthropic model that can use OAuth.
+ */
+export function isClaudeModel(model: string): boolean {
+  return model.startsWith('anthropic/') || model.startsWith('claude-')
+}
+
+/**
+ * Convert an OpenRouter model ID to an Anthropic model ID.
+ * Returns the original if no mapping exists.
+ */
+export function toAnthropicModelId(openrouterModel: string): string {
+  // If it's already an Anthropic model ID (no prefix), return as-is
+  if (!openrouterModel.includes('/')) {
+    return openrouterModel
+  }
+  
+  // Check the mapping table
+  const mapped = OPENROUTER_TO_ANTHROPIC_MODEL_MAP[openrouterModel]
+  if (mapped) {
+    return mapped
+  }
+  
+  // Fallback: strip the "anthropic/" prefix if present
+  if (openrouterModel.startsWith('anthropic/')) {
+    return openrouterModel.replace('anthropic/', '')
+  }
+  
+  return openrouterModel
+}
