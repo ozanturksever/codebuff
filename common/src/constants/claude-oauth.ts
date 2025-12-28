@@ -20,6 +20,13 @@ export const CLAUDE_OAUTH_TOKEN_ENV_VAR = 'CODEBUFF_CLAUDE_OAUTH_TOKEN'
 export const ANTHROPIC_API_VERSION = '2023-06-01'
 
 /**
+ * System prompt prefix required by Anthropic to allow OAuth access to Claude 4+ models.
+ * This must be prepended to the system prompt when using Claude OAuth with Claude 4+ models.
+ * Without this prefix, requests will fail with "This credential is only authorized for use with Claude Code".
+ */
+export const CLAUDE_CODE_SYSTEM_PROMPT_PREFIX = "You are Claude Code, Anthropic's official CLI for Claude."
+
+/**
  * Model ID mapping from OpenRouter format to Anthropic format.
  * OpenRouter uses prefixed IDs like "anthropic/claude-sonnet-4",
  * while Anthropic uses versioned IDs like "claude-3-5-haiku-20241022".
@@ -55,8 +62,8 @@ export const OPENROUTER_TO_ANTHROPIC_MODEL_MAP: Record<string, string> = {
 }
 
 /**
- * Models that are known to work with third-party OAuth.
- * Claude 4.x models are restricted to Claude Code only.
+ * Models that work with third-party OAuth without requiring the Claude Code system prompt prefix.
+ * Claude 4.x models require the CLAUDE_CODE_SYSTEM_PROMPT_PREFIX to be prepended to the system prompt.
  */
 export const OAUTH_COMPATIBLE_MODELS = new Set([
   'claude-3-5-haiku-20241022',

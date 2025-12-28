@@ -11,6 +11,7 @@ import path from 'path'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { BYOK_OPENROUTER_HEADER } from '@codebuff/common/constants/byok'
 import {
+  CLAUDE_CODE_SYSTEM_PROMPT_PREFIX,
   isClaudeModel,
   toAnthropicModelId,
 } from '@codebuff/common/constants/claude-oauth'
@@ -67,7 +68,10 @@ export function getModelForRequest(params: ModelRequestParams): ModelResult {
     const claudeOAuthCredentials = getClaudeOAuthCredentials()
     if (claudeOAuthCredentials) {
       return {
-        model: createAnthropicOAuthModel(model, claudeOAuthCredentials.accessToken),
+        model: createAnthropicOAuthModel(
+          model,
+          claudeOAuthCredentials.accessToken,
+        ),
         isClaudeOAuth: true,
       }
     }
@@ -91,7 +95,7 @@ function createAnthropicOAuthModel(
   const anthropicModelId = toAnthropicModelId(model)
 
   // Create Anthropic provider with custom fetch to use Bearer token auth
-  // Custom fetch to handle OAuth Bearer token authentication
+  // Custom fetch to handle OAuth Bearer token authentication and system prompt transformation
   const customFetch = async (
     input: RequestInfo | URL,
     init?: RequestInit,
@@ -107,7 +111,10 @@ function createAnthropicOAuthModel(
     // Add required beta headers for OAuth (same as opencode)
     // These beta headers are required to access Claude 4+ models with OAuth
     const existingBeta = headers.get('anthropic-beta') ?? ''
-    const betaList = existingBeta.split(',').map((b) => b.trim()).filter(Boolean)
+    const betaList = existingBeta
+      .split(',')
+      .map((b) => b.trim())
+      .filter(Boolean)
     const mergedBetas = [
       ...new Set([
         'oauth-2025-04-20',
@@ -119,13 +126,53 @@ function createAnthropicOAuthModel(
     ].join(',')
     headers.set('anthropic-beta', mergedBetas)
 
-    // Note: opencode does NOT include these headers, so we remove them:
-    // - anthropic-dangerous-direct-browser-access
-    // - x-app
-    // Only the oauth beta headers and authorization are needed
+    // Transform the request body to use the correct system prompt format for Claude OAuth
+    // Anthropic requires the system prompt to be split into two separate blocks:
+    // 1. First block: Claude Code identifier (required for OAuth access)
+    // 2. Second block: The actual system prompt (if any)
+    let modifiedInit = init
+    if (init?.body && typeof init.body === 'string') {
+      try {
+        const body = JSON.parse(init.body)
+        // Always inject the Claude Code identifier for OAuth requests
+        // Extract existing system prompt if present
+        const existingSystem = body.system
+          ? Array.isArray(body.system)
+            ? body.system
+                .map(
+                  (s: { text?: string; content?: string }) =>
+                    s.text ?? s.content ?? '',
+                )
+                .join('\n\n')
+            : typeof body.system === 'string'
+              ? body.system
+              : ''
+          : ''
+
+        // Build the system array with Claude Code identifier first
+        body.system = [
+          {
+            type: 'text',
+            text: CLAUDE_CODE_SYSTEM_PROMPT_PREFIX,
+          },
+          // Only add second block if there's actual content
+          ...(existingSystem
+            ? [
+                {
+                  type: 'text',
+                  text: existingSystem,
+                },
+              ]
+            : []),
+        ]
+        modifiedInit = { ...init, body: JSON.stringify(body) }
+      } catch {
+        // If parsing fails, continue with original body
+      }
+    }
 
     return globalThis.fetch(input, {
-      ...init,
+      ...modifiedInit,
       headers,
     })
   }
