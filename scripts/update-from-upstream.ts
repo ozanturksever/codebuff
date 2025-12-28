@@ -508,6 +508,36 @@ Handle errors gracefully and include them in the final report.
 Do NOT attempt to restart Docker - it will be done automatically after you finish.`,
 }
 
+// Sync agents from cloud
+async function syncAgentsFromCloud() {
+  console.log('\n☁️  Syncing agents from cloud...')
+  
+  const apiKey = process.env.CODEBUFF_API_KEY
+  if (!apiKey) {
+    console.log('⚠️  CODEBUFF_API_KEY not set, skipping cloud agent sync')
+    return
+  }
+
+  try {
+    const result = runCommand(`DATABASE_URL="postgresql://manicode_user_local:secretpassword_local@localhost:5433/manicode_db_local" echo "${apiKey}" | bun run scripts/sync-agents-from-cloud.ts`, {
+      cwd: projectRoot,
+    })
+    
+    if (result.success) {
+      console.log('✅ Agent sync completed!')
+      // Extract summary from output
+      const match = result.stdout.match(/Synced: (\d+)/)
+      if (match) {
+        console.log(`   Synced ${match[1]} agent versions from cloud`)
+      }
+    } else {
+      console.error('⚠️  Agent sync had issues:', result.stderr)
+    }
+  } catch (error) {
+    console.error('⚠️  Agent sync failed:', error)
+  }
+}
+
 // Post-agent Docker restart function
 function restartDockerIfNeeded() {
   const { requiresDockerRestart, requiresDockerRebuild } = analysisResult
@@ -597,6 +627,9 @@ async function main() {
     }
 
     console.log('\n✅ Agent completed successfully!')
+
+    // Sync agents from cloud (replaces local agent seeding)
+    await syncAgentsFromCloud()
 
     // NOW restart Docker if needed (after agent is done)
     restartDockerIfNeeded()
