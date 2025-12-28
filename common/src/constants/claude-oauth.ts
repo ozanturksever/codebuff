@@ -30,13 +30,9 @@ export const CLAUDE_CODE_SYSTEM_PROMPT_PREFIX = "You are Claude Code, Anthropic'
  * Model ID mapping from OpenRouter format to Anthropic format.
  * OpenRouter uses prefixed IDs like "anthropic/claude-sonnet-4",
  * while Anthropic uses versioned IDs like "claude-3-5-haiku-20241022".
- *
- * IMPORTANT: Claude 4.x models (Sonnet 4, Opus 4, etc.) are restricted by Anthropic
- * to only work with the official Claude Code CLI. Third-party OAuth only works with
- * Claude 3.x models (Haiku 3.5, etc.).
  */
 export const OPENROUTER_TO_ANTHROPIC_MODEL_MAP: Record<string, string> = {
-  // Claude 3.x models - WORK with third-party OAuth
+  // Claude 3.x models
   'anthropic/claude-3.5-haiku-20241022': 'claude-3-5-haiku-20241022',
   'anthropic/claude-3.5-haiku': 'claude-3-5-haiku-20241022',
   'anthropic/claude-3-5-haiku': 'claude-3-5-haiku-20241022',
@@ -47,8 +43,7 @@ export const OPENROUTER_TO_ANTHROPIC_MODEL_MAP: Record<string, string> = {
   'claude-3-haiku': 'claude-3-haiku-20240307',
   'claude-3-opus': 'claude-3-opus-20240229',
 
-  // Claude 4.x models - RESTRICTED to Claude Code only (will fail with OAuth)
-  // Keeping these mappings for future compatibility if Anthropic lifts restrictions
+  // Claude 4.x models
   'anthropic/claude-sonnet-4.5': 'claude-sonnet-4-5-20250929',
   'anthropic/claude-sonnet-4': 'claude-sonnet-4-20250514',
   'anthropic/claude-opus-4.5': 'claude-opus-4-5-20251101',
@@ -59,25 +54,6 @@ export const OPENROUTER_TO_ANTHROPIC_MODEL_MAP: Record<string, string> = {
   'claude-opus-4.5': 'claude-opus-4-5-20251101',
   'claude-opus-4.1': 'claude-opus-4-1-20250805',
   'claude-opus-4': 'claude-opus-4-1-20250805',
-}
-
-/**
- * Models that work with third-party OAuth without requiring the Claude Code system prompt prefix.
- * Claude 4.x models require the CLAUDE_CODE_SYSTEM_PROMPT_PREFIX to be prepended to the system prompt.
- */
-export const OAUTH_COMPATIBLE_MODELS = new Set([
-  'claude-3-5-haiku-20241022',
-  'claude-3-haiku-20240307',
-  'claude-3-opus-20240229',
-])
-
-/**
- * Check if a model is compatible with third-party OAuth.
- * Returns false for Claude 4.x models which are restricted to Claude Code.
- */
-export function isOAuthCompatibleModel(model: string): boolean {
-  const anthropicModelId = toAnthropicModelId(model)
-  return OAUTH_COMPATIBLE_MODELS.has(anthropicModelId)
 }
 
 /**
