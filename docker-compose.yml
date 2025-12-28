@@ -69,6 +69,14 @@ services:
       NEXT_PUBLIC_POSTHOG_API_KEY: ${NEXT_PUBLIC_POSTHOG_API_KEY:-}
       NEXT_PUBLIC_POSTHOG_HOST_URL: ${NEXT_PUBLIC_POSTHOG_HOST_URL:-https://us.i.posthog.com}
 
+      # Disable BigQuery for self-hosted (no credentials)
+      BIGQUERY_DISABLED: 'true'
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
     depends_on:
       postgres:
         condition: service_healthy
