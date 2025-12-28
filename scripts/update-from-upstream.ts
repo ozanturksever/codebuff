@@ -1,18 +1,22 @@
 #!/usr/bin/env bun
 /**
- * Upstream Update Script
+ * Upstream Update Script (Online Upgrade Safe)
  *
  * This script uses the Codebuff SDK to run an intelligent agent that:
  * 1. Checks for uncommitted local changes and commits them
  * 2. Fetches and merges updates from upstream
  * 3. Analyzes the updates for agent/prompt changes
- * 4. Updates the docker compose running copy if needed
- * 5. Generates a detailed report of all actions taken
+ * 4. Generates a report
+ *
+ * IMPORTANT: Docker restart happens AFTER the agent completes to avoid
+ * killing the connection mid-execution (since this script runs on the
+ * same instance it's updating).
  */
 
 // Load environment variables from .env files using Bun's native file API
 import { resolve } from 'path'
 import { existsSync, readFileSync } from 'fs'
+import { execSync } from 'child_process'
 
 function loadEnvFile(filePath: string) {
   if (!existsSync(filePath)) return
@@ -48,7 +52,6 @@ if (!process.env.NEXT_PUBLIC_CODEBUFF_APP_URL) {
 import { z } from 'zod/v4'
 import { CodebuffClient, getCustomToolDefinition } from '@codebuff/sdk'
 import type { AgentDefinition } from '@codebuff/sdk'
-import { execSync } from 'child_process'
 
 // Helper to run shell commands
 function runCommand(
@@ -73,6 +76,21 @@ function runCommand(
       stderr: error.stderr?.toString() || error.message,
     }
   }
+}
+
+// Global state to track what the agent found (for post-agent docker restart)
+let analysisResult: {
+  requiresDockerRestart: boolean
+  requiresDockerRebuild: boolean
+  agentChanges: string[]
+  promptChanges: string[]
+  dockerChanges: string[]
+} = {
+  requiresDockerRestart: false,
+  requiresDockerRebuild: false,
+  agentChanges: [],
+  promptChanges: [],
+  dockerChanges: [],
 }
 
 // Define custom tools for the agent
@@ -226,6 +244,19 @@ const gitMergeUpstreamTool = getCustomToolDefinition({
           },
         ]
       }
+      // "Already up to date" is not an error
+      if (mergeResult.stdout.includes('Already up to date') || mergeResult.stderr.includes('Already up to date')) {
+        return [
+          {
+            type: 'json' as const,
+            value: {
+              success: true,
+              mergedCommits: [],
+              mergeOutput: 'Already up to date',
+            },
+          },
+        ]
+      }
       return [
         {
           type: 'json' as const,
@@ -253,7 +284,7 @@ const gitMergeUpstreamTool = getCustomToolDefinition({
 const analyzeChangesTool = getCustomToolDefinition({
   toolName: 'analyze_upstream_changes',
   description:
-    'Analyze what files changed in the upstream merge to detect agent changes, prompt changes, or docker-related changes. Returns categorized lists of changed files.',
+    'Analyze what files changed in the upstream merge to detect agent changes, prompt changes, or docker-related changes. Returns categorized lists of changed files. This also flags whether Docker needs to be restarted (which will happen AFTER this script completes).',
   inputSchema: z.object({
     commitRange: z
       .string()
@@ -302,10 +333,17 @@ const analyzeChangesTool = getCustomToolDefinition({
     )
 
     const webChanges = changedFiles.filter((f) => f.startsWith('web/'))
-
     const sdkChanges = changedFiles.filter((f) => f.startsWith('sdk/'))
-
     const cliChanges = changedFiles.filter((f) => f.startsWith('cli/'))
+
+    // Store analysis for post-agent docker restart
+    analysisResult = {
+      requiresDockerRestart: agentChanges.length > 0 || promptChanges.length > 0 || webChanges.length > 0,
+      requiresDockerRebuild: dockerChanges.length > 0,
+      agentChanges,
+      promptChanges,
+      dockerChanges,
+    }
 
     return [
       {
@@ -317,17 +355,14 @@ const analyzeChangesTool = getCustomToolDefinition({
             agentChanges: {
               count: agentChanges.length,
               files: agentChanges,
-              requiresDockerRestart: agentChanges.length > 0,
             },
             promptChanges: {
               count: promptChanges.length,
               files: promptChanges,
-              requiresDockerRestart: promptChanges.length > 0,
             },
             dockerChanges: {
               count: dockerChanges.length,
               files: dockerChanges,
-              requiresDockerRebuild: dockerChanges.length > 0,
             },
             webChanges: {
               count: webChanges.length,
@@ -342,58 +377,12 @@ const analyzeChangesTool = getCustomToolDefinition({
               files: cliChanges,
             },
           },
-        },
-      },
-    ]
-  },
-})
-
-const dockerRestartTool = getCustomToolDefinition({
-  toolName: 'docker_restart_services',
-  description:
-    'Restart the docker compose services. Use "rebuild" mode if Dockerfile or docker-compose.yml changed, otherwise use "restart" mode for just restarting existing containers.',
-  inputSchema: z.object({
-    mode: z
-      .enum(['restart', 'rebuild'])
-      .describe(
-        'restart = just restart containers, rebuild = rebuild images and restart',
-      ),
-    services: z
-      .array(z.string())
-      .optional()
-      .describe(
-        'Specific services to restart. If empty, restarts all services.',
-      ),
-  }),
-  exampleInputs: [
-    { mode: 'restart' },
-    { mode: 'rebuild', services: ['web'] },
-  ],
-  execute: async ({ mode, services }) => {
-    const serviceList = services?.length ? services.join(' ') : ''
-
-    let command: string
-    if (mode === 'rebuild') {
-      command = `docker compose up -d --build ${serviceList}`.trim()
-    } else {
-      command = `docker compose restart ${serviceList}`.trim()
-    }
-
-    // Check if docker compose is running first
-    const psResult = runCommand('docker compose ps --format json 2>/dev/null || docker compose ps')
-
-    const result = runCommand(command)
-
-    return [
-      {
-        type: 'json' as const,
-        value: {
-          success: result.success,
-          mode,
-          services: services || ['all'],
-          command,
-          output: result.stdout || result.stderr,
-          wasRunning: psResult.success && psResult.stdout.length > 0,
+          // Inform agent about what will happen after it completes
+          postAgentActions: {
+            willRestartDocker: analysisResult.requiresDockerRestart || analysisResult.requiresDockerRebuild,
+            willRebuildDocker: analysisResult.requiresDockerRebuild,
+            note: 'Docker restart will happen AFTER this agent completes to avoid killing the connection.',
+          },
         },
       },
     ]
@@ -403,7 +392,7 @@ const dockerRestartTool = getCustomToolDefinition({
 const generateReportTool = getCustomToolDefinition({
   toolName: 'generate_report',
   description:
-    'Generate a final markdown report summarizing all actions taken during the upstream update process. Call this at the end with all the information gathered.',
+    'Generate a final markdown report summarizing all actions taken during the upstream update process. Call this at the end with all the information gathered. Note: Docker restart info should indicate it will happen after the agent completes.',
   inputSchema: z.object({
     localChangesCommitted: z.boolean(),
     localCommitHash: z.string().optional(),
@@ -412,8 +401,8 @@ const generateReportTool = getCustomToolDefinition({
     mergedCommitList: z.array(z.string()).optional(),
     agentChangesDetected: z.boolean(),
     promptChangesDetected: z.boolean(),
-    dockerRestarted: z.boolean(),
-    dockerRebuild: z.boolean(),
+    dockerChangesDetected: z.boolean(),
+    webChangesDetected: z.boolean(),
     errors: z.array(z.string()).optional(),
     additionalNotes: z.string().optional(),
   }),
@@ -425,12 +414,15 @@ const generateReportTool = getCustomToolDefinition({
       commitsMerged: 5,
       agentChangesDetected: true,
       promptChangesDetected: false,
-      dockerRestarted: true,
-      dockerRebuild: false,
+      dockerChangesDetected: false,
+      webChangesDetected: true,
     },
   ],
   execute: async (data) => {
     const timestamp = new Date().toISOString()
+    const willRestart = analysisResult.requiresDockerRestart || analysisResult.requiresDockerRebuild
+    const willRebuild = analysisResult.requiresDockerRebuild
+
     const report = `
 # Upstream Update Report
 Generated: ${timestamp}
@@ -440,10 +432,14 @@ ${data.localChangesCommitted ? `✅ Local changes committed (${data.localCommitH
 ${data.commitsMerged > 0 ? `✅ Merged ${data.commitsMerged} commits from upstream` : '⏭️ Already up to date with upstream'}
 ${data.agentChangesDetected ? '🔔 Agent changes detected in update' : ''}
 ${data.promptChangesDetected ? '🔔 Prompt changes detected in update' : ''}
-${data.dockerRestarted ? (data.dockerRebuild ? '🐳 Docker services rebuilt and restarted' : '🐳 Docker services restarted') : ''}
+${data.dockerChangesDetected ? '🔔 Docker configuration changes detected' : ''}
+${data.webChangesDetected ? '🔔 Web application changes detected' : ''}
 
 ## Merged Commits
 ${data.mergedCommitList?.length ? data.mergedCommitList.map((c) => `- ${c}`).join('\n') : 'No new commits merged'}
+
+## Post-Agent Actions
+${willRestart ? (willRebuild ? '🐳 Docker will be REBUILT and restarted after this report...' : '🐳 Docker will be RESTARTED after this report...') : '⏭️ No Docker restart needed'}
 
 ${data.errors?.length ? `## Errors\n${data.errors.map((e) => `- ❌ ${e}`).join('\n')}` : ''}
 
@@ -453,7 +449,7 @@ ${data.additionalNotes ? `## Notes\n${data.additionalNotes}` : ''}
 *Report generated by upstream-merger agent*
 `.trim()
 
-    // Also print to console
+    // Print to console
     console.log('\n' + '='.repeat(60))
     console.log(report)
     console.log('='.repeat(60) + '\n')
@@ -464,6 +460,8 @@ ${data.additionalNotes ? `## Notes\n${data.additionalNotes}` : ''}
         value: {
           report,
           timestamp,
+          pendingDockerRestart: willRestart,
+          pendingDockerRebuild: willRebuild,
         },
       },
     ]
@@ -482,7 +480,6 @@ const upstreamMergerAgent: AgentDefinition = {
     'git_fetch_upstream',
     'git_merge_upstream',
     'analyze_upstream_changes',
-    'docker_restart_services',
     'generate_report',
   ],
   systemPrompt: `You are an intelligent git operations agent specializing in syncing forked repositories with their upstream source.
@@ -491,8 +488,9 @@ Your job is to:
 1. Check for and handle uncommitted local changes
 2. Fetch and merge updates from upstream
 3. Analyze what changed (especially agent/prompt changes)
-4. Update docker services if needed
-5. Generate a comprehensive report
+4. Generate a comprehensive report
+
+IMPORTANT: This script runs on the same server it's updating. Docker restart happens AFTER you complete, not during your execution. Do NOT try to restart docker yourself - just report what changes were detected and the script will handle the restart after you finish.
 
 Be thorough but efficient. Always check the current state before making changes.
 If there are merge conflicts, report them clearly - don't try to resolve them automatically.`,
@@ -504,14 +502,51 @@ If there are merge conflicts, report them clearly - don't try to resolve them au
 3. Use git_fetch_upstream to fetch the latest from upstream
 4. If there are new commits, use git_merge_upstream to merge them
 5. Use analyze_upstream_changes to categorize what files changed
-6. If agent or prompt changes were detected, use docker_restart_services to restart the web service (use rebuild mode if docker files changed)
-7. Finally, use generate_report to create a summary of everything that was done
+6. Use generate_report to create a summary (Docker restart will happen automatically after you complete if needed)
 
-Handle errors gracefully and include them in the final report.`,
+Handle errors gracefully and include them in the final report.
+Do NOT attempt to restart Docker - it will be done automatically after you finish.`,
+}
+
+// Post-agent Docker restart function
+function restartDockerIfNeeded() {
+  const { requiresDockerRestart, requiresDockerRebuild } = analysisResult
+
+  if (!requiresDockerRestart && !requiresDockerRebuild) {
+    console.log('ℹ️  No Docker restart needed.')
+    return
+  }
+
+  console.log('\n🐳 Initiating Docker restart (post-agent)...')
+
+  // Check if docker compose is running
+  const psResult = runCommand('docker compose ps -q')
+  if (!psResult.success || !psResult.stdout) {
+    console.log('ℹ️  Docker compose is not running. Skipping restart.')
+    return
+  }
+
+  let command: string
+  if (requiresDockerRebuild) {
+    console.log('🔨 Rebuilding Docker images due to Dockerfile/compose changes...')
+    command = 'docker compose up -d --build'
+  } else {
+    console.log('🔄 Restarting Docker containers...')
+    command = 'docker compose up -d --force-recreate'
+  }
+
+  const result = runCommand(command)
+  if (result.success) {
+    console.log('✅ Docker restart completed successfully!')
+    console.log(result.stdout)
+  } else {
+    console.error('❌ Docker restart failed:', result.stderr)
+  }
 }
 
 async function main() {
-  console.log('🚀 Starting Upstream Update Agent...\n')
+  console.log('🚀 Starting Upstream Update Agent...')
+  console.log('   (Online upgrade safe - Docker restart happens after agent completes)\n')
 
   const apiKey = process.env.CODEBUFF_API_KEY
   if (!apiKey) {
@@ -531,7 +566,7 @@ async function main() {
     const { output } = await client.run({
       agent: 'upstream-merger',
       prompt:
-        'Update this repository from upstream. Check for local changes, commit them if needed, merge upstream, analyze what changed, and restart docker if agent/prompt changes were detected.',
+        'Update this repository from upstream. Check for local changes, commit them if needed, merge upstream, analyze what changed, and generate a report. Docker restart will happen automatically after you complete.',
       agentDefinitions: [upstreamMergerAgent],
       customToolDefinitions: [
         gitStatusTool,
@@ -539,15 +574,12 @@ async function main() {
         gitFetchUpstreamTool,
         gitMergeUpstreamTool,
         analyzeChangesTool,
-        dockerRestartTool,
         generateReportTool,
       ],
       maxAgentSteps: 15,
       handleEvent: (event) => {
         if (event.type === 'tool_call') {
           console.log(`🔧 Tool: ${event.toolName}`)
-        } else if (event.type === 'tool_result') {
-          // Don't spam output for every tool result
         } else if (event.type === 'error') {
           console.error(`❌ Error: ${event.message}`)
         } else if (event.type === 'text') {
@@ -564,7 +596,12 @@ async function main() {
       process.exit(1)
     }
 
-    console.log('\n✅ Upstream update completed successfully!')
+    console.log('\n✅ Agent completed successfully!')
+
+    // NOW restart Docker if needed (after agent is done)
+    restartDockerIfNeeded()
+
+    console.log('\n🎉 Upstream update completed!')
   } catch (error) {
     console.error('\n❌ Fatal error:', error)
     process.exit(1)
