@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: codebuff-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-manicode_user_local}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secretpassword_local}
+      POSTGRES_DB: ${POSTGRES_DB:-manicode_db_local}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - '5433:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-manicode_user_local} -d ${POSTGRES_DB:-manicode_db_local}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Codebuff Web App
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    container_name: codebuff-web
+    restart: unless-stopped
+    ports:
+      - '${PORT:-3000}:3000'
+    environment:
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-manicode_user_local}:${POSTGRES_PASSWORD:-secretpassword_local}@postgres:5432/${POSTGRES_DB:-manicode_db_local}
+
+      # Server
+      PORT: 3000
+      NODE_ENV: production
+
+      # AI API Keys (required - set at least one!)
+      OPEN_ROUTER_API_KEY: ${OPEN_ROUTER_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-dummy_openai_key}
+
+      # Authentication (optional for self-hosted)
+      CODEBUFF_GITHUB_ID: ${CODEBUFF_GITHUB_ID:-dummy_github_id}
+      CODEBUFF_GITHUB_SECRET: ${CODEBUFF_GITHUB_SECRET:-dummy_github_secret}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dummy_nextauth_secret_at_least_32_chars_long}
+
+      # Public URLs
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXT_PUBLIC_CODEBUFF_APP_URL: ${NEXT_PUBLIC_CODEBUFF_APP_URL:-http://localhost:3000}
+      NEXT_PUBLIC_CB_ENVIRONMENT: production
+      NEXT_PUBLIC_SUPPORT_EMAIL: ${NEXT_PUBLIC_SUPPORT_EMAIL:-support@localhost}
+
+      # Payment (optional - can skip for self-hosted)
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_dummy}
+      STRIPE_WEBHOOK_SECRET_KEY: ${STRIPE_WEBHOOK_SECRET_KEY:-whsec_dummy}
+      STRIPE_USAGE_PRICE_ID: ${STRIPE_USAGE_PRICE_ID:-price_dummy}
+      STRIPE_TEAM_FEE_PRICE_ID: ${STRIPE_TEAM_FEE_PRICE_ID:-price_dummy}
+
+      # Other services (optional)
+      LINKUP_API_KEY: ${LINKUP_API_KEY:-dummy_linkup_key}
+      LOOPS_API_KEY: ${LOOPS_API_KEY:-dummy_loops_key}
+      DISCORD_PUBLIC_KEY: ${DISCORD_PUBLIC_KEY:-dummy_discord_key}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-dummy_discord_token}
+      DISCORD_APPLICATION_ID: ${DISCORD_APPLICATION_ID:-dummy_discord_app_id}
+
+      # Analytics (optional)
+      NEXT_PUBLIC_POSTHOG_API_KEY: ${NEXT_PUBLIC_POSTHOG_API_KEY:-}
+      NEXT_PUBLIC_POSTHOG_HOST_URL: ${NEXT_PUBLIC_POSTHOG_HOST_URL:-https://us.i.posthog.com}
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--quiet',
+          '--tries=1',
+          '--spider',
+          'http://localhost:3000/api/healthz',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+    driver: local

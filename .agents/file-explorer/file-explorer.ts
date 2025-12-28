@@ -19,6 +19,7 @@ const paramsSchema = {
 
 const fileExplorer: SecretAgentDefinition = {
   id: AgentTemplateTypes.file_explorer,
+  version: '0.0.2',
   displayName: 'Dora the File Explorer',
   spawnerPrompt:
     'Comprehensively explores the codebase and reports back on the results',

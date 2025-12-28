@@ -14,7 +14,9 @@
     "typecheck": "tsc --noEmit -p .",
     "test": "bun test",
     "debug-log-subset": "bun run debug-log-subset.ts",
-    "typecheck-all": "bun run typecheck-all.ts"
+    "typecheck-all": "bun run typecheck-all.ts",
+    "seed-agents": "bun run seed-default-agents.ts",
+    "seed-agent-store": "bun run seed-agent-store.ts"
   },
   "sideEffects": false,
   "engines": {
@@ -24,6 +26,9 @@
     "@ai-sdk/openai-compatible": "^1.0.19",
     "@codebuff/bigquery": "workspace:*",
     "@codebuff/common": "workspace:*",
+    "@codebuff/internal": "workspace:*",
+    "@codebuff/sdk": "workspace:*",
+    "drizzle-orm": "^0.43.1",
     "lodash": "4.17.21"
   },
   "devDependencies": {
