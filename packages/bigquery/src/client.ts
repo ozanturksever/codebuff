@@ -8,7 +8,12 @@ import type { BaseTrace, GetRelevantFilesTrace, Relabel, Trace } from './schema'
 import type { MessageRow } from '@codebuff/common/types/contracts/bigquery'
 import type { Logger } from '@codebuff/common/types/contracts/logger'
 
-const DATASET = IS_PROD ? 'codebuff_data' : 'codebuff_data_dev'
+// Skip BigQuery entirely if disabled (useful for self-hosted)
+const BIGQUERY_DISABLED = process.env.BIGQUERY_DISABLED === 'true'
+
+const DATASET =
+  process.env.BIGQUERY_DATASET ||
+  (IS_PROD ? 'codebuff_data' : 'codebuff_data_dev')
 
 const TRACES_TABLE = 'traces'
 const RELABELS_TABLE = 'relabels'
@@ -33,15 +38,19 @@ export async function setupBigQuery({
   dataset?: string
   logger: Logger
 }) {
+  if (BIGQUERY_DISABLED) {
+    logger.info('BigQuery is disabled via BIGQUERY_DISABLED=true')
+    return
+  }
   if (client) {
     return
   }
   const resolvedDataset = dataset ?? DATASET
   try {
-    client = new BigQuery()
+    const newClient = new BigQuery()
 
     // Ensure dataset exists
-    const [ds] = await client
+    const [ds] = await newClient
       .dataset(resolvedDataset)
       .get({ autoCreate: true })
 
@@ -79,8 +88,11 @@ export async function setupBigQuery({
         fields: ['user_id'],
       },
     })
+
+    // Assign client only after successful initialization
+    client = newClient
   } catch (error) {
-    logger.error(
+    logger.warn(
       {
         error,
         stack: (error as Error).stack,
@@ -89,9 +101,9 @@ export async function setupBigQuery({
         code: (error as any).code,
         details: (error as any).details,
       },
-      'Failed to initialize BigQuery',
+      'Failed to initialize BigQuery. BigQuery integration will be disabled.',
     )
-    throw error // Re-throw to be caught by caller
+    // Do not re-throw, allowing the app to continue without BigQuery
   }
 }
 
@@ -104,6 +116,9 @@ export async function insertMessageBigquery({
   dataset?: string
   logger: Logger
 }) {
+  if (!client) {
+    return true
+  }
   const resolvedDataset = dataset ?? DATASET
   try {
     await getClient()
@@ -138,6 +153,9 @@ export async function insertTrace({
   dataset?: string
   logger: Logger
 }) {
+  if (!client) {
+    return true
+  }
   const resolvedDataset = dataset ?? DATASET
   try {
     // Create a copy of the trace and stringify payload if needed
@@ -178,6 +196,9 @@ export async function insertRelabel({
   dataset?: string
   logger: Logger
 }) {
+  if (!client) {
+    return true
+  }
   const resolvedDataset = dataset ?? DATASET
   try {
     // Stringify payload if needed
@@ -209,6 +230,9 @@ export async function getRecentTraces(
   limit: number = 10,
   dataset: string = DATASET,
 ) {
+  if (!client) {
+    return []
+  }
   const query = `
     SELECT * FROM ${dataset}.${TRACES_TABLE}
     ORDER BY created_at DESC
@@ -227,6 +251,9 @@ export async function getRecentRelabels(
   limit: number = 10,
   dataset: string = DATASET,
 ) {
+  if (!client) {
+    return []
+  }
   const query = `
     SELECT * FROM ${dataset}.${RELABELS_TABLE}
     ORDER BY created_at DESC
@@ -247,6 +274,9 @@ export async function getTracesWithoutRelabels(
   userId: string | undefined = undefined,
   dataset: string = DATASET,
 ) {
+  if (!client) {
+    return []
+  }
   // TODO: Optimize query, maybe only get traces in last 30 days etc
   const query = `
     SELECT t.*
@@ -281,6 +311,9 @@ export async function getTracesWithRelabels(
   limit: number = 100,
   dataset: string = DATASET,
 ) {
+  if (!client) {
+    return []
+  }
   // Get traces that DO have matching relabels for the specified model
   const query = `
   SELECT
@@ -340,6 +373,9 @@ export async function getTracesAndRelabelsForUser(
   dataset: string = DATASET,
   joinType: 'INNER' | 'LEFT' = 'LEFT',
 ) {
+  if (!client) {
+    return []
+  }
   // Get recent traces for the user and any associated relabels
   const query = `
   WITH traces AS (
@@ -416,6 +452,9 @@ export async function getTracesAndAllDataForUser(
   pageCursor?: string,
   dataset = DATASET,
 ): Promise<TraceBundle[]> {
+  if (!client) {
+    return []
+  }
   const EXTRA_TRACE_TYPES = [
     'get-expanded-file-context-for-training',
     'get-expanded-file-context-for-training-blobs',

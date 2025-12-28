@@ -9,10 +9,13 @@ This package provides integration with Google BigQuery for storing and analyzing
 
 ## Environment Configuration
 
-Dataset name determined by `NEXT_PUBLIC_CB_ENVIRONMENT`:
+The dataset name is determined by:
+1. `BIGQUERY_DATASET` environment variable (if set)
+2. `NEXT_PUBLIC_CB_ENVIRONMENT` (fallback):
+   - Production: `codebuff_data`
+   - Development/Other: `codebuff_data_dev`
 
-- Production: `codebuff_data`
-- Development: `codebuff_data_dev`
+Authentication uses Google Application Default Credentials. Set `GOOGLE_APPLICATION_CREDENTIALS` to the path of your service account key file.
 
 ## Tables
 
