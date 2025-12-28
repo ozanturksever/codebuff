@@ -1,0 +1,30 @@
+#!/bin/bash
+# Run codebuff CLI against self-hosted backend at localhost:3000
+# Can be symlinked to /usr/local/bin and run from any directory
+
+# Capture the original working directory before any cd
+ORIGINAL_CWD="$(pwd)"
+
+# Resolve the actual script location (follows symlinks)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  # If $SOURCE is relative, resolve it relative to symlink directory
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+
+export CODEBUFF_API_URL=http://localhost:3000
+export NEXT_PUBLIC_CODEBUFF_APP_URL=http://localhost:3000
+export LOG_LEVEL=debug
+export NEXT_PUBLIC_CB_ENVIRONMENT=dev
+export NEXT_PUBLIC_SUPPORT_EMAIL=support@example.com
+export NEXT_PUBLIC_POSTHOG_API_KEY=dummy
+export NEXT_PUBLIC_POSTHOG_HOST_URL=https://us.i.posthog.com
+export NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy
+export NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL=https://billing.stripe.com/p/login/dummy
+export NEXT_PUBLIC_WEB_PORT=3000
+
+cd "$SCRIPT_DIR/cli"
+exec bun run src/index.tsx --cwd "$ORIGINAL_CWD" -- "$@"
