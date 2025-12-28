@@ -10,13 +10,13 @@ RUN bun install
 
 # Build-time args for NEXT_PUBLIC_* vars (baked into JS bundle)
 ARG NEXT_PUBLIC_CB_ENVIRONMENT=prod
-ARG NEXT_PUBLIC_CODEBUFF_APP_URL=http://localhost:3000
+ARG NEXT_PUBLIC_CODEBUFF_APP_URL=http://localhost:9999
 ARG NEXT_PUBLIC_SUPPORT_EMAIL=support@example.com
 ARG NEXT_PUBLIC_POSTHOG_API_KEY=dummy_posthog_key
 ARG NEXT_PUBLIC_POSTHOG_HOST_URL=https://us.i.posthog.com
 ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy
 ARG NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL=https://billing.stripe.com/p/login/dummy
-ARG NEXT_PUBLIC_WEB_PORT=3000
+ARG NEXT_PUBLIC_WEB_PORT=9999
 
 # Set build-time env vars
 ENV NEXT_PUBLIC_CB_ENVIRONMENT=$NEXT_PUBLIC_CB_ENVIRONMENT
@@ -32,7 +32,7 @@ ENV NEXT_PUBLIC_WEB_PORT=$NEXT_PUBLIC_WEB_PORT
 ENV OPENAI_API_KEY=dummy_for_build
 ENV OPEN_ROUTER_API_KEY=dummy_for_build
 ENV LINKUP_API_KEY=dummy_for_build
-ENV PORT=3000
+ENV PORT=9999
 ENV DATABASE_URL=postgresql://user:pass@localhost:5432/db
 ENV CODEBUFF_GITHUB_ID=dummy_github_id
 ENV CODEBUFF_GITHUB_SECRET=dummy_github_secret
@@ -66,11 +66,11 @@ RUN bun install --production
 COPY --from=builder /app/web/.next web/.next
 
 # Expose port
-EXPOSE 3000
+EXPOSE 9999
 
 # Set environment
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=9999
 
 # Start app from web directory
 WORKDIR /app/web
