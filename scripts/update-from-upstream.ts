@@ -46,7 +46,7 @@ loadEnvFile(resolve(projectRoot, '.env'))
 
 // Default to localhost for self-hosted if not set
 if (!process.env.NEXT_PUBLIC_CODEBUFF_APP_URL) {
-  process.env.NEXT_PUBLIC_CODEBUFF_APP_URL = 'http://localhost:3000'
+  process.env.NEXT_PUBLIC_CODEBUFF_APP_URL = 'http://localhost:9999'
 }
 
 import { z } from 'zod/v4'

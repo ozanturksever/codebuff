@@ -61,12 +61,33 @@ CALLING_DIR="$(pwd)"
 rm -f "$ENV_LOCAL_FILE.tmp" 2>/dev/null
 
 # Function to check if .env.local cache is valid
+# Helper function to get file modification time (works with both BSD and GNU stat)
+get_mtime() {
+    local file="$1"
+    # Try GNU stat first (more common in cross-platform setups like Nix)
+    local mtime=$(stat -c "%Y" "$file" 2>/dev/null)
+    if [ -n "$mtime" ] && [ "$mtime" -eq "$mtime" ] 2>/dev/null; then
+        echo "$mtime"
+        return 0
+    fi
+    # Fall back to BSD stat (macOS default)
+    mtime=$(stat -f "%m" "$file" 2>/dev/null)
+    if [ -n "$mtime" ] && [ "$mtime" -eq "$mtime" ] 2>/dev/null; then
+        echo "$mtime"
+        return 0
+    fi
+    return 1
+}
+
 is_cache_valid() {
     if [ ! -f "$ENV_LOCAL_FILE" ]; then
         return 1
     fi
 
-    local cache_time=$(stat -f "%m" "$ENV_LOCAL_FILE" 2>/dev/null || stat -c "%Y" "$ENV_LOCAL_FILE" 2>/dev/null)
+    local cache_time=$(get_mtime "$ENV_LOCAL_FILE")
+    if [ -z "$cache_time" ]; then
+        return 1
+    fi
     local current_time=$(date +%s)
     local age=$((current_time - cache_time))
 
@@ -77,8 +98,8 @@ is_cache_valid() {
 
     # Check if .infisical.json has been modified since cache was created
     if [ -f "$PROJECT_ROOT/.infisical.json" ]; then
-        local infisical_time=$(stat -f "%m" "$PROJECT_ROOT/.infisical.json" 2>/dev/null || stat -c "%Y" "$PROJECT_ROOT/.infisical.json" 2>/dev/null)
-        if [ $infisical_time -gt $cache_time ]; then
+        local infisical_time=$(get_mtime "$PROJECT_ROOT/.infisical.json")
+        if [ -n "$infisical_time" ] && [ $infisical_time -gt $cache_time ]; then
             return 1
         fi
     fi

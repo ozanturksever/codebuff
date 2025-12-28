@@ -15,8 +15,8 @@ while [ -L "$SOURCE" ]; do
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 
-export CODEBUFF_API_URL=http://localhost:3000
-export NEXT_PUBLIC_CODEBUFF_APP_URL=http://localhost:3000
+export CODEBUFF_API_URL=http://localhost:9999
+export NEXT_PUBLIC_CODEBUFF_APP_URL=http://localhost:9999
 export LOG_LEVEL=debug
 export NEXT_PUBLIC_CB_ENVIRONMENT=dev
 export NEXT_PUBLIC_SUPPORT_EMAIL=support@example.com
@@ -24,7 +24,7 @@ export NEXT_PUBLIC_POSTHOG_API_KEY=dummy
 export NEXT_PUBLIC_POSTHOG_HOST_URL=https://us.i.posthog.com
 export NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy
 export NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL=https://billing.stripe.com/p/login/dummy
-export NEXT_PUBLIC_WEB_PORT=3000
+export NEXT_PUBLIC_WEB_PORT=9999
 
 cd "$SCRIPT_DIR/cli"
 exec bun run src/index.tsx --cwd "$ORIGINAL_CWD" -- "$@"

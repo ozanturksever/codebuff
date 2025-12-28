@@ -133,7 +133,7 @@ if [ "$SKIP_WEB" = false ]; then
     MAX_RETRIES=60
     RETRY_COUNT=0
     
-    while ! curl -s http://localhost:3000/api/healthz > /dev/null 2>&1; do
+    while ! curl -s http://localhost:9999/api/healthz > /dev/null 2>&1; do
         RETRY_COUNT=$((RETRY_COUNT + 1))
         if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
             log_warn "Web app health check timed out. Check logs with: docker compose logs web"
@@ -144,8 +144,8 @@ if [ "$SKIP_WEB" = false ]; then
     done
     echo ""
     
-    if curl -s http://localhost:3000/api/healthz > /dev/null 2>&1; then
-        log_info "Web app is ready at http://localhost:3000"
+    if curl -s http://localhost:9999/api/healthz > /dev/null 2>&1; then
+        log_info "Web app is ready at http://localhost:9999"
     fi
 fi
 
@@ -161,7 +161,7 @@ echo "  Pass: secretpassword_local"
 echo "  DB:   manicode_db_local"
 echo ""
 if [ "$SKIP_WEB" = false ]; then
-    echo "Web App: http://localhost:3000"
+    echo "Web App: http://localhost:9999"
     echo ""
 fi
 echo "Useful commands:"
