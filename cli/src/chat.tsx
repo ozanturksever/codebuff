@@ -13,6 +13,8 @@ import { useShallow } from 'zustand/react/shallow'
 import { getAdsEnabled } from './commands/ads'
 import { routeUserPrompt, addBashMessageToHistory } from './commands/router'
 import { AdBanner } from './components/ad-banner'
+import { AutoContinue, useAutoContinueSetting } from './components/auto-continue'
+import { AutoHandoff, useAutoHandoffSetting } from './components/auto-handoff'
 import { ChatInputBar } from './components/chat-input-bar'
 import { BottomStatusLine } from './components/bottom-status-line'
 import { areCreditsRestored } from './components/out-of-credits-banner'
@@ -124,7 +126,11 @@ export const Chat = ({
   // Monitor usage data and auto-show banner when thresholds are crossed
   useUsageMonitor()
 
-  // Get chat state from extracted hook
+// Auto-continue setting
+  const { autoContinue, useProjectHooks } = useAutoContinueSetting()
+
+  // Auto-handoff setting for context overflow recovery
+  const { autoHandoff } = useAutoHandoffSetting()
   const {
     inputValue,
     cursorPosition,
@@ -422,6 +428,34 @@ export const Chat = ({
   })
 
   sendMessageRef.current = sendMessage
+
+  // Listen for auto-handoff continuation events (after sendMessage is defined)
+  useEffect(() => {
+    const handleAutoHandoffContinue = (event: Event) => {
+      const customEvent = event as CustomEvent<{ prompt: string }>
+      const { prompt } = customEvent.detail
+
+      if (prompt && sendMessage) {
+        // Send the handoff prompt as a new message
+        sendMessage({
+          content: prompt,
+          agentMode,
+        })
+      }
+    }
+
+    globalThis.addEventListener(
+      'codebuff:auto-handoff-continue',
+      handleAutoHandoffContinue,
+    )
+
+    return () => {
+      globalThis.removeEventListener(
+        'codebuff:auto-handoff-continue',
+        handleAutoHandoffContinue,
+      )
+    }
+  }, [sendMessage, agentMode])
 
   const onSubmitPrompt = useEvent(
     async (
@@ -1233,6 +1267,12 @@ export const Chat = ({
         flexGrow: 1,
       }}
     >
+      {/* Headless component for auto-continue and project hooks functionality */}
+      <AutoContinue enabled={autoContinue} useProjectHooks={useProjectHooks} />
+      
+      {/* Headless component for auto-handoff on context overflow */}
+      <AutoHandoff enabled={autoHandoff} />
+
       <scrollbox
         ref={scrollRef as React.Ref<ScrollBoxRenderable>}
         stickyScroll

@@ -1,0 +1,37 @@
+#!/bin/bash
+# Run local codebuff CLI against cloud backend (codebuff.com)
+# Can be symlinked to /usr/local/bin and run from any directory
+#
+# Usage:
+#   codebuff-cloud              # Uses cloud backend with your local CLI code
+#   codebuff-cloud "prompt"     # Run with a prompt
+
+# Capture the original working directory before any cd
+ORIGINAL_CWD="$(pwd)"
+
+# Resolve the actual script location (follows symlinks)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  # If $SOURCE is relative, resolve it relative to symlink directory
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+
+echo "🌐 Running local CLI against CLOUD backend (codebuff.com)"
+
+cd "$SCRIPT_DIR/cli"
+
+# Use env command to set variables, ensuring they take precedence over .env files
+exec env \
+  NEXT_PUBLIC_CODEBUFF_APP_URL=https://www.codebuff.com \
+  NEXT_PUBLIC_CB_ENVIRONMENT=prod \
+  NEXT_PUBLIC_WEB_PORT=3000 \
+  LOG_LEVEL=debug \
+  NEXT_PUBLIC_SUPPORT_EMAIL=support@codebuff.com \
+  NEXT_PUBLIC_POSTHOG_API_KEY=dummy \
+  NEXT_PUBLIC_POSTHOG_HOST_URL=https://us.i.posthog.com \
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy \
+  NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL=https://billing.stripe.com/p/login/dummy \
+  bun run src/index.tsx --cwd "$ORIGINAL_CWD" -- "$@"

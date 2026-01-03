@@ -18,6 +18,19 @@ const DEFAULT_SETTINGS: Settings = {
 export interface Settings {
   mode?: AgentMode
   adsEnabled?: boolean
+  /** When enabled, automatically executes "Continue" followup suggestions */
+  autoContinue?: boolean
+  /** 
+   * When enabled, use project-level hooks from .codebuff/hooks.json 
+   * Default: true (project hooks take priority when available)
+   */
+  useProjectHooks?: boolean
+  /**
+   * When enabled, automatically triggers a handoff when context overflow errors occur.
+   * This creates a summary of the conversation and starts a new context to continue.
+   * Default: true
+   */
+  autoHandoff?: boolean
 }
 
 /**
@@ -88,6 +101,21 @@ const validateSettings = (parsed: unknown): Settings => {
   // Validate adsEnabled
   if (typeof obj.adsEnabled === 'boolean') {
     settings.adsEnabled = obj.adsEnabled
+  }
+
+  // Validate autoContinue
+  if (typeof obj.autoContinue === 'boolean') {
+    settings.autoContinue = obj.autoContinue
+  }
+
+  // Validate useProjectHooks
+  if (typeof obj.useProjectHooks === 'boolean') {
+    settings.useProjectHooks = obj.useProjectHooks
+  }
+
+  // Validate autoHandoff
+  if (typeof obj.autoHandoff === 'boolean') {
+    settings.autoHandoff = obj.autoHandoff
   }
 
   return settings

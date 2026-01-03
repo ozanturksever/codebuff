@@ -37,6 +37,7 @@ import type { SendMessageFn } from '../types/contracts/send-message'
 import type { AgentMode } from '../utils/constants'
 import type { SendMessageTimerEvent } from '../utils/send-message-timer'
 import type { AgentDefinition, MessageContent, RunState } from '@codebuff/sdk'
+import { useQueryClient } from '@tanstack/react-query'
 
 interface UseSendMessageOptions {
   inputRef: React.MutableRefObject<any>
@@ -114,6 +115,7 @@ export const useSendMessage = ({
 } => {
   // Pull setters directly from store - these are stable references that don't need
   // to trigger re-renders, so using getState() outside of callbacks is intentional.
+  const queryClient = useQueryClient()
   const {
     setMessages,
     setFocusedAgentId,
@@ -405,6 +407,9 @@ export const useSendMessage = ({
           saveChatState(runState, currentMessages)
           return currentMessages
         })
+        // Get current messages for context overflow handling
+        const currentMessages = useChatStore.getState().messages
+
         handleRunCompletion({
           runState,
           actualCredits,
@@ -420,6 +425,8 @@ export const useSendMessage = ({
           resumeQueue,
           isProcessingQueueRef,
           isQueuePausedRef,
+          queryClient,
+          messages: currentMessages,
         })
       } catch (error) {
         handleRunError({

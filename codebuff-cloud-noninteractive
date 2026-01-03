@@ -1,0 +1,30 @@
+#!/bin/bash
+# Non-interactive Codebuff CLI - runs a prompt against cloud and outputs only the response
+#
+# Usage:
+#   ./codebuff-cloud-noninteractive "your prompt here"
+#   ./codebuff-cloud-noninteractive --agent codebuff/base-lite "your prompt"
+#   echo "your prompt" | ./codebuff-cloud-noninteractive
+
+# Resolve the actual script location (follows symlinks)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+
+# Run with cloud environment variables set BEFORE bun loads modules
+# BUN_CONFIG_NO_DOTENV=1 prevents loading .env files
+exec env \
+  BUN_CONFIG_NO_DOTENV=1 \
+  NEXT_PUBLIC_CODEBUFF_APP_URL=https://www.codebuff.com \
+  NEXT_PUBLIC_CB_ENVIRONMENT=prod \
+  NEXT_PUBLIC_WEB_PORT=3000 \
+  NEXT_PUBLIC_SUPPORT_EMAIL=support@codebuff.com \
+  NEXT_PUBLIC_POSTHOG_API_KEY=dummy \
+  NEXT_PUBLIC_POSTHOG_HOST_URL=https://us.i.posthog.com \
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy \
+  NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL=https://billing.stripe.com/p/login/dummy \
+  bun run "$SCRIPT_DIR/scripts/noninteractive-run.ts" "$@"

@@ -113,6 +113,17 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     description: 'Publish agents to the agent store',
   },
   {
+    id: 'hooks',
+    label: 'hooks',
+    description: 'View project hooks configuration',
+  },
+  {
+    id: 'handoff',
+    label: 'handoff',
+    description: 'Summarize chat and prepare for fresh continuation',
+    aliases: ['ho'],
+  },
+  {
     id: 'logout',
     label: 'logout',
     description: 'Sign out of your session',

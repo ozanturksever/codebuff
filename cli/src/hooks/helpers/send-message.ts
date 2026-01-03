@@ -2,6 +2,8 @@ import { getProjectRoot } from '../../project-files'
 import { useChatStore } from '../../state/chat-store'
 import { processBashContext } from '../../utils/bash-context-processor'
 import {
+  createErrorMessage,
+  isContextOverflowError,
   isOutOfCreditsError,
   OUT_OF_CREDITS_MESSAGE,
 } from '../../utils/error-handling'
@@ -33,6 +35,7 @@ import type { StreamController } from '../stream-state'
 import type { StreamStatus } from '../use-message-queue'
 import type { MessageContent, RunState } from '@codebuff/sdk'
 import type { MutableRefObject, SetStateAction } from 'react'
+import type { QueryClient } from '@tanstack/react-query'
 
 /** Resets queue state after streaming completes, aborts, or errors. */
 export type FinalizeQueueStateParams = {
@@ -251,6 +254,9 @@ export const handleRunCompletion = (params: {
   resumeQueue?: () => void
   isProcessingQueueRef?: MutableRefObject<boolean>
   isQueuePausedRef?: MutableRefObject<boolean>
+  queryClient: QueryClient
+  /** Current messages for context overflow handling */
+  messages?: ChatMessage[]
 }) => {
   const {
     runState,
@@ -298,6 +304,29 @@ export const handleRunCompletion = (params: {
       updater.setError(OUT_OF_CREDITS_MESSAGE)
       useChatStore.getState().setInputMode('outOfCredits')
       invalidateActivityQuery(usageQueryKeys.current())
+      finalizeAfterError()
+      return
+    } else if (isContextOverflowError(output)) {
+      // Show user-friendly message and emit event for auto-handoff
+      updater.setError(
+        '**Context too long.** The conversation exceeded the model\'s token limit. ' +
+        'Initiating automatic handoff to continue...',
+      )
+
+      // Emit event for AutoHandoff component to handle
+      const currentMessages = params.messages ?? useChatStore.getState().messages
+      const event = new CustomEvent('codebuff:context-overflow', {
+        detail: {
+          errorMessage: output.message ?? 'Context overflow',
+          messages: currentMessages,
+        },
+      })
+      globalThis.dispatchEvent(event)
+
+      logger.info(
+        { messageCount: currentMessages.length },
+        'Context overflow detected, emitting handoff event',
+      )
       finalizeAfterError()
       return
     }
