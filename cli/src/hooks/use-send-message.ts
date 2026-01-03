@@ -391,6 +391,9 @@ export const useSendMessage = ({
           saveChatState(runState, currentMessages)
           return currentMessages
         })
+        // Get current messages for context overflow handling
+        const currentMessages = useChatStore.getState().messages
+
         handleRunCompletion({
           runState,
           actualCredits,
@@ -405,6 +408,7 @@ export const useSendMessage = ({
           setHasReceivedPlanResponse,
           resumeQueue,
           queryClient,
+          messages: currentMessages,
         })
       } catch (error) {
         handleRunError({

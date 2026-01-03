@@ -1,6 +1,11 @@
 #!/bin/bash
-# Run codebuff CLI against self-hosted backend at localhost:3000
+# Run codebuff CLI against self-hosted backend or cloud
 # Can be symlinked to /usr/local/bin and run from any directory
+#
+# Usage:
+#   codebuff-local              # Uses local backend (localhost:9999)
+#   codebuff-local --cloud      # Uses cloud backend (codebuff.com)
+#   CODEBUFF_USE_CLOUD=1 codebuff-local  # Uses cloud backend via env var
 
 # Capture the original working directory before any cd
 ORIGINAL_CWD="$(pwd)"
@@ -15,16 +20,45 @@ while [ -L "$SOURCE" ]; do
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 
-export CODEBUFF_API_URL=http://localhost:9999
-export NEXT_PUBLIC_CODEBUFF_APP_URL=http://localhost:9999
-export LOG_LEVEL=debug
-export NEXT_PUBLIC_CB_ENVIRONMENT=dev
-export NEXT_PUBLIC_SUPPORT_EMAIL=support@example.com
-export NEXT_PUBLIC_POSTHOG_API_KEY=dummy
-export NEXT_PUBLIC_POSTHOG_HOST_URL=https://us.i.posthog.com
-export NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy
-export NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL=https://billing.stripe.com/p/login/dummy
-export NEXT_PUBLIC_WEB_PORT=9999
+# Check for --cloud flag
+USE_CLOUD="${CODEBUFF_USE_CLOUD:-}"
+ARGS=()
+for arg in "$@"; do
+  if [ "$arg" = "--cloud" ]; then
+    USE_CLOUD=1
+  else
+    ARGS+=("$arg")
+  fi
+done
+
+# Common environment variables
+COMMON_ENV=(
+  "LOG_LEVEL=debug"
+  "NEXT_PUBLIC_SUPPORT_EMAIL=support@example.com"
+  "NEXT_PUBLIC_POSTHOG_API_KEY=dummy"
+  "NEXT_PUBLIC_POSTHOG_HOST_URL=https://us.i.posthog.com"
+  "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy"
+  "NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL=https://billing.stripe.com/p/login/dummy"
+)
+
+if [ -n "$USE_CLOUD" ]; then
+  # Cloud mode: use codebuff.com
+  echo "🌐 Running in CLOUD mode (codebuff.com)"
+  MODE_ENV=(
+    "NEXT_PUBLIC_CODEBUFF_APP_URL=https://codebuff.com"
+    "NEXT_PUBLIC_CB_ENVIRONMENT=prod"
+    "NEXT_PUBLIC_WEB_PORT=3000"
+  )
+else
+  # Local mode: use localhost
+  echo "🏠 Running in LOCAL mode (localhost:9999)"
+  MODE_ENV=(
+    "NEXT_PUBLIC_CODEBUFF_APP_URL=http://localhost:9999"
+    "NEXT_PUBLIC_CB_ENVIRONMENT=dev"
+    "NEXT_PUBLIC_WEB_PORT=9999"
+  )
+fi
 
 cd "$SCRIPT_DIR/cli"
-exec bun run src/index.tsx --cwd "$ORIGINAL_CWD" -- "$@"
+# Use env command to ensure our variables take precedence over .env files
+exec env "${COMMON_ENV[@]}" "${MODE_ENV[@]}" bun run src/index.tsx --cwd "$ORIGINAL_CWD" -- "${ARGS[@]}"

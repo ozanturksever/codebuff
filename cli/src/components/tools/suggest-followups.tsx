@@ -1,16 +1,115 @@
 import { TextAttributes } from '@opentui/core'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { defineToolComponent } from './types'
 import { useTheme } from '../../hooks/use-theme'
-import { getLatestFollowupToolCallId, useChatStore } from '../../state/chat-store'
+import {
+  getLatestFollowupToolCallId,
+  useChatStore,
+} from '../../state/chat-store'
 import { Button } from '../button'
 
 import type { ToolRenderConfig } from './types'
+import type { ChatMessage } from '../../types/chat'
 import type { SuggestedFollowup } from '../../state/chat-store'
+import type { FollowupHookContext, TodoItem, FileChange } from '../../utils/project-hooks'
 import { useTerminalDimensions } from '../../hooks/use-terminal-dimensions'
 
 const EMPTY_CLICKED_SET = new Set<number>()
+
+/**
+ * Extract todos from the chat messages by finding the most recent write_todos tool result.
+ */
+function extractTodosFromMessages(messages: ChatMessage[]): TodoItem[] {
+  // Look through messages in reverse to find the most recent todos
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (!msg?.blocks) continue
+
+    for (const block of msg.blocks) {
+      if (
+        block.type === 'tool' &&
+        block.toolName === 'write_todos' &&
+        block.input?.todos
+      ) {
+        return block.input.todos as TodoItem[]
+      }
+    }
+  }
+  return []
+}
+
+/**
+ * Extract recent file changes from chat messages by looking at write_file and str_replace tool results.
+ */
+function extractFileChangesFromMessages(messages: ChatMessage[]): FileChange[] {
+  const changes: FileChange[] = []
+  const seenPaths = new Set<string>()
+
+  // Look through recent messages (last 20) for file operations
+  const recentMessages = messages.slice(-20)
+
+  for (const msg of recentMessages) {
+    if (!msg?.blocks) continue
+
+    for (const block of msg.blocks) {
+      if (block.type !== 'tool') continue
+
+      // Check for write_file or str_replace tool results
+      if (
+        block.toolName === 'write_file' ||
+        block.toolName === 'str_replace'
+      ) {
+        const result = block.outputRaw
+        if (typeof result === 'object' && result !== null) {
+          const resultObj = result as { file?: string; path?: string; message?: string }
+          const filePath = resultObj.file || resultObj.path
+          if (filePath && !seenPaths.has(filePath)) {
+            seenPaths.add(filePath)
+
+            // Determine change type from message
+            const message = (resultObj.message ?? '').toLowerCase()
+            let type: FileChange['type'] = 'modified'
+            if (
+              message.includes('created') ||
+              message.includes('new file')
+            ) {
+              type = 'created'
+            } else if (message.includes('deleted')) {
+              type = 'deleted'
+            }
+
+            changes.push({ path: filePath, type })
+          }
+        }
+      }
+    }
+  }
+
+  return changes
+}
+
+/**
+ * Extract the last assistant message content as a summary.
+ */
+function extractLastAssistantMessage(
+  messages: ChatMessage[],
+): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg?.variant !== 'ai') continue
+
+    if (!msg.blocks) continue
+
+    for (const block of msg.blocks) {
+      if (block.type === 'text' && block.content) {
+        // Return first 500 chars as summary
+        return block.content.slice(0, 500)
+      }
+    }
+  }
+  return undefined
+}
 const MIN_LABEL_COLUMN_WIDTH = 12
 const MAX_LABEL_COLUMN_WIDTH = 60
 /** Minimum terminal width to show the prompt description on hover */
@@ -236,6 +335,22 @@ const SuggestFollowupsItem = ({
 
   const isActive = latestFollowupToolCallId === toolCallId
 
+  const processFollowupsWithHooks = useChatStore(
+    (state) => state.processFollowupsWithHooks,
+  )
+  const followupHooks = useChatStore((state) => state.followupHooks)
+  const messages = useChatStore((state) => state.messages)
+
+  // Extract context from messages
+  const context: FollowupHookContext = useMemo(
+    () => ({
+      todos: extractTodosFromMessages(messages),
+      recentFileChanges: extractFileChangesFromMessages(messages),
+      lastAssistantMessage: extractLastAssistantMessage(messages),
+    }),
+    [messages],
+  )
+
   useEffect(() => {
     if (!isActive) return
 
@@ -256,17 +371,25 @@ const SuggestFollowupsItem = ({
 
     if (hasSameFollowups && hasSameClicks) return
 
-    // Track the currently active followups set so we can persist clicked state and avoid races
-    setSuggestedFollowups({
-      toolCallId,
-      followups,
-      clickedIndices: new Set(clickedIndices),
-    })
+    // If there are hooks registered, process through them
+    if (followupHooks.length > 0) {
+      void processFollowupsWithHooks(followups, toolCallId, context)
+    } else {
+      // No hooks, set directly
+      setSuggestedFollowups({
+        toolCallId,
+        followups,
+        clickedIndices: new Set(clickedIndices),
+      })
+    }
   }, [
     clickedIndices,
+    context,
     currentSuggestedFollowups,
     followups,
+    followupHooks.length,
     isActive,
+    processFollowupsWithHooks,
     setSuggestedFollowups,
     toolCallId,
   ])

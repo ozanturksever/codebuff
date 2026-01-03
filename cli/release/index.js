@@ -398,6 +398,11 @@ async function ensureBinaryExists() {
 }
 
 async function checkForUpdates(runningProcess, exitListener) {
+  // Allow disabling auto-updates via environment variable
+  if (process.env.CODEBUFF_DISABLE_AUTO_UPDATE === '1') {
+    return
+  }
+
   try {
     const currentVersion = getCurrentVersion()
 

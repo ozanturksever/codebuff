@@ -32,6 +32,7 @@ import type { StreamStatus } from '../hooks/use-message-queue'
 import type { ContentBlock, ToolContentBlock } from '../types/chat'
 import type { Logger } from '@codebuff/common/types/contracts/logger'
 import type {
+  PrintModeError,
   PrintModeEvent as SDKEvent,
   PrintModeFinish,
   PrintModeSubagentFinish,
@@ -418,6 +419,16 @@ const handleFinish = (state: EventHandlerState, event: PrintModeFinish) => {
   }
 }
 
+const handleError = (state: EventHandlerState, event: PrintModeError) => {
+  // Log the error for debugging - the main error display is handled by handleRunCompletion
+  // but this ensures errors are visible if they arrive via the event stream before completion
+  state.logger.error({ message: event.message }, 'Received error event from agent')
+
+  // Display the error to the user immediately
+  state.message.updater.setError(`**Error:** ${event.message}`)
+  state.streaming.setStreamStatus('idle')
+}
+
 export const createStreamChunkHandler =
   (state: EventHandlerState) => (event: StreamChunkEvent) => {
     const destination = destinationFromChunkEvent(event)
@@ -461,5 +472,6 @@ export const createEventHandler =
       .with({ type: 'tool_call' }, (e) => handleToolCall(state, e))
       .with({ type: 'tool_result' }, (e) => handleToolResult(state, e))
       .with({ type: 'finish' }, (e) => handleFinish(state, e))
+      .with({ type: 'error' }, (e) => handleError(state, e))
       .otherwise(() => undefined)
   }

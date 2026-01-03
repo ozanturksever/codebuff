@@ -10,6 +10,7 @@ import type { ChatMessage, ContentBlock } from '../types/chat'
 import type { AgentMode } from '../utils/constants'
 import type { InputMode } from '../utils/input-modes'
 import type { RunState } from '@codebuff/sdk'
+import type { FollowupHookContext } from '../utils/project-hooks'
 
 /** Types of banners that can appear at the top of the chat */
 export type TopBannerType = 'homeDir' | 'gitRoot' | null
@@ -82,6 +83,29 @@ export type SuggestedFollowup = {
   label?: string
 }
 
+/**
+ * Result returned by a followup hook.
+ * - `followups`: The transformed followups to display (can filter, modify, or add)
+ * - `autoExecute`: If set, the followup at this index will be auto-executed
+ */
+export type FollowupHookResult = {
+  followups: SuggestedFollowup[]
+  autoExecuteIndex?: number
+}
+
+/**
+ * A hook function that intercepts followups before they're displayed.
+ * Receives the original followups, toolCallId, and context about completed work.
+ * Can optionally specify an index to auto-execute.
+ * 
+ * Hooks can be async to support external command execution (e.g., project hooks).
+ */
+export type FollowupHook = (
+  followups: SuggestedFollowup[],
+  toolCallId: string,
+  context: FollowupHookContext,
+) => FollowupHookResult | Promise<FollowupHookResult>
+
 export type SuggestedFollowupsState = {
   /** The tool call ID that created these followups */
   toolCallId: string
@@ -122,6 +146,8 @@ export type ChatStoreState = {
   suggestedFollowups: SuggestedFollowupsState | null
   /** Persisted clicked indices per toolCallId */
   clickedFollowupsMap: ClickedFollowupsMap
+  /** Registered followup hooks that intercept and transform followups */
+  followupHooks: FollowupHook[]
 }
 
 const findLatestFollowupInBlocks = (
@@ -199,6 +225,13 @@ type ChatStoreActions = {
   clearPendingBashMessages: () => void
   setSuggestedFollowups: (state: SuggestedFollowupsState | null) => void
   markFollowupClicked: (toolCallId: string, index: number) => void
+  registerFollowupHook: (hook: FollowupHook) => void
+  unregisterFollowupHook: (hook: FollowupHook) => void
+  processFollowupsWithHooks: (
+    followups: SuggestedFollowup[],
+    toolCallId: string,
+    context: FollowupHookContext,
+  ) => Promise<void>
   reset: () => void
 }
 
@@ -230,6 +263,7 @@ const initialState: ChatStoreState = {
   pendingBashMessages: [],
   suggestedFollowups: null,
   clickedFollowupsMap: new Map<string, Set<number>>(),
+  followupHooks: [],
 }
 
 export const useChatStore = create<ChatStore>()(
@@ -450,6 +484,71 @@ export const useChatStore = create<ChatStore>()(
         state.suggestedFollowups = suggestedFollowups
       }),
 
+    registerFollowupHook: (hook) =>
+      set((state) => {
+        if (!state.followupHooks.includes(hook)) {
+          state.followupHooks.push(hook)
+        }
+      }),
+
+    unregisterFollowupHook: (hook) =>
+      set((state) => {
+        state.followupHooks = state.followupHooks.filter((h) => h !== hook)
+      }),
+
+    processFollowupsWithHooks: async (followups, toolCallId, context) => {
+      const { followupHooks } = useChatStore.getState()
+
+      let processedFollowups = followups
+      let autoExecuteIndex: number | undefined
+
+      // Run through all registered hooks
+      for (const hook of followupHooks) {
+        try {
+          const result = await hook(processedFollowups, toolCallId, context)
+          processedFollowups = result.followups
+          // Last hook to set autoExecuteIndex wins
+          if (result.autoExecuteIndex !== undefined) {
+            autoExecuteIndex = result.autoExecuteIndex
+          }
+        } catch (error) {
+          // Log but don't fail on hook errors
+          console.error('Followup hook error:', error)
+        }
+      }
+
+      // If a hook requested auto-execute and the index is valid
+      if (
+        autoExecuteIndex !== undefined &&
+        autoExecuteIndex >= 0 &&
+        autoExecuteIndex < processedFollowups.length
+      ) {
+        const followupToExecute = processedFollowups[autoExecuteIndex]
+        if (followupToExecute) {
+          // Dispatch the auto-execute event
+          const event = new CustomEvent('codebuff:send-followup', {
+            detail: {
+              prompt: followupToExecute.prompt,
+              index: autoExecuteIndex,
+              toolCallId,
+            },
+          })
+          globalThis.dispatchEvent(event)
+          // Don't set suggested followups since we're auto-executing
+          return
+        }
+      }
+
+      // Set the processed followups in state
+      useChatStore.setState((state) => {
+        state.suggestedFollowups = {
+          toolCallId,
+          followups: processedFollowups,
+          clickedIndices: new Set(),
+        }
+      })
+    },
+
     markFollowupClicked: (toolCallId: string, index: number) =>
       set((state) => {
         // Store in the persistent map
@@ -493,6 +592,7 @@ export const useChatStore = create<ChatStore>()(
         state.pendingBashMessages = []
         state.suggestedFollowups = null
         state.clickedFollowupsMap = new Map<string, Set<number>>()
+        state.followupHooks = []
       }),
   })),
 )

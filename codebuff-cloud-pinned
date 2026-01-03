@@ -1,0 +1,102 @@
+#!/bin/bash
+# Run a specific git version of Codebuff CLI against cloud backend
+# Creates a temporary checkout of the specified version and runs from source
+#
+# Usage:
+#   codebuff-cloud-pinned --version 1.0.556    # Checkout and run v1.0.556
+#   codebuff-cloud-pinned -v 1.0.556           # Short form
+#   CODEBUFF_VERSION=1.0.556 codebuff-cloud-pinned  # Via env var
+#   codebuff-cloud-pinned --version 1.0.556 "your prompt"
+
+set -e
+
+# Resolve script location (follows symlinks)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+
+# Get the git remote URL from the current repo
+REPO_URL="$(cd "$SCRIPT_DIR" && git remote get-url origin)"
+
+# Parse arguments
+VERSION="${CODEBUFF_VERSION:-}"
+ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --version|-v)
+      VERSION="$2"
+      shift 2
+      ;;
+    *)
+      ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+# Version is required
+if [ -z "$VERSION" ]; then
+  echo "❌ Error: Version is required"
+  echo ""
+  echo "Usage:"
+  echo "  codebuff-cloud-pinned --version 1.0.556"
+  echo "  codebuff-cloud-pinned -v 1.0.556"
+  echo "  CODEBUFF_VERSION=1.0.556 codebuff-cloud-pinned"
+  exit 1
+fi
+
+# Capture the original working directory
+ORIGINAL_CWD="$(pwd)"
+
+# Create a cache directory for checkouts (reuse across runs)
+CACHE_DIR="$HOME/.cache/codebuff-pinned"
+CHECKOUT_DIR="$CACHE_DIR/v$VERSION"
+
+# Check if we already have this version cached
+if [ -d "$CHECKOUT_DIR" ] && [ -f "$CHECKOUT_DIR/.codebuff-version-ok" ]; then
+  echo "🔖 Using cached checkout of v$VERSION"
+else
+  echo "🔖 Checking out codebuff v$VERSION..."
+  
+  # Clean up any partial checkout
+  rm -rf "$CHECKOUT_DIR"
+  mkdir -p "$CACHE_DIR"
+  
+  # Clone with specific tag (shallow clone for speed)
+  if ! git clone --depth 1 --branch "v$VERSION" "$REPO_URL" "$CHECKOUT_DIR" 2>/dev/null; then
+    echo "❌ Error: Failed to checkout v$VERSION"
+    echo "   Make sure the version exists (git tag -l 'v$VERSION')"
+    rm -rf "$CHECKOUT_DIR"
+    exit 1
+  fi
+  
+  echo "📦 Installing dependencies..."
+  cd "$CHECKOUT_DIR"
+  bun install --frozen-lockfile
+  
+  # Mark this checkout as ready
+  touch "$CHECKOUT_DIR/.codebuff-version-ok"
+fi
+
+echo "🌐 Running codebuff v$VERSION against CLOUD backend (codebuff.com)"
+
+cd "$CHECKOUT_DIR/cli"
+
+# Run with cloud environment variables
+exec env \
+  CODEBUFF_DISABLE_AUTO_UPDATE=1 \
+  NEXT_PUBLIC_CODEBUFF_APP_URL=https://www.codebuff.com \
+  NEXT_PUBLIC_CB_ENVIRONMENT=prod \
+  NEXT_PUBLIC_WEB_PORT=3000 \
+  LOG_LEVEL=debug \
+  NEXT_PUBLIC_SUPPORT_EMAIL=support@codebuff.com \
+  NEXT_PUBLIC_POSTHOG_API_KEY=dummy \
+  NEXT_PUBLIC_POSTHOG_HOST_URL=https://us.i.posthog.com \
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy \
+  NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL=https://billing.stripe.com/p/login/dummy \
+  bun run src/index.tsx --cwd "$ORIGINAL_CWD" -- "${ARGS[@]}"

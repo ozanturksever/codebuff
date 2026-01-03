@@ -12,7 +12,19 @@ import type { AgentMode } from './constants'
  */
 export interface Settings {
   mode?: AgentMode
-  // Add new settings here over time
+  /** When enabled, automatically executes "Continue" followup suggestions */
+  autoContinue?: boolean
+  /** 
+   * When enabled, use project-level hooks from .codebuff/hooks.json 
+   * Default: true (project hooks take priority when available)
+   */
+  useProjectHooks?: boolean
+  /**
+   * When enabled, automatically triggers a handoff when context overflow errors occur.
+   * This creates a summary of the conversation and starts a new context to continue.
+   * Default: true
+   */
+  autoHandoff?: boolean
 }
 
 /**
@@ -67,7 +79,20 @@ const validateSettings = (parsed: unknown): Settings => {
     settings.mode = obj.mode as AgentMode
   }
 
-  // Add validation for new settings here
+  // Validate autoContinue
+  if (typeof obj.autoContinue === 'boolean') {
+    settings.autoContinue = obj.autoContinue
+  }
+
+  // Validate useProjectHooks
+  if (typeof obj.useProjectHooks === 'boolean') {
+    settings.useProjectHooks = obj.useProjectHooks
+  }
+
+  // Validate autoHandoff
+  if (typeof obj.autoHandoff === 'boolean') {
+    settings.autoHandoff = obj.autoHandoff
+  }
 
   return settings
 }

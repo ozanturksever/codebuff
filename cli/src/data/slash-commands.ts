@@ -93,5 +93,16 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     label: 'publish',
     description: 'Publish agents to the agent store',
   },
+  {
+    id: 'hooks',
+    label: 'hooks',
+    description: 'View project hooks configuration',
+  },
+  {
+    id: 'handoff',
+    label: 'handoff',
+    description: 'Summarize chat and prepare for fresh continuation',
+    aliases: ['ho'],
+  },
   ...MODE_COMMANDS,
 ]

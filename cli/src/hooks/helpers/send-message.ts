@@ -4,6 +4,7 @@ import { processBashContext } from '../../utils/bash-context-processor'
 import {
   createErrorMessage,
   createPaymentErrorMessage,
+  isContextOverflowError,
   isOutOfCreditsError,
   isPaymentRequiredError,
 } from '../../utils/error-handling'
@@ -177,6 +178,8 @@ export const handleRunCompletion = (params: {
   setHasReceivedPlanResponse: (value: boolean) => void
   resumeQueue?: () => void
   queryClient: QueryClient
+  /** Current messages for context overflow handling */
+  messages?: ChatMessage[]
 }) => {
   const {
     runState,
@@ -225,6 +228,27 @@ export const handleRunCompletion = (params: {
           queryKey: usageQueryKeys.current(),
         })
       }
+    } else if (isContextOverflowError(output)) {
+      // Show user-friendly message and emit event for auto-handoff
+      updater.setError(
+        '**Context too long.** The conversation exceeded the model\'s token limit. ' +
+        'Initiating automatic handoff to continue...',
+      )
+
+      // Emit event for AutoHandoff component to handle
+      const currentMessages = params.messages ?? useChatStore.getState().messages
+      const event = new CustomEvent('codebuff:context-overflow', {
+        detail: {
+          errorMessage: output.message ?? 'Context overflow',
+          messages: currentMessages,
+        },
+      })
+      globalThis.dispatchEvent(event)
+
+      logger.info(
+        { messageCount: currentMessages.length },
+        'Context overflow detected, emitting handoff event',
+      )
     } else {
       const partial = createErrorMessage(
         output.message ?? 'No output from agent run',

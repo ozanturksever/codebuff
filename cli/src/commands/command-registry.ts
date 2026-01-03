@@ -1,4 +1,6 @@
+import { handleHandoffCommand } from './handoff'
 import { handleHelpCommand } from './help'
+import { handleHooksCommand, handleHooksInitCommand } from './hooks'
 import { handleImageCommand } from './image'
 import { handleInitializationFlowLocally } from './init'
 import { handleReferralCode } from './referral'
@@ -421,6 +423,63 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
 
       // Otherwise open selection UI
       return { openPublishMode: true }
+    },
+  }),
+  defineCommandWithArgs({
+    name: 'hooks',
+    handler: (params, args) => {
+      const trimmedArgs = args.trim().toLowerCase()
+
+      let postUserMessage
+      if (trimmedArgs === 'init') {
+        ;({ postUserMessage } = handleHooksInitCommand())
+      } else {
+        ;({ postUserMessage } = handleHooksCommand())
+      }
+
+      params.setMessages((prev) => postUserMessage(prev))
+      params.saveToHistory(params.inputValue.trim())
+      clearInput(params)
+    },
+  }),
+  defineCommand({
+    name: 'handoff',
+    aliases: ['ho'],
+    handler: async (params) => {
+      // Show initial message
+      const loadingMessage: ChatMessage = {
+        id: `handoff-${Date.now()}`,
+        variant: 'ai',
+        content: '⏳ Generating handoff summary...',
+        timestamp: new Date().toISOString(),
+        blocks: [
+          {
+            type: 'text',
+            content: '⏳ Generating handoff summary...',
+          },
+        ],
+      }
+      params.setMessages((prev) => [...prev, loadingMessage])
+
+      params.saveToHistory(params.inputValue.trim())
+      clearInput(params)
+
+      // Run the handoff
+      const { postUserMessage, summary } = await handleHandoffCommand({
+        clearMessages: params.clearMessages,
+      })
+
+      if (!summary) {
+        // Something went wrong, show the error message
+        params.setMessages((prev) => {
+          // Remove the "generating" message and add error
+          const filtered = prev.filter(
+            (m) => !m.content.includes('Generating handoff summary'),
+          )
+          return postUserMessage(filtered)
+        })
+      }
+      // If summary exists, handoff was successful and chat was already cleared
     },
   }),
 ]

@@ -9,6 +9,7 @@ const CODEBUFF_ADMIN_USER_EMAILS = [
   'brandonchenjiacheng@gmail.com',
   'jahooma@gmail.com',
   'charleslien97@gmail.com',
+  'ozan.turksever@gmail.com',
 ]
 
 /**

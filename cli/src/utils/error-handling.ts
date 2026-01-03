@@ -6,7 +6,7 @@ import type { ChatMessage } from '../types/chat'
 const defaultAppUrl = env.NEXT_PUBLIC_CODEBUFF_APP_URL || 'https://codebuff.com'
 
 // Normalize unknown errors to a user-facing string.
-const extractErrorMessage = (error: unknown, fallback: string): string => {
+export const extractErrorMessage = (error: unknown, fallback: string): string => {
   if (typeof error === 'string') {
     return error
   }
@@ -66,6 +66,21 @@ export const createErrorMessage = (
     blocks: undefined,
     isComplete: true,
   }
+}
+
+/**
+ * Detect context overflow errors (prompt too long, context length exceeded, etc.)
+ * These occur when the conversation history + system prompt exceeds the model's token limit.
+ */
+export const isContextOverflowError = (error: unknown): boolean => {
+  const message = extractErrorMessage(error, '').toLowerCase()
+  return (
+    message.includes('prompt is too long') ||
+    (message.includes('tokens') && message.includes('maximum')) ||
+    message.includes('context length exceeded') ||
+    message.includes('input is too long') ||
+    message.includes('too many tokens')
+  )
 }
 
 // Re-export for convenience in helpers
