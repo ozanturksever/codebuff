@@ -44,6 +44,15 @@ export const printModeToolResultSchema = z.object({
 })
 export type PrintModeToolResult = z.infer<typeof printModeToolResultSchema>
 
+export const printModeToolProgressSchema = z.object({
+  type: z.literal('tool_progress'),
+  toolCallId: z.string(),
+  toolName: z.string(),
+  output: z.string(),
+  parentAgentId: z.string().optional(),
+})
+export type PrintModeToolProgress = z.infer<typeof printModeToolProgressSchema>
+
 export const printModeTextSchema = z.object({
   type: z.literal('text'),
   text: z.string(),
@@ -105,6 +114,7 @@ export const printModeEventSchema = z.discriminatedUnion('type', [
   printModeSubagentStartSchema,
   printModeTextSchema,
   printModeToolCallSchema,
+  printModeToolProgressSchema,
   printModeToolResultSchema,
 
   printModeReasoningDeltaSchema,

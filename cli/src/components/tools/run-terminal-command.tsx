@@ -49,7 +49,7 @@ export const parseTerminalOutput = (rawOutput: string | undefined): ParsedTermin
 export const RunTerminalCommandComponent = defineToolComponent({
   toolName: 'run_terminal_command',
 
-  render(toolBlock): ToolRenderConfig {
+  render(toolBlock, _theme, options): ToolRenderConfig {
     // Extract command from input
     const command =
       toolBlock.input && typeof (toolBlock.input as any).command === 'string'
@@ -59,14 +59,18 @@ export const RunTerminalCommandComponent = defineToolComponent({
     // Extract output and startingCwd from tool result
     const { output, startingCwd } = parseTerminalOutput(toolBlock.output)
 
+    const isRunning = options?.isStreaming ?? false
+
     // Custom content component using shared TerminalCommandDisplay
+    // Show 6 lines when running to see streaming output
     const content = (
       <TerminalCommandDisplay
         command={command}
         output={output}
         expandable={true}
-        maxVisibleLines={5}
+        maxVisibleLines={isRunning ? 6 : 5}
         cwd={startingCwd}
+        isRunning={isRunning}
       />
     )
 

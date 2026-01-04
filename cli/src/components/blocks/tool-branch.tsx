@@ -71,6 +71,7 @@ export const ToolBranch = memo(
       indentationOffset: 0,
       previewPrefix: '',
       labelWidth: 0,
+      isStreaming,
     })
 
     const streamingPreview = isStreaming
