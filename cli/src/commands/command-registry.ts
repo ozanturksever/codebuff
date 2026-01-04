@@ -461,45 +461,26 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
       clearInput(params)
     },
   }),
-  defineCommand({
+  defineCommandWithArgs({
     name: 'handoff',
-    description: 'Generate a summary of the current session and start fresh',
     aliases: ['ho'],
-    handler: async (params) => {
-      // Show initial message
-      const loadingMessage: ChatMessage = {
-        id: `handoff-${Date.now()}`,
-        variant: 'ai',
-        content: '⏳ Generating handoff summary...',
-        timestamp: new Date().toISOString(),
-        blocks: [
-          {
-            type: 'text',
-            content: '⏳ Generating handoff summary...',
-          },
-        ],
-      }
-      params.setMessages((prev) => [...prev, loadingMessage])
+    handler: (params, args) => {
+      const trimmedArgs = args.trim()
 
       params.saveToHistory(params.inputValue.trim())
       clearInput(params)
 
-      // Run the handoff
-      const { postUserMessage, summary } = await handleHandoffCommand({
+      // Generate handoff prompt (optionally combined with user's prompt)
+      const { postUserMessage, handoffPrompt } = handleHandoffCommand({
         clearMessages: params.clearMessages,
+        userPrompt: trimmedArgs || undefined,
       })
 
-      if (!summary) {
+      if (!handoffPrompt) {
         // Something went wrong, show the error message
-        params.setMessages((prev) => {
-          // Remove the "generating" message and add error
-          const filtered = prev.filter(
-            (m) => !m.content.includes('Generating handoff summary'),
-          )
-          return postUserMessage(filtered)
-        })
+        params.setMessages((prev) => postUserMessage(prev))
       }
-      // If summary exists, handoff was successful and chat was already cleared
+      // If handoffPrompt exists, handoff was successful and input was set
     },
   }),
 ]
