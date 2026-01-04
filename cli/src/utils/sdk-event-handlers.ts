@@ -15,6 +15,7 @@ import {
   nestBlockUnderParent,
   transformAskUserBlocks,
   updateToolBlockWithOutput,
+  updateToolBlockWithPartialOutput,
 } from './message-block-helpers'
 import {
   findMatchingSpawnAgent,
@@ -39,6 +40,7 @@ import type {
   PrintModeSubagentStart,
   PrintModeText,
   PrintModeToolCall,
+  PrintModeToolProgress,
   PrintModeToolResult,
 } from '@codebuff/common/types/print-mode'
 import type { ToolName } from '@codebuff/sdk'
@@ -429,6 +431,18 @@ const handleError = (state: EventHandlerState, event: PrintModeError) => {
   state.streaming.setStreamStatus('idle')
 }
 
+const handleToolProgress = (
+  state: EventHandlerState,
+  event: PrintModeToolProgress,
+) => {
+  state.message.updater.updateAiMessageBlocks((blocks) =>
+    updateToolBlockWithPartialOutput(blocks, {
+      toolCallId: event.toolCallId,
+      partialOutput: event.output,
+    }),
+  )
+}
+
 export const createStreamChunkHandler =
   (state: EventHandlerState) => (event: StreamChunkEvent) => {
     const destination = destinationFromChunkEvent(event)
@@ -470,6 +484,7 @@ export const createEventHandler =
       .with({ type: 'subagent_start' }, (e) => handleSubagentStart(state, e))
       .with({ type: 'subagent_finish' }, (e) => handleSubagentFinish(state, e))
       .with({ type: 'tool_call' }, (e) => handleToolCall(state, e))
+      .with({ type: 'tool_progress' }, (e) => handleToolProgress(state, e))
       .with({ type: 'tool_result' }, (e) => handleToolResult(state, e))
       .with({ type: 'finish' }, (e) => handleFinish(state, e))
       .with({ type: 'error' }, (e) => handleError(state, e))

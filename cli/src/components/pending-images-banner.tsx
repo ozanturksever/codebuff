@@ -32,8 +32,13 @@ export const PendingImagesBanner = () => {
 
   // If we only have errors (no valid images), show just the error messages
   if (validImages.length === 0 && errorImages.length > 0) {
+    const handleCloseErrors = () => {
+      for (const img of errorImages) {
+        removePendingImage(img.path)
+      }
+    }
     return (
-      <BottomBanner borderColorKey="error">
+      <BottomBanner borderColorKey="error" onClose={handleCloseErrors}>
         {errorImages.map((image, index) => (
           <text key={`${image.path}-${index}`} style={{ fg: theme.error }}>
             {image.note} ({image.filename})

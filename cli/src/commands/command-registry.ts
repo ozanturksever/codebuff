@@ -463,6 +463,7 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
   }),
   defineCommand({
     name: 'handoff',
+    description: 'Generate a summary of the current session and start fresh',
     aliases: ['ho'],
     handler: async (params) => {
       // Show initial message

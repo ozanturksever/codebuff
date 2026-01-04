@@ -10,6 +10,8 @@ export type ToolRenderOptions = {
   indentationOffset: number
   previewPrefix?: string
   labelWidth: number
+  /** Whether the tool is currently streaming/running */
+  isStreaming?: boolean
 }
 
 export type ToolRenderConfig = {

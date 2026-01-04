@@ -34,4 +34,5 @@ exec env \
   NEXT_PUBLIC_POSTHOG_HOST_URL=https://us.i.posthog.com \
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy \
   NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL=https://billing.stripe.com/p/login/dummy \
-  bun run src/index.tsx --cwd "$ORIGINAL_CWD" -- "$@"
+  bun run src/index.tsx --cwd "$ORIGINAL_CWD" "$@"
+

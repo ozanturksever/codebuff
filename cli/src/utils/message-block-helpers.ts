@@ -544,3 +544,37 @@ export const updateToolBlockWithOutput = (
     return block
   })
 }
+
+/**
+ * Options for updating tool blocks with partial/streaming output.
+ */
+export interface UpdateToolBlockPartialOutputOptions {
+  toolCallId: string
+  partialOutput: string
+}
+
+/**
+ * Updates tool blocks with partial output during streaming.
+ * Appends new output to existing output for incremental display.
+ * Recursively processes nested agent blocks.
+ */
+export const updateToolBlockWithPartialOutput = (
+  blocks: ContentBlock[],
+  options: UpdateToolBlockPartialOutputOptions,
+): ContentBlock[] => {
+  const { toolCallId, partialOutput } = options
+
+  return blocks.map((block) => {
+    if (block.type === 'tool' && block.toolCallId === toolCallId) {
+      const currentOutput = block.output || ''
+      return { ...block, output: currentOutput + partialOutput }
+    } else if (block.type === 'agent' && block.blocks) {
+      const updatedBlocks = updateToolBlockWithPartialOutput(block.blocks, options)
+      if (isEqual(block.blocks, updatedBlocks)) {
+        return block
+      }
+      return { ...block, blocks: updatedBlocks }
+    }
+    return block
+  })
+}
