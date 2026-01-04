@@ -31,7 +31,7 @@ import type { ParamsExcluding } from '@codebuff/common/types/function-params'
 let agentRuntimeImpl: AgentRuntimeDeps & AgentRuntimeScopedDeps
 let runAgentStepBaseParams: ParamsExcluding<
   typeof runAgentStep,
-  'localAgentTemplates' | 'agentState' | 'prompt'
+  'localAgentTemplates' | 'agentState' | 'prompt' | 'agentTemplate'
 >
 import type { StreamChunk } from '@codebuff/common/types/contracts/llm'
 
@@ -78,8 +78,6 @@ describe('web_search tool with researcher agent (via web API facade)', () => {
     }
 
     // Mock analytics and tracing
-    spyOn(analytics, 'initAnalytics').mockImplementation(() => {})
-    analytics.initAnalytics(runAgentStepBaseParams)
     spyOn(analytics, 'trackEvent').mockImplementation(() => {})
     spyOn(bigquery, 'insertTrace').mockImplementation(() =>
       Promise.resolve(true),
@@ -131,6 +129,7 @@ describe('web_search tool with researcher agent (via web API facade)', () => {
     await runAgentStep({
       ...runAgentStepBaseParams,
       localAgentTemplates: agentTemplates,
+      agentTemplate: agentTemplates['researcher'],
       agentState,
       prompt: 'Search for test',
     })
@@ -165,6 +164,7 @@ describe('web_search tool with researcher agent (via web API facade)', () => {
     const { agentState: newAgentState } = await runAgentStep({
       ...runAgentStepBaseParams,
       localAgentTemplates: agentTemplates,
+      agentTemplate: agentTemplates['researcher'],
       agentState,
       prompt: 'Search for Next.js 15 new features',
     })
@@ -204,6 +204,7 @@ describe('web_search tool with researcher agent (via web API facade)', () => {
     await runAgentStep({
       ...runAgentStepBaseParams,
       localAgentTemplates: agentTemplates,
+      agentTemplate: agentTemplates['researcher'],
       agentState,
       prompt: 'Search deep',
     })
@@ -235,6 +236,7 @@ describe('web_search tool with researcher agent (via web API facade)', () => {
     const { agentState: newAgentState } = await runAgentStep({
       ...runAgentStepBaseParams,
       localAgentTemplates: agentTemplates,
+      agentTemplate: agentTemplates['researcher'],
       agentState,
       prompt: 'Search nothing',
     })
@@ -271,6 +273,7 @@ describe('web_search tool with researcher agent (via web API facade)', () => {
     const { agentState: newAgentState } = await runAgentStep({
       ...runAgentStepBaseParams,
       localAgentTemplates: agentTemplates,
+      agentTemplate: agentTemplates['researcher'],
       agentState,
       prompt: 'Search for something',
     })
@@ -307,6 +310,7 @@ describe('web_search tool with researcher agent (via web API facade)', () => {
     const { agentState: newAgentState } = await runAgentStep({
       ...runAgentStepBaseParams,
       localAgentTemplates: agentTemplates,
+      agentTemplate: agentTemplates['researcher'],
       agentState,
       prompt: 'Search for something',
     })
@@ -344,6 +348,7 @@ describe('web_search tool with researcher agent (via web API facade)', () => {
     const { agentState: newAgentState } = await runAgentStep({
       ...runAgentStepBaseParams,
       localAgentTemplates: agentTemplates,
+      agentTemplate: agentTemplates['researcher'],
       agentState,
       prompt: 'Test search result formatting',
     })
@@ -385,6 +390,7 @@ describe('web_search tool with researcher agent (via web API facade)', () => {
     const { agentState: newAgentState } = await runAgentStep({
       ...runAgentStepBaseParams,
       localAgentTemplates: agentTemplates,
+      agentTemplate: agentTemplates['researcher'],
       agentState,
       prompt: 'Search for test',
     })

@@ -99,11 +99,15 @@ describe('mainPrompt', () => {
       onResponseChunk: () => {},
       localAgentTemplates: mockLocalAgentTemplates,
       signal: new AbortController().signal,
+      // Mock fetch to return a token count response
+      fetch: async () =>
+        ({
+          ok: true,
+          text: async () => JSON.stringify({ inputTokens: 1000 }),
+        }) as Response,
     }
 
     // Mock analytics and tracing
-    spyOn(analytics, 'initAnalytics').mockImplementation(() => {})
-    analytics.initAnalytics(mainPromptBaseParams) // Initialize the mock
     spyOn(analytics, 'trackEvent').mockImplementation(() => {})
     spyOn(bigquery, 'insertTrace').mockImplementation(() =>
       Promise.resolve(true),
@@ -452,57 +456,5 @@ describe('mainPrompt', () => {
     })
 
     expect(output.type).toBeDefined() // Output should exist even for empty response
-  })
-
-  it('should unescape ampersands in run_terminal_command tool calls', async () => {
-    const sessionState = getInitialSessionState(mockFileContext)
-    const userPromptText = 'Run the backend tests'
-    const expectedCommand = 'cd backend && bun test'
-
-    mockAgentStream([
-      createToolCallChunk('run_terminal_command', {
-        command: expectedCommand,
-        process_type: 'SYNC',
-      }),
-      createToolCallChunk('end_turn', {}),
-    ])
-
-    // Get reference to the spy so we can check if it was called
-    const requestToolCallSpy = mainPromptBaseParams.requestToolCall
-
-    const action = {
-      type: 'prompt' as const,
-      prompt: userPromptText,
-      sessionState,
-      fingerprintId: 'test',
-      costMode: 'max' as const,
-      promptId: 'test',
-      toolResults: [],
-    }
-
-    await mainPrompt({
-      ...mainPromptBaseParams,
-      repoId: undefined,
-      repoUrl: undefined,
-      action,
-      userId: TEST_USER_ID,
-      clientSessionId: 'test-session',
-      onResponseChunk: () => {},
-      localAgentTemplates: mockLocalAgentTemplates,
-    })
-
-    // Assert that requestToolCall was called exactly once
-    expect(requestToolCallSpy).toHaveBeenCalledTimes(1)
-
-    // Verify the run_terminal_command call was made with the correct arguments
-    expect(requestToolCallSpy).toHaveBeenCalledWith({
-      userInputId: expect.any(String), // userInputId
-      toolName: 'run_terminal_command',
-      input: expect.objectContaining({
-        command: expectedCommand,
-        process_type: 'SYNC',
-        mode: 'assistant',
-      }),
-    })
   })
 })

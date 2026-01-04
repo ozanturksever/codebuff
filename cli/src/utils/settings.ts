@@ -25,6 +25,7 @@ export interface Settings {
    * Default: true
    */
   autoHandoff?: boolean
+  adsEnabled?: boolean
 }
 
 /**
@@ -92,6 +93,11 @@ const validateSettings = (parsed: unknown): Settings => {
   // Validate autoHandoff
   if (typeof obj.autoHandoff === 'boolean') {
     settings.autoHandoff = obj.autoHandoff
+  }
+
+  // Validate adsEnabled
+  if (typeof obj.adsEnabled === 'boolean') {
+    settings.adsEnabled = obj.adsEnabled
   }
 
   return settings
