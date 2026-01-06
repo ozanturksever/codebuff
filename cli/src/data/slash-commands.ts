@@ -66,7 +66,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'usage',
     label: 'usage',
-    description: 'View remaining or bonus credits',
+    description: 'View credits and subscription quota',
     aliases: ['credits'],
   },
   {
@@ -113,6 +113,12 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     label: 'handoff',
     description: 'Summarize chat and prepare for fresh continuation',
     aliases: ['ho'],
+  },
+  {
+    id: 'connect:claude',
+    label: 'connect:claude',
+    description: 'Connect your Claude Pro/Max subscription',
+    aliases: ['claude'],
   },
   ...MODE_COMMANDS,
 ]

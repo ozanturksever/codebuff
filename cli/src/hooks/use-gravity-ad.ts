@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { getAdsEnabled } from '../commands/ads'
 import { useChatStore } from '../state/chat-store'
+import { subscribeToActivity } from '../utils/activity-tracker'
 import { getAuthToken } from '../utils/auth'
 import { logger } from '../utils/logger'
 
@@ -23,7 +24,6 @@ export type AdResponse = {
 export type GravityAdState = {
   ad: AdResponse | null
   isLoading: boolean
-  reportActivity: () => void
 }
 
 /**
@@ -34,6 +34,8 @@ export type GravityAdState = {
  * - Ads rotate every 60 seconds
  * - After 3 ads without user activity, rotation stops
  * - Any user activity resets the counter and resumes rotation
+ * 
+ * Activity is tracked via the global activity-tracker module.
  */
 export const useGravityAd = (): GravityAdState => {
   const [ad, setAd] = useState<AdResponse | null>(null)
@@ -122,18 +124,24 @@ export const useGravityAd = (): GravityAdState => {
     // Also check UI messages for the latest user message
     // (UI messages update immediately, runState.messageHistory updates after LLM responds)
     const uiMessages = useChatStore.getState().messages
-    const latestUserMessage = [...uiMessages]
+    const lastUIMessage = [...uiMessages]
       .reverse()
       .find((msg) => msg.variant === 'user')
 
     // If the latest UI user message isn't in our converted history, append it
     // This ensures we always include the most recent user message even before LLM responds
-    if (latestUserMessage?.content) {
+    if (lastUIMessage?.content) {
       const lastAdUserMessage = [...adMessages]
         .reverse()
         .find((m) => m.role === 'user')
-      if (lastAdUserMessage?.content !== latestUserMessage.content) {
-        adMessages.push({ role: 'user', content: latestUserMessage.content })
+      if (
+        !lastAdUserMessage ||
+        !lastAdUserMessage.content.includes(lastUIMessage.content)
+      ) {
+        adMessages.push({
+          role: 'user',
+          content: `<user_message>${lastUIMessage.content}</user_message>`,
+        })
       }
     }
 
@@ -203,8 +211,8 @@ export const useGravityAd = (): GravityAdState => {
     }, AD_ROTATION_INTERVAL_MS)
   }, [clearTimer, fetchAd])
 
-  // Report user activity - resets counter and resumes rotation if paused
-  const reportActivity = useCallback(() => {
+  // Handle activity from the global activity tracker
+  const handleActivity = useCallback(() => {
     const wasPaused = isPausedRef.current
     adsShownRef.current = 0
 
@@ -214,6 +222,14 @@ export const useGravityAd = (): GravityAdState => {
       scheduleRotation()
     }
   }, [scheduleRotation])
+
+  // Subscribe to global activity tracker
+  useEffect(() => {
+    if (!getAdsEnabled()) return
+    
+    const unsubscribe = subscribeToActivity(handleActivity)
+    return unsubscribe
+  }, [handleActivity])
 
   // Subscribe to UI messages to detect first user message
   // We use UI messages (not runState.messageHistory) because UI messages
@@ -266,7 +282,7 @@ export const useGravityAd = (): GravityAdState => {
     return () => clearTimer()
   }, [clearTimer])
 
-  return { ad: isActive ? ad : null, isLoading, reportActivity }
+  return { ad: isActive ? ad : null, isLoading }
 }
 
 type AdMessage = { role: 'user' | 'assistant'; content: string }
@@ -280,7 +296,10 @@ const convertToAdMessages = (messages: Message[]): AdMessage[] => {
     .filter(
       (message) => message.role === 'assistant' || message.role === 'user',
     )
-    .filter((message) => !message.tags?.includes('USER_PROMPT'))
+    .filter(
+      (message) =>
+        !message.tags || !message.tags.includes('INSTRUCTIONS_PROMPT'),
+    )
     .map((message) => ({
       role: message.role,
       content: message.content

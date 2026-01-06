@@ -483,6 +483,16 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
       // If handoffPrompt exists, handoff was successful and input was set
     },
   }),
+  defineCommand({
+    name: 'connect:claude',
+    aliases: ['claude'],
+    handler: (params) => {
+      // Enter connect:claude mode to show the OAuth banner
+      useChatStore.getState().setInputMode('connect:claude')
+      params.saveToHistory(params.inputValue.trim())
+      clearInput(params)
+    },
+  }),
 ]
 
 export function findCommand(cmd: string): CommandDefinition | undefined {

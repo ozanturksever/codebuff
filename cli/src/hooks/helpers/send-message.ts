@@ -7,6 +7,7 @@ import {
   isOutOfCreditsError,
   OUT_OF_CREDITS_MESSAGE,
 } from '../../utils/error-handling'
+import { invalidateActivityQuery } from '../use-activity-query'
 import { usageQueryKeys } from '../use-usage-query'
 import { formatElapsedTime } from '../../utils/format-elapsed-time'
 import { processImagesForMessage } from '../../utils/image-processor'
@@ -27,7 +28,6 @@ import type { SendMessageTimerController } from '../../utils/send-message-timer'
 import type { StreamController } from '../stream-state'
 import type { StreamStatus } from '../use-message-queue'
 import type { MessageContent, RunState } from '@codebuff/sdk'
-import type { QueryClient } from '@tanstack/react-query'
 import type { MutableRefObject, SetStateAction } from 'react'
 import { getErrorObject } from '@codebuff/common/util/error'
 
@@ -176,9 +176,6 @@ export const handleRunCompletion = (params: {
   updateChainInProgress: (value: boolean) => void
   setHasReceivedPlanResponse: (value: boolean) => void
   resumeQueue?: () => void
-  queryClient: QueryClient
-  /** Current messages for context overflow handling */
-  messages?: ChatMessage[]
 }) => {
   const {
     runState,
@@ -193,7 +190,6 @@ export const handleRunCompletion = (params: {
     updateChainInProgress,
     setHasReceivedPlanResponse,
     resumeQueue,
-    queryClient,
   } = params
 
   const output = runState.output
@@ -220,7 +216,7 @@ export const handleRunCompletion = (params: {
     if (isOutOfCreditsError(output)) {
       updater.setError(OUT_OF_CREDITS_MESSAGE)
       useChatStore.getState().setInputMode('outOfCredits')
-      queryClient.invalidateQueries({ queryKey: usageQueryKeys.current() })
+      invalidateActivityQuery(usageQueryKeys.current())
       finalizeAfterError()
       return
     }
@@ -258,7 +254,7 @@ export const handleRunCompletion = (params: {
     return
   }
 
-  queryClient.invalidateQueries({ queryKey: usageQueryKeys.current() })
+  invalidateActivityQuery(usageQueryKeys.current())
 
   setStreamStatus('idle')
   if (resumeQueue) {
@@ -297,7 +293,6 @@ export const handleRunError = (params: {
   setStreamStatus: (status: StreamStatus) => void
   setCanProcessQueue: (can: boolean) => void
   updateChainInProgress: (value: boolean) => void
-  queryClient: QueryClient
 }) => {
   const {
     error,
@@ -308,7 +303,6 @@ export const handleRunError = (params: {
     setStreamStatus,
     setCanProcessQueue,
     updateChainInProgress,
-    queryClient,
   } = params
 
   const partial = createErrorMessage(error, aiMessageId)
@@ -326,7 +320,7 @@ export const handleRunError = (params: {
   if (isOutOfCreditsError(error)) {
     updater.setError(OUT_OF_CREDITS_MESSAGE)
     useChatStore.getState().setInputMode('outOfCredits')
-    queryClient.invalidateQueries({ queryKey: usageQueryKeys.current() })
+    invalidateActivityQuery(usageQueryKeys.current())
     return
   }
 

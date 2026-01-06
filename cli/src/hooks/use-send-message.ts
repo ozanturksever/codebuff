@@ -1,4 +1,3 @@
-import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef } from 'react'
 
 import { setCurrentChatId } from '../project-files'
@@ -116,7 +115,6 @@ export const useSendMessage = ({
   sendMessage: SendMessageFn
   clearMessages: () => void
 } => {
-  const queryClient = useQueryClient()
   // Pull setters directly from store - these are stable references that don't need
   // to trigger re-renders, so using getState() outside of callbacks is intentional.
   const {
@@ -405,8 +403,6 @@ export const useSendMessage = ({
           updateChainInProgress,
           setHasReceivedPlanResponse,
           resumeQueue,
-          queryClient,
-          messages: currentMessages,
         })
       } catch (error) {
         handleRunError({
@@ -418,7 +414,6 @@ export const useSendMessage = ({
           setStreamStatus,
           setCanProcessQueue,
           updateChainInProgress,
-          queryClient,
         })
       } finally {
         // Ensure the batched updater's flush interval is always cleaned up,
@@ -437,7 +432,6 @@ export const useSendMessage = ({
       onBeforeMessageSend,
       onTimerEvent,
       prepareUserMessage,
-      queryClient,
       removeActiveSubagent,
       resumeQueue,
       scrollToLatest,
