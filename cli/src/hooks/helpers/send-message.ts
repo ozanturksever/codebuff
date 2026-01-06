@@ -229,7 +229,7 @@ export const handleRunCompletion = (params: {
       )
 
       // Emit event for AutoHandoff component to handle
-      const currentMessages = params.messages ?? useChatStore.getState().messages
+      const currentMessages = useChatStore.getState().messages
       const event = new CustomEvent('codebuff:context-overflow', {
         detail: {
           errorMessage: output.message ?? 'Context overflow',
