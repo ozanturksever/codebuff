@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 
 import { ScrollToBottomButton } from './scroll-to-bottom-button'
 import { ShimmerText } from './shimmer-text'
+import { StatusDot } from './status-dot'
 import { useTheme } from '../hooks/use-theme'
 import { formatElapsedTime } from '../utils/format-elapsed-time'
 
@@ -101,6 +102,10 @@ export const StatusBar = ({
     }
   }
 
+  const renderStatusDot = () => {
+    return <StatusDot state={statusIndicatorState.kind} />
+  }
+
   const renderElapsedTime = () => {
     if (!shouldShowTimer || elapsedSeconds === 0) {
       return null
@@ -112,8 +117,8 @@ export const StatusBar = ({
   const statusIndicatorContent = renderStatusIndicator()
   const elapsedTimeContent = renderElapsedTime()
 
-  // Only show gray background when there's status indicator or timer
-  const hasContent = statusIndicatorContent || elapsedTimeContent
+  // Only show gray background when there's status indicator or timer (not just the dot)
+  const hasTextContent = statusIndicatorContent || elapsedTimeContent
 
   return (
     <box
@@ -124,9 +129,13 @@ export const StatusBar = ({
         paddingLeft: 1,
         paddingRight: 1,
         gap: 1,
-        backgroundColor: hasContent ? theme.surface : 'transparent',
+        backgroundColor: hasTextContent ? theme.surface : 'transparent',
       }}
     >
+      <box style={{ flexShrink: 0 }}>
+        {renderStatusDot()}
+      </box>
+
       <box
         style={{
           flexGrow: 1,

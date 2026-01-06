@@ -1395,7 +1395,6 @@ export const Chat = ({
     isRetrying,
     isAskUserActive: askUserState !== null,
   })
-  const hasStatusIndicatorContent = statusIndicatorState.kind !== 'idle'
   const inputBoxTitle = useMemo(() => {
     const segments: string[] = []
 
@@ -1412,9 +1411,8 @@ export const Chat = ({
     return ` ${segments.join('   ')} `
   }, [queuePreviewTitle, pausedQueueText])
 
-  const shouldShowStatusLine =
-    !feedbackMode &&
-    (hasStatusIndicatorContent || shouldShowQueuePreview || !isAtBottom)
+  // Always show status line so the status dot is visible (user can tell if system is working)
+  const shouldShowStatusLine = !feedbackMode
 
   // Track mouse movement for ad activity (throttled)
   const lastMouseActivityRef = useRef<number>(0)
