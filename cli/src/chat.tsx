@@ -1240,9 +1240,8 @@ export const Chat = ({
     return ` ${segments.join('   ')} `
   }, [queuePreviewTitle, pausedQueueText])
 
-  const shouldShowStatusLine =
-    !feedbackMode &&
-    (hasStatusIndicatorContent || shouldShowQueuePreview || !isAtBottom)
+  // Always show status line so the status dot is visible (user can tell if system is working)
+  const shouldShowStatusLine = !feedbackMode
 
   // Determine if Claude is actively streaming/waiting
   const isClaudeActive = isStreaming || isWaitingForResponse
