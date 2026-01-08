@@ -56,6 +56,7 @@ import { useUsageMonitor } from './hooks/use-usage-monitor'
 import { WEBSITE_URL } from './login/constants'
 import { getProjectRoot } from './project-files'
 import { useChatStore } from './state/chat-store'
+import { useChatHistoryStore } from './state/chat-history-store'
 import { useFeedbackStore } from './state/feedback-store'
 import { usePublishStore } from './state/publish-store'
 import {
@@ -902,6 +903,10 @@ export const Chat = ({
         } else {
           openPublishMode()
         }
+      }
+
+      if (result.openChatHistory) {
+        useChatHistoryStore.getState().openChatHistory()
       }
     },
     [
