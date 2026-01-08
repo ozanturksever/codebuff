@@ -6,6 +6,8 @@ import { handleHelpCommand } from './help'
 import { handleHooksCommand, handleHooksInitCommand } from './hooks'
 import { handleImageCommand } from './image'
 import { handleInitializationFlowLocally } from './init'
+import { handleRalphCommand } from './ralph'
+import { useRalphStore } from '../state/ralph-store'
 import { handleReferralCode } from './referral'
 import { runBashCommand } from './router'
 import { normalizeReferralCode } from './router-utils'
@@ -512,6 +514,45 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
       params.saveToHistory(params.inputValue.trim())
       clearInput(params)
       return { openChatHistory: true }
+    },
+  }),
+  defineCommandWithArgs({
+    name: 'ralph',
+    handler: (params, args) => {
+      const result = handleRalphCommand(args)
+
+      // If there's a prompt to send (new PRD creation, run story, edit)
+      if (result.prompt) {
+        params.saveToHistory(params.inputValue.trim())
+        clearInput(params)
+
+        // If running a story, start a Ralph session for auto-continue
+        if (result.prdName && result.storyId) {
+          useRalphStore.getState().startSession(result.prdName, result.storyId)
+        } else {
+          // Clear any existing session for other commands (new, edit)
+          useRalphStore.getState().clearSession()
+        }
+
+        // Clear messages for fresh context, then send the prompt
+        params.setMessages(() => [])
+        params.clearMessages()
+        params.setCanProcessQueue(true)
+        params.sendMessage({
+          content: result.prompt,
+          agentMode: params.agentMode,
+          postUserMessage: result.postUserMessage,
+        })
+        setTimeout(() => {
+          params.scrollToLatest()
+        }, 0)
+        return
+      }
+
+      // Otherwise just show the message (list, status, delete, help)
+      params.setMessages((prev) => result.postUserMessage(prev))
+      params.saveToHistory(params.inputValue.trim())
+      clearInput(params)
     },
   }),
 ]

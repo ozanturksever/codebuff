@@ -16,6 +16,7 @@ import { routeUserPrompt, addBashMessageToHistory } from './commands/router'
 import { AdBanner } from './components/ad-banner'
 import { AutoContinue, useAutoContinueSetting } from './components/auto-continue'
 import { AutoHandoff, useAutoHandoffSetting } from './components/auto-handoff'
+import { RalphAutoContinue } from './components/ralph-auto-continue'
 import { ChatInputBar } from './components/chat-input-bar'
 import { BottomStatusLine } from './components/bottom-status-line'
 import { areCreditsRestored } from './components/out-of-credits-banner'
@@ -1454,6 +1455,9 @@ export const Chat = ({
       
       {/* Headless component for auto-handoff on context overflow */}
       <AutoHandoff enabled={autoHandoff} />
+      
+      {/* Headless component for Ralph PRD auto-continue between stories */}
+      <RalphAutoContinue />
 
       <scrollbox
         ref={scrollRef}

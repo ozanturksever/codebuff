@@ -127,4 +127,9 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     description: 'Quit the CLI',
     aliases: ['quit', 'q'],
   },
+  {
+    id: 'ralph',
+    label: 'ralph',
+    description: 'PRD-driven autonomous development',
+  },
 ]
