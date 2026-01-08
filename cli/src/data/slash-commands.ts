@@ -137,6 +137,11 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     aliases: ['quit', 'q'],
     implicitCommand: true,
   },
+  {
+    id: 'ralph',
+    label: 'ralph',
+    description: 'PRD-driven autonomous development',
+  },
 ]
 
 export const SLASHLESS_COMMAND_IDS = new Set(
