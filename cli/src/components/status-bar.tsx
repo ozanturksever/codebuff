@@ -4,6 +4,7 @@ import { ScrollToBottomButton } from './scroll-to-bottom-button'
 import { ShimmerText } from './shimmer-text'
 import { StatusDot } from './status-dot'
 import { useTheme } from '../hooks/use-theme'
+import { useRalphStore } from '../state/ralph-store'
 import { formatElapsedTime } from '../utils/format-elapsed-time'
 
 import type { StatusIndicatorState } from '../utils/status-indicator-state'
@@ -26,6 +27,7 @@ export const StatusBar = ({
 }: StatusBarProps) => {
   const theme = useTheme()
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const { activePrdName, activeStoryId } = useRalphStore()
 
   // Show timer only when actively working (streaming or waiting for response)
   // This uses statusIndicatorState as the single source of truth for "is the LLM working?"
@@ -114,11 +116,32 @@ export const StatusBar = ({
     return <span fg={theme.secondary}>{formatElapsedTime(elapsedSeconds)}</span>
   }
 
+  const renderRalphIndicator = () => {
+    if (!activePrdName) {
+      return null
+    }
+
+    const storyLabel = activeStoryId ? ` → ${activeStoryId}` : ''
+    return (
+      <box
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 1,
+        }}
+      >
+        <span fg={theme.primary}>[Ralph]</span>
+        <span fg={theme.secondary}>{activePrdName}{storyLabel}</span>
+      </box>
+    )
+  }
+
   const statusIndicatorContent = renderStatusIndicator()
   const elapsedTimeContent = renderElapsedTime()
+  const ralphIndicator = renderRalphIndicator()
 
   // Only show gray background when there's status indicator or timer (not just the dot)
-  const hasTextContent = statusIndicatorContent || elapsedTimeContent
+  const hasTextContent = statusIndicatorContent || elapsedTimeContent || ralphIndicator
 
   return (
     <box
@@ -135,6 +158,18 @@ export const StatusBar = ({
       <box style={{ flexShrink: 0 }}>
         {renderStatusDot()}
       </box>
+
+      {ralphIndicator && (
+        <box style={{ flexShrink: 0 }}>
+          {ralphIndicator}
+        </box>
+      )}
+
+      {ralphIndicator && statusIndicatorContent && (
+        <box style={{ flexShrink: 0 }}>
+          <span fg={theme.secondary}>│</span>
+        </box>
+      )}
 
       <box
         style={{
