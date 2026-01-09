@@ -81,6 +81,7 @@ export function createBase2(
       isDefault && 'code-reviewer',
       isMax && 'code-reviewer-multi-prompt',
       'context-pruner',
+      'ralph',
     ),
 
     systemPrompt: `You are Buffy, a strategic assistant that orchestrates complex coding tasks through specialized sub-agents. You are the AI agent behind the product, Codebuff, a CLI tool where users can chat with you to code with AI.
