@@ -136,21 +136,23 @@ Examples:
       agent,
       prompt,
       handleStreamChunk: (chunk) => {
-        // Handle streaming text chunks for real-time output
+        // Collect chunks silently (quiet mode by default)
         if (typeof chunk === 'string') {
           responseText += chunk
-          process.stdout.write(chunk)
         }
       },
     })
     
-    // Ensure we end with a newline
-    if (responseText && !responseText.endsWith('\n')) {
-      console.log()
+    // Output final result at the end
+    if (responseText) {
+      process.stdout.write(responseText)
+      if (!responseText.endsWith('\n')) {
+        console.log()
+      }
     }
     
     if (output.type === 'error') {
-      console.error(`\nError: ${output.message}`)
+      console.error(`Error: ${output.message}`)
       process.exit(1)
     }
   } catch (error) {

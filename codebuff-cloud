@@ -19,9 +19,27 @@ while [ -L "$SOURCE" ]; do
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 
-echo "🌐 Running local CLI against CLOUD backend (codebuff.com)"
+# Check if running in non-interactive mode
+NON_INTERACTIVE=false
+for arg in "$@"; do
+  if [[ "$arg" == "-n" || "$arg" == "--non-interactive" ]]; then
+    NON_INTERACTIVE=true
+    break
+  fi
+done
+
+# Only print banner in interactive mode
+if [[ "$NON_INTERACTIVE" == false ]]; then
+  echo "🌐 Running local CLI against CLOUD backend (codebuff.com)"
+fi
 
 cd "$SCRIPT_DIR/cli"
+
+# Add quiet flag in non-interactive mode
+QUIET_FLAG=""
+if [[ "$NON_INTERACTIVE" == true ]]; then
+  QUIET_FLAG="-q"
+fi
 
 # Use env command to set variables, ensuring they take precedence over .env files
 exec env \
@@ -34,5 +52,5 @@ exec env \
   NEXT_PUBLIC_POSTHOG_HOST_URL=https://us.i.posthog.com \
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy \
   NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL=https://billing.stripe.com/p/login/dummy \
-  bun run src/index.tsx --cwd "$ORIGINAL_CWD" "$@"
+  bun run src/index.tsx --cwd "$ORIGINAL_CWD" $QUIET_FLAG "$@"
 
