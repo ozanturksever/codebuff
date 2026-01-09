@@ -92,9 +92,12 @@ export function RalphAutoContinue(): null {
         label: `Next: ${runResult.storyId}`,
       }
 
-      // Return without autoExecuteIndex so user must click to continue
+      // Auto-execute to continue to the next story
+      // This is safe because /ralph run updates the session before starting,
+      // so each story is processed one at a time sequentially
       return {
         followups: modifiedFollowups,
+        autoExecuteIndex: continueIndex,
       }
     },
     [activePrdName, activeStoryId, autoContinueEnabled, clearSession],

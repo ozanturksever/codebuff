@@ -518,8 +518,34 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
   }),
   defineCommandWithArgs({
     name: 'ralph',
-    handler: (params, args) => {
+    handler: async (params, args) => {
       const result = handleRalphCommand(args)
+
+      // Handle async commands (parallel, merge, cleanup, orchestra)
+      if (result.asyncHandler) {
+        console.log('[Ralph Command] asyncHandler detected, about to execute...')
+        params.saveToHistory(params.inputValue.trim())
+        clearInput(params)
+        
+        // Show the initial "starting..." message
+        params.setMessages((prev) => result.postUserMessage(prev))
+        
+        // Run the async handler and update with results
+        try {
+          console.log('[Ralph Command] Calling asyncHandler now...')
+          const asyncResult = await result.asyncHandler()
+          console.log('[Ralph Command] asyncHandler completed successfully')
+          params.setMessages((prev) => asyncResult.postUserMessage(prev))
+        } catch (error) {
+          console.log('[Ralph Command] asyncHandler threw error:', error)
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          params.setMessages((prev) => [
+            ...prev,
+            getSystemMessage(`❌ Error: ${errorMessage}`),
+          ])
+        }
+        return
+      }
 
       // If there's a prompt to send (new PRD creation, run story, edit)
       if (result.prompt) {
