@@ -14,11 +14,12 @@ import {
   focusManager,
 } from '@tanstack/react-query'
 import { Command } from 'commander'
-import { cyan, green, red, yellow } from 'picocolors'
+import { cyan, dim, green, magenta, red, yellow } from 'picocolors'
 import React from 'react'
 
 import { App } from './app'
 import { handlePublish } from './commands/publish'
+import { handleRalphCommand } from './commands/ralph'
 import { initializeApp } from './init/init-app'
 import { getProjectRoot, setProjectRoot } from './project-files'
 import { initAnalytics } from './utils/analytics'
@@ -33,9 +34,15 @@ import { saveRecentProject } from './utils/recent-projects'
 import { installProcessCleanupHandlers } from './utils/renderer-cleanup'
 import { detectTerminalTheme } from './utils/terminal-color-detection'
 import { setOscDetectedTheme } from './utils/theme-system'
+import {
+  formatTraceEvent,
+  simplifyEventForJson,
+  createTraceState,
+} from './utils/non-interactive-traces'
 
 import type { AgentMode } from './utils/constants'
 import type { FileTreeNode } from '@codebuff/common/util/file'
+import type { PrintModeEvent } from '@codebuff/common/types/print-mode'
 
 const require = createRequire(import.meta.url)
 
@@ -214,6 +221,20 @@ interface JsonOutput {
   error?: string
 }
 
+/**
+ * Extract message text from Ralph postUserMessage result.
+ */
+function extractRalphMessage(postUserMessage: (prev: never[]) => Array<{ content?: string }>): string {
+  const messages = postUserMessage([])
+  const lines: string[] = []
+  for (const msg of messages) {
+    if (msg.content) {
+      lines.push(msg.content)
+    }
+  }
+  return lines.join('\n')
+}
+
 async function runNonInteractive({
   prompt,
   agent,
@@ -249,6 +270,60 @@ async function runNonInteractive({
     process.exit(1)
   }
 
+  // Check if this is a Ralph command
+  const trimmedPrompt = prompt.trim()
+  if (trimmedPrompt.startsWith('/ralph')) {
+    const ralphArgs = trimmedPrompt.slice('/ralph'.length).trim()
+    const result = handleRalphCommand(ralphArgs)
+
+    // Handle async commands (parallel, merge, cleanup, orchestra)
+    if (result.asyncHandler) {
+      try {
+        const asyncResult = await result.asyncHandler()
+        const output = extractRalphMessage(asyncResult.postUserMessage)
+        
+        if (json) {
+          const jsonOutput: JsonOutput = { success: true, output }
+          console.log(JSON.stringify(jsonOutput, null, 2))
+        } else if (outputFile) {
+          await fs.writeFile(outputFile, output, 'utf-8')
+        } else {
+          console.log(output)
+        }
+        return
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        if (json) {
+          const jsonOutput: JsonOutput = { success: false, output: '', error: errorMessage }
+          console.log(JSON.stringify(jsonOutput, null, 2))
+        } else {
+          console.error(`Error: ${errorMessage}`)
+        }
+        process.exit(1)
+      }
+    }
+
+    // If there's a prompt to send to the AI (run story, new PRD, edit)
+    if (result.prompt) {
+      // Replace the user's command with the generated prompt
+      prompt = result.prompt
+      // Fall through to send this prompt to the AI
+    } else {
+      // Commands that just display info (list, status, delete, help)
+      const output = extractRalphMessage(result.postUserMessage)
+      
+      if (json) {
+        const jsonOutput: JsonOutput = { success: true, output }
+        console.log(JSON.stringify(jsonOutput, null, 2))
+      } else if (outputFile) {
+        await fs.writeFile(outputFile, output, 'utf-8')
+      } else {
+        console.log(output)
+      }
+      return
+    }
+  }
+
   // Resolve agent ID from mode or explicit agent
   const agentId = agent ?? (initialMode ? AGENT_MODE_TO_ID[initialMode] : AGENT_MODE_TO_ID.DEFAULT)
 
@@ -260,6 +335,7 @@ async function runNonInteractive({
   })
 
   let responseText = ''
+  const traceState = createTraceState()
 
   // Create abort controller for timeout
   const abortController = new AbortController()
@@ -271,6 +347,15 @@ async function runNonInteractive({
     }, timeout * 1000)
   }
 
+  // Always show traces to stderr so user can see progress (even with --json)
+  // Only suppress in quiet mode
+  const showTraces = !quiet
+  // Stream text to stdout only when not in JSON/quiet/outputFile mode
+  const streamTextToStdout = !json && !quiet && !outputFile
+  
+  // Track all events for JSON output (included when json: true)
+  const allEvents: Array<{ type: string; [key: string]: unknown }> = []
+
   try {
     const { output } = await client.run({
       signal: abortController.signal,
@@ -280,10 +365,42 @@ async function runNonInteractive({
         // Handle streaming text chunks for real-time output
         if (typeof chunk === 'string') {
           responseText += chunk
-          // Only stream to stdout when not in JSON, quiet, or output file mode
-          if (!json && !quiet && !outputFile) {
+          if (streamTextToStdout) {
+            // Clear agent label after root text starts
+            if (traceState.currentAgentLabel) {
+              traceState.currentAgentLabel = ''
+            }
             process.stdout.write(chunk)
           }
+        } else if (chunk.type === 'subagent_chunk') {
+          // Show subagent output with label - always to stderr for visibility
+          if (showTraces) {
+            if (traceState.currentAgentLabel !== chunk.agentType) {
+              traceState.currentAgentLabel = chunk.agentType
+              process.stderr.write(dim(`\n[${chunk.agentType}] `))
+            }
+            process.stderr.write(chunk.chunk)
+          }
+        } else if (chunk.type === 'reasoning_chunk') {
+          // Show reasoning output (thinking) - always to stderr
+          if (showTraces) {
+            process.stderr.write(dim(chunk.chunk))
+          }
+        }
+      },
+      handleEvent: (event: PrintModeEvent) => {
+        // Track events for JSON output (simplified format)
+        const simplified = simplifyEventForJson(event)
+        if (simplified) {
+          allEvents.push(simplified)
+        }
+        
+        if (!showTraces) return
+
+        // All trace output goes to stderr so it doesn't interfere with JSON output on stdout
+        const formatted = formatTraceEvent(event, traceState)
+        if (formatted) {
+          console.error(formatted.text)
         }
       },
     })
@@ -314,10 +431,11 @@ async function runNonInteractive({
         process.exit(1)
       }
     } else if (json) {
-      // Output structured JSON
-      const jsonOutput: JsonOutput = {
+      // Output structured JSON with traces
+      const jsonOutput = {
         success: output.type !== 'error',
         output: responseText,
+        traces: allEvents,
         ...(output.type === 'error' && { error: output.message }),
       }
       console.log(JSON.stringify(jsonOutput, null, 2))

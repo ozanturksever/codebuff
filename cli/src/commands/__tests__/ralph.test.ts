@@ -618,27 +618,37 @@ describe('ralph command handlers (integration)', () => {
   })
 
   describe('handleRalphNew', () => {
-    test('shows error when no description provided', () => {
+    test('shows error when no name provided', () => {
       const { postUserMessage, prdPrompt } = handleRalphNew('')
 
       expect(prdPrompt).toBeUndefined()
       const messages = postUserMessage([])
-      expect(getMessageText(messages)).toContain('Please provide a feature description')
+      expect(getMessageText(messages)).toContain('Please provide a PRD name')
     })
 
-    test('generates PRD creation prompt', () => {
-      const { prdPrompt } = handleRalphNew('Add user authentication')
+    test('generates PRD creation prompt with name only', () => {
+      const { prdPrompt } = handleRalphNew('auth-feature')
+
+      expect(prdPrompt).toBeDefined()
+      expect(prdPrompt).toContain('auth-feature')
+      expect(prdPrompt).toContain('clarifying questions')
+      expect(prdPrompt).toContain('userStories')
+    })
+
+    test('generates PRD creation prompt with name and description', () => {
+      const { prdPrompt } = handleRalphNew('auth', 'Add user authentication')
 
       expect(prdPrompt).toBeDefined()
       expect(prdPrompt).toContain('Add user authentication')
+      expect(prdPrompt).toContain('prd/auth.json')
       expect(prdPrompt).toContain('clarifying questions')
       expect(prdPrompt).toContain('userStories')
     })
 
     test('includes slugified filename in prompt', () => {
-      const { prdPrompt } = handleRalphNew('Add User Authentication!')
+      const { prdPrompt } = handleRalphNew('My Feature Name!')
 
-      expect(prdPrompt).toContain('prd/add-user-authentication.json')
+      expect(prdPrompt).toContain('prd/my-feature-name.json')
     })
   })
 
@@ -777,10 +787,17 @@ describe('ralph command handlers (integration)', () => {
       expect(getMessageText(messages)).toContain('Test Project')
     })
 
-    test('routes "new" to new handler', () => {
-      const { prompt } = handleRalphCommand('new My feature')
+    test('routes "new" to new handler with name', () => {
+      const { prompt } = handleRalphCommand('new my-feature')
 
-      expect(prompt).toContain('My feature')
+      expect(prompt).toContain('my-feature')
+    })
+
+    test('routes "new" to new handler with name and description', () => {
+      const { prompt } = handleRalphCommand('new auth Add user authentication')
+
+      expect(prompt).toContain('Add user authentication')
+      expect(prompt).toContain('prd/auth.json')
     })
 
     test('routes "run" to run handler', () => {
@@ -817,11 +834,18 @@ describe('ralph command handlers (integration)', () => {
       expect(getMessageText(messages)).toContain('Commands')
     })
 
-    test('routes unknown subcommand as new feature description', () => {
-      const { prompt } = handleRalphCommand('Add authentication system')
+    test('routes unknown subcommand as new with name', () => {
+      const { prompt } = handleRalphCommand('auth-system')
+
+      expect(prompt).toContain('auth-system')
+      expect(prompt).toContain('clarifying questions')
+    })
+
+    test('routes unknown subcommand as new with name and description', () => {
+      const { prompt } = handleRalphCommand('auth Add authentication system')
 
       expect(prompt).toContain('Add authentication system')
-      expect(prompt).toContain('clarifying questions')
+      expect(prompt).toContain('prd/auth.json')
     })
 
     test('handles case-insensitive subcommands', () => {
