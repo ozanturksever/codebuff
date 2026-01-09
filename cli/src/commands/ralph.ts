@@ -2,8 +2,10 @@ import fs from 'fs'
 import path from 'path'
 
 import { getProjectRoot } from '../project-files'
+import { useChatStore } from '../state/chat-store'
 import { getSystemMessage, getUserMessage } from '../utils/message-history'
 
+import type { ChatMessage } from '../types/chat'
 import type { PostUserMessageFn } from '../types/contracts/send-message'
 
 // ============================================================================
@@ -170,13 +172,17 @@ export function markStoryComplete(prdName: string, storyId: string): boolean {
 // PRD Generation Prompt
 // ============================================================================
 
-function generatePrdCreationPrompt(featureDescription: string): string {
+function generatePrdCreationPrompt(featureDescription: string, initialPrompt?: string): string {
+  const initialContext = initialPrompt 
+    ? `\n\nThe user has provided additional context:\n"${initialPrompt}"\n\nUse this information to reduce the number of clarifying questions needed.`
+    : ''
+
   return `You are helping create a PRD (Product Requirements Document) for autonomous development.
 
-The user wants to build: "${featureDescription}"
+The user wants to build: "${featureDescription}"${initialContext}
 
 Your task:
-1. Ask 3-5 clarifying questions to understand the scope, constraints, and acceptance criteria
+1. Ask 3-5 clarifying questions to understand the scope, constraints, and acceptance criteria${initialPrompt ? ' (skip questions already answered by the initial context)' : ''}
 2. Use the ask_user tool to get answers
 3. Based on the answers, generate a PRD with well-scoped user stories
 
@@ -241,12 +247,41 @@ ${story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
 
 ${story.notes ? `**Notes:** ${story.notes}` : ''}
 
+## Development Approach: Test-Driven Development (TDD)
+
+Follow TDD principles strictly:
+
+1. **Write tests FIRST** - Before implementing any feature code:
+   - Write unit tests for the core logic/functions
+   - Write e2e/integration tests for the user-facing behavior
+   - Tests should initially fail (red phase)
+
+2. **Implement minimal code** - Write just enough code to make tests pass (green phase)
+
+3. **Refactor** - Clean up while keeping tests green
+
+### Testing Guidelines:
+
+- **Prefer real implementations over mocks** - Only use mocks when absolutely necessary (e.g., external APIs, payment systems)
+- **Use Testcontainers** for database and service dependencies - spin up real containers instead of mocking
+- **Unit tests** for business logic, utilities, and pure functions
+- **E2E/Integration tests** for API endpoints, user flows, and feature behavior
+- **All acceptance criteria must have corresponding tests**
+
+### Validation Before Proceeding:
+
+- All tests must pass before marking the story complete
+- Run the full test suite for affected areas
+- Typecheck and lint must also pass
+
 ## Instructions
 
-1. Implement this single user story
-2. Run quality checks (typecheck, lint, test as appropriate)
-3. If checks pass, commit changes with message: "feat: ${story.id} - ${story.title}"
-4. Update any relevant AGENTS.md files with learnings
+1. Write failing tests for this story's acceptance criteria
+2. Implement the feature to make tests pass
+3. Refactor if needed while keeping tests green
+4. Run quality checks (typecheck, lint, test)
+5. If all checks pass, commit with message: "feat: ${story.id} - ${story.title}"
+6. Update any relevant AGENTS.md files with learnings
 
 After completing the story:
 - Use write_file to update the PRD: Mark story ${story.id} as passes: true
@@ -353,7 +388,7 @@ export function handleRalphStatus(prdName?: string): {
   return { postUserMessage }
 }
 
-export function handleRalphNew(featureDescription: string): {
+export function handleRalphNew(featureDescription: string, initialPrompt?: string): {
   postUserMessage: PostUserMessageFn
   prdPrompt?: string
 } {
@@ -362,19 +397,24 @@ export function handleRalphNew(featureDescription: string): {
       ...prev,
       getSystemMessage(
         '❌ Please provide a feature description.\n\n' +
-        'Example:\n' +
-        '  /ralph new Add task priority system with filtering'
+        'Examples:\n' +
+        '  /ralph new Add task priority system\n' +
+        '  /ralph new Add auth -- use OAuth2 with Google and GitHub'
       ),
     ]
     return { postUserMessage }
   }
 
   // Generate the prompt for PRD creation
-  const prdPrompt = generatePrdCreationPrompt(featureDescription)
+  const prdPrompt = generatePrdCreationPrompt(featureDescription, initialPrompt)
+
+  const userMessageText = initialPrompt 
+    ? `/ralph new ${featureDescription} -- ${initialPrompt}`
+    : `/ralph new ${featureDescription}`
 
   const postUserMessage: PostUserMessageFn = (prev) => [
     ...prev,
-    getUserMessage(`/ralph new ${featureDescription}`),
+    getUserMessage(userMessageText),
   ]
 
   return { postUserMessage, prdPrompt }
@@ -523,6 +563,8 @@ export function handleRalphHelp(): {
     'Commands:',
     '  /ralph              - List all PRDs (or create new)',
     '  /ralph new [desc]   - Create a new PRD interactively',
+    '  /ralph new [desc] -- [context] - Create PRD with initial context',
+    '  /ralph handoff      - Create PRD from current chat context',
     '  /ralph list         - List all PRDs with status',
     '  /ralph status [name]- Show detailed PRD status',
     '  /ralph run [name]   - Execute the next story in a PRD',
@@ -531,6 +573,8 @@ export function handleRalphHelp(): {
     '',
     'Workflow:',
     '  1. /ralph new "Add user authentication"',
+    '     or: /ralph new "Add auth" -- use OAuth2 with Google',
+    '     or: /ralph handoff (after discussing feature in chat)',
     '     → Codebuff asks clarifying questions',
     '     → Generates PRD with user stories',
     '',
@@ -549,6 +593,146 @@ export function handleRalphHelp(): {
   ]
 
   return { postUserMessage }
+}
+
+// ============================================================================
+// Handoff - Create PRD from chat history
+// ============================================================================
+
+/**
+ * Extracts a text representation of the conversation from chat messages.
+ * Used to generate context for PRD creation from chat history.
+ */
+function extractConversationText(messages: ChatMessage[]): string {
+  const lines: string[] = []
+
+  for (const msg of messages) {
+    if (msg.variant === 'user') {
+      lines.push(`User: ${msg.content}`)
+    } else if (msg.variant === 'ai') {
+      // Extract text content from AI messages
+      if (msg.blocks) {
+        for (const block of msg.blocks) {
+          if (block.type === 'text' && block.content) {
+            lines.push(`Assistant: ${block.content.slice(0, 500)}`)
+          }
+          if (block.type === 'tool' && block.toolName === 'write_todos') {
+            const todos = block.input?.todos as
+              | Array<{ task: string; completed: boolean }>
+              | undefined
+            if (todos && todos.length > 0) {
+              lines.push(
+                `Todos: ${todos.map((t) => `[${t.completed ? 'x' : ' '}] ${t.task}`).join(', ')}`,
+              )
+            }
+          }
+        }
+      } else if (msg.content) {
+        lines.push(`Assistant: ${msg.content.slice(0, 500)}`)
+      }
+    }
+  }
+
+  // Limit total size
+  const text = lines.join('\n')
+  if (text.length > 10000) {
+    return text.slice(-10000)
+  }
+  return text
+}
+
+/**
+ * Generates a PRD creation prompt that includes conversation context.
+ */
+function generatePrdFromConversationPrompt(conversationText: string): string {
+  return `You are helping create a PRD (Product Requirements Document) for autonomous development.
+
+The user has been discussing a feature in the current chat session. Here is the conversation context:
+
+---
+${conversationText}
+---
+
+Based on this conversation, create a PRD with well-scoped user stories.
+
+Your task:
+1. Analyze the conversation to understand what feature/task the user wants to build
+2. Ask 1-3 brief clarifying questions if critical details are missing (skip if the conversation provides enough context)
+3. Generate a PRD with well-scoped user stories
+
+Each user story should:
+- Be small enough to complete in one context window (single focused change)
+- Have clear acceptance criteria that can be verified
+- Be ordered by priority (dependencies first)
+
+After gathering any needed clarification, create the PRD file at: prd/<feature-slug>.json
+
+Use this exact JSON structure:
+{
+  "project": "Project Name",
+  "branchName": "feature/branch-name",
+  "description": "Brief description of the feature",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Story title",
+      "description": "As a [user], I want [goal] so that [benefit]",
+      "acceptanceCriteria": [
+        "Criterion 1",
+        "Criterion 2"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    }
+  ],
+  "createdAt": "${new Date().toISOString()}",
+  "updatedAt": "${new Date().toISOString()}"
+}
+
+Start by summarizing what you understood from the conversation, then ask any critical clarifying questions or proceed to create the PRD.`
+}
+
+export function handleRalphHandoff(): {
+  postUserMessage: PostUserMessageFn
+  prdPrompt?: string
+} {
+  const { messages } = useChatStore.getState()
+
+  if (messages.length === 0) {
+    const postUserMessage: PostUserMessageFn = (prev) => [
+      ...prev,
+      getSystemMessage(
+        '❌ No conversation to create PRD from.\n\n' +
+        'Start a conversation about the feature you want to build, then use /ralph handoff.'
+      ),
+    ]
+    return { postUserMessage }
+  }
+
+  // Extract conversation text
+  const conversationText = extractConversationText(messages)
+
+  if (!conversationText.trim()) {
+    const postUserMessage: PostUserMessageFn = (prev) => [
+      ...prev,
+      getSystemMessage(
+        '❌ No meaningful content to create PRD from.\n\n' +
+        'Have a conversation about the feature first, then use /ralph handoff.'
+      ),
+    ]
+    return { postUserMessage }
+  }
+
+  // Generate the PRD creation prompt with conversation context
+  const prdPrompt = generatePrdFromConversationPrompt(conversationText)
+
+  const postUserMessage: PostUserMessageFn = (prev) => [
+    ...prev,
+    getUserMessage('/ralph handoff'),
+  ]
+
+  return { postUserMessage, prdPrompt }
 }
 
 // ============================================================================
@@ -574,12 +758,24 @@ export function handleRalphCommand(args: string): {
     case 'status':
       return handleRalphStatus(restArgs || undefined)
     
-    case 'new':
-      const newResult = handleRalphNew(restArgs)
+    case 'handoff': {
+      const handoffResult = handleRalphHandoff()
+      return {
+        postUserMessage: handoffResult.postUserMessage,
+        prompt: handoffResult.prdPrompt,
+      }
+    }
+    
+    case 'new': {
+      // Support syntax: /ralph new <feature> -- <initial prompt>
+      const [featureDesc, ...promptParts] = restArgs.split(' -- ')
+      const initialPrompt = promptParts.join(' -- ').trim() || undefined
+      const newResult = handleRalphNew(featureDesc.trim(), initialPrompt)
       return {
         postUserMessage: newResult.postUserMessage,
         prompt: newResult.prdPrompt,
       }
+    }
     
     case 'run':
       const runResult = handleRalphRun(restArgs)
@@ -605,12 +801,16 @@ export function handleRalphCommand(args: string): {
     case '--help':
       return handleRalphHelp()
     
-    default:
+    default: {
       // Treat as "new" with the full args as feature description
-      const defaultResult = handleRalphNew(trimmedArgs)
+      // Support syntax: /ralph <feature> -- <initial prompt>
+      const [featureDesc, ...promptParts] = trimmedArgs.split(' -- ')
+      const initialPrompt = promptParts.join(' -- ').trim() || undefined
+      const defaultResult = handleRalphNew(featureDesc.trim(), initialPrompt)
       return {
         postUserMessage: defaultResult.postUserMessage,
         prompt: defaultResult.prdPrompt,
       }
+    }
   }
 }

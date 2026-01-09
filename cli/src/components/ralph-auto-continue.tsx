@@ -66,8 +66,7 @@ export function RalphAutoContinue(): null {
         return { followups }
       }
 
-      // Mark the current story as complete before getting the next one
-      // This ensures consistency even if the agent failed to update the PRD
+      // Mark the current story as complete when user is ready to continue
       markStoryComplete(activePrdName, activeStoryId)
 
       // Get the next story using handleRalphRun
@@ -80,19 +79,22 @@ export function RalphAutoContinue(): null {
         return { followups }
       }
 
-      // Update session with the new story ID
-      useRalphStore.getState().startSession(activePrdName, runResult.storyId)
+      // DON'T update activeStoryId here - it should only be updated when
+      // the user clicks and the story actually starts running via /ralph run.
+      // If we update it here, and the hook runs again, the next story would
+      // be marked complete before it's even started.
 
-      // Replace the continue followup with the actual story prompt
+      // Replace the continue followup with /ralph run command
+      // This ensures the session is properly updated when executed
       const modifiedFollowups = [...followups]
       modifiedFollowups[continueIndex] = {
-        prompt: runResult.storyPrompt,
+        prompt: `/ralph run ${activePrdName}`,
         label: `Next: ${runResult.storyId}`,
       }
 
+      // Return without autoExecuteIndex so user must click to continue
       return {
         followups: modifiedFollowups,
-        autoExecuteIndex: continueIndex,
       }
     },
     [activePrdName, activeStoryId, autoContinueEnabled, clearSession],

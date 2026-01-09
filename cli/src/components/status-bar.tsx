@@ -123,16 +123,11 @@ export const StatusBar = ({
 
     const storyLabel = activeStoryId ? ` → ${activeStoryId}` : ''
     return (
-      <box
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 1,
-        }}
-      >
+      <text style={{ wrapMode: 'none' }}>
         <span fg={theme.primary}>[Ralph]</span>
+        <span> </span>
         <span fg={theme.secondary}>{activePrdName}{storyLabel}</span>
-      </box>
+      </text>
     )
   }
 
@@ -167,7 +162,9 @@ export const StatusBar = ({
 
       {ralphIndicator && statusIndicatorContent && (
         <box style={{ flexShrink: 0 }}>
-          <span fg={theme.secondary}>│</span>
+          <text style={{ wrapMode: 'none' }}>
+            <span fg={theme.secondary}>│</span>
+          </text>
         </box>
       )}
 
