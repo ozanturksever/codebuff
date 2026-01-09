@@ -1,0 +1,49 @@
+{
+  "project": "Sample Test Project",
+  "branchName": "feature/sample-test",
+  "description": "A simple test PRD to verify Ralph orchestra functionality",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create a greeting utility",
+      "description": "As a developer, I want a greeting utility function so that I can easily greet users",
+      "acceptanceCriteria": [
+        "Create a file at scripts/greeting.ts",
+        "Export a function `greet(name: string): string` that returns 'Hello, {name}!'",
+        "Add a simple test"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Simple utility function"
+    },
+    {
+      "id": "US-002",
+      "title": "Create a farewell utility",
+      "description": "As a developer, I want a farewell utility function so that I can say goodbye to users",
+      "acceptanceCriteria": [
+        "Create a file at scripts/farewell.ts",
+        "Export a function `farewell(name: string): string` that returns 'Goodbye, {name}!'",
+        "Add a simple test"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Simple utility function - independent of US-001"
+    },
+    {
+      "id": "US-003",
+      "title": "Create a combined message utility",
+      "description": "As a developer, I want to combine greeting and farewell into a session message",
+      "acceptanceCriteria": [
+        "Create a file at scripts/session.ts",
+        "Import greet and farewell functions",
+        "Export a function `sessionMessage(name: string): string` that combines both",
+        "Add a test"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Depends on US-001 and US-002"
+    }
+  ],
+  "createdAt": "2025-01-08T00:00:00.000Z",
+  "updatedAt": "2025-01-08T00:00:00.000Z"
+}

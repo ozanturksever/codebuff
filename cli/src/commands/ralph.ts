@@ -1,9 +1,14 @@
+import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 
 import { getProjectRoot } from '../project-files'
+import { logger } from '../utils/logger'
 import { useChatStore } from '../state/chat-store'
+import { getCodebuffClient } from '../utils/codebuff-client'
 import { getSystemMessage, getUserMessage } from '../utils/message-history'
+
+import type { CodebuffClient } from '@codebuff/sdk'
 
 import type { ChatMessage } from '../types/chat'
 import type { PostUserMessageFn } from '../types/contracts/send-message'
@@ -22,6 +27,14 @@ export interface UserStory {
   notes: string
 }
 
+export interface ParallelWorktree {
+  storyId: string
+  branch: string
+  worktreePath: string
+  status: 'running' | 'completed' | 'merged'
+  createdAt: string
+}
+
 export interface PRD {
   project: string
   branchName?: string
@@ -29,6 +42,8 @@ export interface PRD {
   userStories: UserStory[]
   createdAt: string
   updatedAt: string
+  /** Tracks stories being executed in parallel worktrees */
+  parallelWorktrees?: ParallelWorktree[]
 }
 
 export interface PRDSummary {
@@ -166,6 +181,259 @@ export function markStoryComplete(prdName: string, storyId: string): boolean {
   story.passes = true
   savePRD(prdName, prd)
   return true
+}
+
+// ============================================================================
+// Worktree Management for Parallel Execution
+// ============================================================================
+
+const WORKTREES_DIR = '../codebuff-worktrees'
+
+export function getWorktreesDir(): string {
+  return path.resolve(getProjectRoot(), WORKTREES_DIR)
+}
+
+export function getStoryWorktreePath(prdName: string, storyId: string): string {
+  return path.join(getWorktreesDir(), `${prdName}-${storyId.toLowerCase()}`)
+}
+
+export function getStoryBranchName(prdName: string, storyId: string): string {
+  return `ralph/${prdName}/${storyId.toLowerCase()}`
+}
+
+async function runGitCommand(
+  args: string[],
+  cwd?: string,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('git', args, {
+      cwd: cwd ?? getProjectRoot(),
+      stdio: 'pipe',
+      shell: false,
+    })
+
+    let stdout = ''
+    let stderr = ''
+
+    proc.stdout?.on('data', (data) => {
+      stdout += data.toString()
+    })
+
+    proc.stderr?.on('data', (data) => {
+      stderr += data.toString()
+    })
+
+    proc.on('close', (code) => {
+      resolve({ stdout, stderr, exitCode: code || 0 })
+    })
+
+    proc.on('error', (error) => {
+      reject(error)
+    })
+  })
+}
+
+async function getCurrentBranch(): Promise<string> {
+  const result = await runGitCommand(['rev-parse', '--abbrev-ref', 'HEAD'])
+  return result.stdout.trim() || 'main'
+}
+
+async function branchExists(branchName: string): Promise<boolean> {
+  const result = await runGitCommand([
+    'show-ref',
+    '--verify',
+    '--quiet',
+    `refs/heads/${branchName}`,
+  ])
+  return result.exitCode === 0
+}
+
+async function createStoryWorktree(
+  prdName: string,
+  story: UserStory,
+): Promise<{ success: boolean; worktreePath: string; branch: string; error?: string }> {
+  const worktreePath = getStoryWorktreePath(prdName, story.id)
+  const branch = getStoryBranchName(prdName, story.id)
+
+  // Check if worktree already exists - reuse it if so
+  if (fs.existsSync(worktreePath)) {
+    // Verify it's a valid worktree by checking for .git
+    const gitPath = path.join(worktreePath, '.git')
+    if (fs.existsSync(gitPath)) {
+      // Sync .codebuff directory even for existing worktrees (PRD may have changed)
+      const mainCodebuffDir = path.join(getProjectRoot(), '.codebuff')
+      const worktreeCodebuffDir = path.join(worktreePath, '.codebuff')
+      if (fs.existsSync(mainCodebuffDir)) {
+        try {
+          fs.cpSync(mainCodebuffDir, worktreeCodebuffDir, { recursive: true })
+        } catch {
+          // Non-fatal
+        }
+      }
+      // Also sync PRD directory for existing worktrees (PRD may have changed)
+      const mainPrdDir = path.join(getProjectRoot(), PRD_DIR)
+      const worktreePrdDir = path.join(worktreePath, PRD_DIR)
+      if (fs.existsSync(mainPrdDir)) {
+        try {
+          fs.cpSync(mainPrdDir, worktreePrdDir, { recursive: true })
+        } catch {
+          // Non-fatal
+        }
+      }
+      return {
+        success: true,
+        worktreePath,
+        branch,
+      }
+    }
+    // Directory exists but not a valid worktree - clean it up
+    try {
+      fs.rmSync(worktreePath, { recursive: true, force: true })
+    } catch {
+      return {
+        success: false,
+        worktreePath,
+        branch,
+        error: `Invalid worktree exists at ${worktreePath} and could not be removed`,
+      }
+    }
+  }
+
+  // Ensure worktrees directory exists
+  const worktreesDir = getWorktreesDir()
+  if (!fs.existsSync(worktreesDir)) {
+    fs.mkdirSync(worktreesDir, { recursive: true })
+  }
+
+  // Check if branch already exists
+  const exists = await branchExists(branch)
+
+  // Create the worktree
+  const worktreeArgs = ['worktree', 'add', worktreePath]
+  if (exists) {
+    worktreeArgs.push(branch)
+  } else {
+    worktreeArgs.push('-b', branch, 'HEAD')
+  }
+
+  const result = await runGitCommand(worktreeArgs)
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      worktreePath,
+      branch,
+      error: result.stderr || 'Failed to create worktree',
+    }
+  }
+
+  // Write a .ralph-story.json file with story info for the worktree
+  const storyInfoPath = path.join(worktreePath, '.ralph-story.json')
+  fs.writeFileSync(
+    storyInfoPath,
+    JSON.stringify(
+      {
+        prdName,
+        storyId: story.id,
+        title: story.title,
+        createdAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
+  )
+
+  // Copy .codebuff directory to worktree (PRDs and other config aren't committed)
+  const mainCodebuffDir = path.join(getProjectRoot(), '.codebuff')
+  const worktreeCodebuffDir = path.join(worktreePath, '.codebuff')
+  if (fs.existsSync(mainCodebuffDir)) {
+    try {
+      fs.cpSync(mainCodebuffDir, worktreeCodebuffDir, { recursive: true })
+    } catch (e) {
+      // Non-fatal - log but continue
+    }
+  }
+
+  // Copy PRD directory to worktree (PRD files might be uncommitted)
+  const mainPrdDir = path.join(getProjectRoot(), PRD_DIR)
+  const worktreePrdDir = path.join(worktreePath, PRD_DIR)
+  if (fs.existsSync(mainPrdDir)) {
+    try {
+      fs.cpSync(mainPrdDir, worktreePrdDir, { recursive: true })
+    } catch (e) {
+      // Non-fatal - log but continue
+    }
+  }
+
+  return { success: true, worktreePath, branch }
+}
+
+async function cleanupStoryWorktree(
+  prdName: string,
+  storyId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const worktreePath = getStoryWorktreePath(prdName, storyId)
+
+  // Remove git worktree
+  const removeResult = await runGitCommand(['worktree', 'remove', worktreePath, '--force'])
+
+  // Clean up directory if it still exists
+  if (fs.existsSync(worktreePath)) {
+    try {
+      fs.rmSync(worktreePath, { recursive: true, force: true })
+    } catch (e) {
+      return { success: false, error: `Failed to remove directory: ${e}` }
+    }
+  }
+
+  // Prune worktrees
+  await runGitCommand(['worktree', 'prune'])
+
+  return { success: removeResult.exitCode === 0 || !fs.existsSync(worktreePath) }
+}
+
+async function checkBranchHasStoryCommit(
+  branch: string,
+  storyId: string,
+  baseBranch: string,
+): Promise<boolean> {
+  // Get commits on branch that aren't on base
+  const result = await runGitCommand([
+    'log',
+    `${baseBranch}..${branch}`,
+    '--oneline',
+    '--grep',
+    storyId,
+  ])
+
+  return result.exitCode === 0 && result.stdout.trim().length > 0
+}
+
+async function mergeBranch(
+  branch: string,
+  baseBranch: string,
+): Promise<{ success: boolean; error?: string; hasConflicts?: boolean }> {
+  // First checkout base branch
+  const checkoutResult = await runGitCommand(['checkout', baseBranch])
+  if (checkoutResult.exitCode !== 0) {
+    return { success: false, error: `Failed to checkout ${baseBranch}` }
+  }
+
+  // Try to merge
+  const mergeResult = await runGitCommand(['merge', branch, '--no-edit'])
+
+  if (mergeResult.exitCode !== 0) {
+    // Check if it's a conflict
+    if (mergeResult.stderr.includes('CONFLICT') || mergeResult.stdout.includes('CONFLICT')) {
+      return { success: false, hasConflicts: true, error: 'Merge conflicts detected' }
+    }
+    return { success: false, error: mergeResult.stderr || 'Merge failed' }
+  }
+
+  return { success: true }
+}
+
+async function deleteBranch(branch: string): Promise<void> {
+  await runGitCommand(['branch', '-D', branch])
 }
 
 // ============================================================================
@@ -363,6 +631,10 @@ export function handleRalphStatus(prdName?: string): {
   const totalCount = prd.userStories.length
   const nextStory = getNextStory(prd)
 
+  // Check for parallel worktrees
+  const runningWorktrees = prd.parallelWorktrees?.filter(w => w.status === 'running') || []
+  const worktreeMap = new Map(runningWorktrees.map(w => [w.storyId, w]))
+
   const lines = [
     `📋 PRD: ${prd.project}`,
     '',
@@ -371,14 +643,26 @@ export function handleRalphStatus(prdName?: string): {
     prd.branchName ? `Branch: ${prd.branchName}` : '',
     '',
     'Stories:',
-    ...prd.userStories.map(s => 
-      `  ${s.passes ? '✅' : '○'} [${s.priority}] ${s.id}: ${s.title}`
-    ),
-    '',
+    ...prd.userStories.map(s => {
+      const worktree = worktreeMap.get(s.id)
+      const statusIcon = s.passes ? '✅' : worktree ? '🔀' : '○'
+      const worktreeInfo = worktree ? ` (parallel: ${worktree.branch})` : ''
+      return `  ${statusIcon} [${s.priority}] ${s.id}: ${s.title}${worktreeInfo}`
+    }),
+  ]
+
+  if (runningWorktrees.length > 0) {
+    lines.push('')
+    lines.push(`🔀 ${runningWorktrees.length} stories running in parallel worktrees`)
+    lines.push('   Use /ralph merge ' + prdName + ' to merge completed work')
+  }
+
+  lines.push('')
+  lines.push(
     nextStory 
       ? `Next up: ${nextStory.id} - ${nextStory.title}`
-      : '🎉 All stories complete!',
-  ].filter(Boolean)
+      : '🎉 All stories complete!'
+  )
 
   const postUserMessage: PostUserMessageFn = (prev) => [
     ...prev,
@@ -571,6 +855,15 @@ export function handleRalphHelp(): {
     '  /ralph edit [name]  - Edit an existing PRD',
     '  /ralph delete [name]- Delete a PRD',
     '',
+    'Parallel Execution:',
+    '  /ralph parallel [name] [story-ids...] - Run stories in parallel worktrees',
+    '  /ralph merge [name]    - Merge completed parallel branches',
+    '  /ralph cleanup [name]  - Clean up worktrees for a PRD',
+    '',
+    'Autonomous Mode:',
+    '  /ralph orchestra [name] [--parallelism N] - Fully autonomous execution',
+    '     Runs stories in parallel batches, auto-merges, resolves conflicts',
+    '',
     'Workflow:',
     '  1. /ralph new "Add user authentication"',
     '     or: /ralph new "Add auth" -- use OAuth2 with Google',
@@ -582,6 +875,21 @@ export function handleRalphHelp(): {
     '     → Executes next pending story',
     '     → Updates PRD when complete',
     '     → Repeat until all stories pass',
+    '',
+    '  Parallel workflow:',
+    '  2a. /ralph parallel auth US-001 US-002 US-003',
+    '      → Creates separate worktrees for each story',
+    '      → Run codebuff in each worktree terminal',
+    '',
+    '  2b. /ralph merge auth',
+    '      → Merges completed branches back to main',
+    '      → Cleans up worktrees',
+    '',
+    '  Autonomous (recommended):',
+    '  /ralph orchestra auth --parallelism 3',
+    '      → Automatically runs all stories in parallel batches',
+    '      → Merges completed work, resolves conflicts with AI',
+    '      → Continues until all stories pass',
     '',
     'PRD files are stored in: prd/',
     'Progress logs are stored in: prd/progress/',
@@ -693,6 +1001,855 @@ Use this exact JSON structure:
 Start by summarizing what you understood from the conversation, then ask any critical clarifying questions or proceed to create the PRD.`
 }
 
+// ============================================================================
+// Parallel Execution Commands
+// ============================================================================
+
+export async function handleRalphParallel(prdName: string, storyIds: string[]): Promise<{
+  postUserMessage: PostUserMessageFn
+}> {
+  if (!prdName.trim()) {
+    const postUserMessage: PostUserMessageFn = (prev) => [
+      ...prev,
+      getSystemMessage(
+        '❌ Please specify a PRD name.\n\n' +
+        'Usage: /ralph parallel <prd-name> [story-ids...]\n' +
+        'Example: /ralph parallel my-feature US-001 US-002'
+      ),
+    ]
+    return { postUserMessage }
+  }
+
+  const prd = loadPRD(prdName)
+  if (!prd) {
+    const postUserMessage: PostUserMessageFn = (prev) => [
+      ...prev,
+      getSystemMessage(`❌ PRD not found: ${prdName}\n\nUse /ralph list to see available PRDs.`),
+    ]
+    return { postUserMessage }
+  }
+
+  // Get stories to parallelize
+  let storiesToRun: UserStory[]
+  if (storyIds.length === 0) {
+    // No specific stories - use all pending stories
+    storiesToRun = prd.userStories.filter(s => !s.passes)
+    if (storiesToRun.length === 0) {
+      const postUserMessage: PostUserMessageFn = (prev) => [
+        ...prev,
+        getSystemMessage(`🎉 All stories in "${prd.project}" are already complete!`),
+      ]
+      return { postUserMessage }
+    }
+  } else {
+    // Specific story IDs provided
+    storiesToRun = []
+    const notFound: string[] = []
+    for (const id of storyIds) {
+      const story = prd.userStories.find(s => s.id.toLowerCase() === id.toLowerCase())
+      if (story) {
+        if (!story.passes) {
+          storiesToRun.push(story)
+        }
+      } else {
+        notFound.push(id)
+      }
+    }
+
+    if (notFound.length > 0) {
+      const postUserMessage: PostUserMessageFn = (prev) => [
+        ...prev,
+        getSystemMessage(
+          `❌ Stories not found: ${notFound.join(', ')}\n\n` +
+          `Available stories: ${prd.userStories.map(s => s.id).join(', ')}`
+        ),
+      ]
+      return { postUserMessage }
+    }
+
+    if (storiesToRun.length === 0) {
+      const postUserMessage: PostUserMessageFn = (prev) => [
+        ...prev,
+        getSystemMessage('❌ All specified stories are already complete.'),
+      ]
+      return { postUserMessage }
+    }
+  }
+
+  // Get current branch as base
+  const baseBranch = await getCurrentBranch()
+
+  // Create worktrees for each story
+  const results: Array<{
+    story: UserStory
+    success: boolean
+    worktreePath: string
+    branch: string
+    error?: string
+  }> = []
+
+  for (const story of storiesToRun) {
+    const result = await createStoryWorktree(prdName, story)
+    results.push({ story, ...result })
+  }
+
+  // Update PRD with worktree info
+  prd.parallelWorktrees = prd.parallelWorktrees || []
+  for (const result of results) {
+    if (result.success) {
+      // Remove existing entry if present
+      prd.parallelWorktrees = prd.parallelWorktrees.filter(
+        w => w.storyId !== result.story.id
+      )
+      prd.parallelWorktrees.push({
+        storyId: result.story.id,
+        branch: result.branch,
+        worktreePath: result.worktreePath,
+        status: 'running',
+        createdAt: new Date().toISOString(),
+      })
+    }
+  }
+  savePRD(prdName, prd)
+
+  // Build output message
+  const successResults = results.filter(r => r.success)
+  const failedResults = results.filter(r => !r.success)
+
+  const lines: string[] = [
+    `🚀 Parallel Execution Setup for "${prd.project}"`,
+    `   Base branch: ${baseBranch}`,
+    '',
+  ]
+
+  if (successResults.length > 0) {
+    lines.push('✅ Created worktrees:')
+    for (const r of successResults) {
+      lines.push(`   ${r.story.id}: ${r.story.title}`)
+      lines.push(`      Path: ${r.worktreePath}`)
+      lines.push(`      Branch: ${r.branch}`)
+    }
+    lines.push('')
+    lines.push('📝 To work on each story, open a new terminal and run:')
+    lines.push('')
+    for (const r of successResults) {
+      lines.push(`   # ${r.story.id}: ${r.story.title}`)
+      lines.push(`   cd ${r.worktreePath} && codebuff`)
+      lines.push(`   # Then run: /ralph run ${prdName}`)
+      lines.push('')
+    }
+  }
+
+  if (failedResults.length > 0) {
+    lines.push('')
+    lines.push('❌ Failed to create worktrees:')
+    for (const r of failedResults) {
+      lines.push(`   ${r.story.id}: ${r.error}`)
+    }
+  }
+
+  lines.push('')
+  lines.push('When done, run: /ralph merge ' + prdName)
+
+  const postUserMessage: PostUserMessageFn = (prev) => [
+    ...prev,
+    getSystemMessage(lines.join('\n')),
+  ]
+
+  return { postUserMessage }
+}
+
+export async function handleRalphMerge(prdName: string): Promise<{
+  postUserMessage: PostUserMessageFn
+}> {
+  if (!prdName.trim()) {
+    const postUserMessage: PostUserMessageFn = (prev) => [
+      ...prev,
+      getSystemMessage(
+        '❌ Please specify a PRD name.\n\n' +
+        'Usage: /ralph merge <prd-name>'
+      ),
+    ]
+    return { postUserMessage }
+  }
+
+  const prd = loadPRD(prdName)
+  if (!prd) {
+    const postUserMessage: PostUserMessageFn = (prev) => [
+      ...prev,
+      getSystemMessage(`❌ PRD not found: ${prdName}\n\nUse /ralph list to see available PRDs.`),
+    ]
+    return { postUserMessage }
+  }
+
+  if (!prd.parallelWorktrees || prd.parallelWorktrees.length === 0) {
+    const postUserMessage: PostUserMessageFn = (prev) => [
+      ...prev,
+      getSystemMessage(
+        `❌ No parallel worktrees found for "${prdName}".\n\n` +
+        'Use /ralph parallel to create worktrees first.'
+      ),
+    ]
+    return { postUserMessage }
+  }
+
+  const baseBranch = await getCurrentBranch()
+  const runningWorktrees = prd.parallelWorktrees.filter(w => w.status === 'running')
+
+  if (runningWorktrees.length === 0) {
+    const postUserMessage: PostUserMessageFn = (prev) => [
+      ...prev,
+      getSystemMessage('✅ All worktrees have already been merged.'),
+    ]
+    return { postUserMessage }
+  }
+
+  const lines: string[] = [
+    `🔀 Merging parallel branches for "${prd.project}"`,
+    `   Base branch: ${baseBranch}`,
+    '',
+  ]
+
+  const mergeResults: Array<{
+    worktree: ParallelWorktree
+    hasCommit: boolean
+    merged: boolean
+    hasConflicts?: boolean
+    error?: string
+  }> = []
+
+  // Check and merge each branch
+  for (const worktree of runningWorktrees) {
+    const hasCommit = await checkBranchHasStoryCommit(
+      worktree.branch,
+      worktree.storyId,
+      baseBranch,
+    )
+
+    if (!hasCommit) {
+      mergeResults.push({ worktree, hasCommit: false, merged: false })
+      continue
+    }
+
+    const mergeResult = await mergeBranch(worktree.branch, baseBranch)
+    mergeResults.push({
+      worktree,
+      hasCommit: true,
+      merged: mergeResult.success,
+      hasConflicts: mergeResult.hasConflicts,
+      error: mergeResult.error,
+    })
+  }
+
+  // Process results and update PRD
+  const merged: typeof mergeResults = []
+  const notReady: typeof mergeResults = []
+  const conflicts: typeof mergeResults = []
+  const failed: typeof mergeResults = []
+
+  for (const result of mergeResults) {
+    if (!result.hasCommit) {
+      notReady.push(result)
+    } else if (result.merged) {
+      merged.push(result)
+      // Update worktree status
+      const wt = prd.parallelWorktrees?.find(w => w.storyId === result.worktree.storyId)
+      if (wt) wt.status = 'merged'
+      // Mark story as complete
+      const story = prd.userStories.find(s => s.id === result.worktree.storyId)
+      if (story) story.passes = true
+      // Clean up worktree and branch
+      await cleanupStoryWorktree(prdName, result.worktree.storyId)
+      await deleteBranch(result.worktree.branch)
+    } else if (result.hasConflicts) {
+      conflicts.push(result)
+    } else {
+      failed.push(result)
+    }
+  }
+
+  // Remove merged worktrees from tracking
+  prd.parallelWorktrees = prd.parallelWorktrees?.filter(
+    w => w.status !== 'merged'
+  )
+  savePRD(prdName, prd)
+
+  // Build output
+  if (merged.length > 0) {
+    lines.push('✅ Successfully merged:')
+    for (const r of merged) {
+      lines.push(`   ${r.worktree.storyId} (${r.worktree.branch})`)
+    }
+    lines.push('')
+  }
+
+  if (notReady.length > 0) {
+    lines.push('⏳ Not ready (no story commit found):')
+    for (const r of notReady) {
+      lines.push(`   ${r.worktree.storyId} - work in progress`)
+      lines.push(`      Expected commit message containing: ${r.worktree.storyId}`)
+    }
+    lines.push('')
+  }
+
+  if (conflicts.length > 0) {
+    lines.push('⚠️  Merge conflicts (resolve manually):')
+    for (const r of conflicts) {
+      lines.push(`   ${r.worktree.storyId} (${r.worktree.branch})`)
+    }
+    lines.push('')
+    lines.push('   To resolve conflicts:')
+    lines.push(`   1. git checkout ${baseBranch}`)
+    lines.push(`   2. git merge <branch> --no-commit`)
+    lines.push('   3. Resolve conflicts and commit')
+    lines.push('')
+  }
+
+  if (failed.length > 0) {
+    lines.push('❌ Failed to merge:')
+    for (const r of failed) {
+      lines.push(`   ${r.worktree.storyId}: ${r.error}`)
+    }
+    lines.push('')
+  }
+
+  // Summary
+  const remaining = prd.parallelWorktrees?.filter(w => w.status === 'running').length || 0
+  if (remaining > 0) {
+    lines.push(`📊 ${merged.length} merged, ${remaining} remaining`)
+  } else {
+    lines.push('🎉 All parallel work has been merged!')
+  }
+
+  const postUserMessage: PostUserMessageFn = (prev) => [
+    ...prev,
+    getSystemMessage(lines.join('\n')),
+  ]
+
+  return { postUserMessage }
+}
+
+export async function handleRalphCleanup(prdName: string): Promise<{
+  postUserMessage: PostUserMessageFn
+}> {
+  if (!prdName.trim()) {
+    const postUserMessage: PostUserMessageFn = (prev) => [
+      ...prev,
+      getSystemMessage(
+        '❌ Please specify a PRD name.\n\n' +
+        'Usage: /ralph cleanup <prd-name>'
+      ),
+    ]
+    return { postUserMessage }
+  }
+
+  const prd = loadPRD(prdName)
+  if (!prd) {
+    const postUserMessage: PostUserMessageFn = (prev) => [
+      ...prev,
+      getSystemMessage(`❌ PRD not found: ${prdName}\n\nUse /ralph list to see available PRDs.`),
+    ]
+    return { postUserMessage }
+  }
+
+  if (!prd.parallelWorktrees || prd.parallelWorktrees.length === 0) {
+    const postUserMessage: PostUserMessageFn = (prev) => [
+      ...prev,
+      getSystemMessage(`No worktrees found for "${prdName}".`),
+    ]
+    return { postUserMessage }
+  }
+
+  const lines: string[] = [
+    `🧹 Cleaning up worktrees for "${prd.project}"`,
+    '',
+  ]
+
+  for (const worktree of prd.parallelWorktrees) {
+    const result = await cleanupStoryWorktree(prdName, worktree.storyId)
+    if (result.success) {
+      lines.push(`   ✅ Removed: ${worktree.storyId}`)
+      // Also delete the branch
+      await deleteBranch(worktree.branch)
+    } else {
+      lines.push(`   ❌ Failed: ${worktree.storyId} - ${result.error}`)
+    }
+  }
+
+  // Clear worktree tracking
+  prd.parallelWorktrees = []
+  savePRD(prdName, prd)
+
+  lines.push('')
+  lines.push('✅ Cleanup complete')
+
+  const postUserMessage: PostUserMessageFn = (prev) => [
+    ...prev,
+    getSystemMessage(lines.join('\n')),
+  ]
+
+  return { postUserMessage }
+}
+
+// ============================================================================
+// Orchestra - Autonomous Parallel Execution with SDK
+// ============================================================================
+
+/** Progress callback for orchestra mode */
+export type OrchestraProgressCallback = (message: string) => void
+
+/** Default timeout for story execution (10 minutes) */
+const STORY_EXECUTION_TIMEOUT_MS = 10 * 60 * 1000
+
+/**
+ * Runs a story using the CodebuffClient in a worktree directory.
+ */
+async function runStoryWithClient(
+  client: CodebuffClient,
+  worktreePath: string,
+  storyPrompt: string,
+  storyId: string,
+  onProgress?: OrchestraProgressCallback,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const progressMsg = `Running story ${storyId} in ${worktreePath}...`
+    onProgress?.(progressMsg)
+    logger.info({}, progressMsg)
+    
+    // Log that we're about to call client.run()
+    logger.info({}, `[Orchestra] About to call client.run() for ${storyId}`)
+    console.log(`[Orchestra] About to call client.run() for ${storyId}`)
+    
+    // Create a timeout promise
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Story ${storyId} timed out after ${STORY_EXECUTION_TIMEOUT_MS / 1000}s`))
+      }, STORY_EXECUTION_TIMEOUT_MS)
+    })
+    
+    // Race between the run and timeout
+    const result = await Promise.race([
+      client.run({
+        agent: 'codebuff/base@latest',
+        prompt: storyPrompt,
+        cwd: worktreePath,
+      }),
+      timeoutPromise,
+    ])
+    
+    // Check if the run resulted in an error
+    if (result.output?.type === 'error') {
+      const errorMsg = `Story ${storyId} failed: ${result.output.message}`
+      logger.error({}, errorMsg)
+      return { success: false, error: result.output.message }
+    }
+    
+    logger.info({}, `Story ${storyId} completed successfully`)
+    return { success: true }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    logger.error({ error }, `Story execution failed: ${errorMessage}`)
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Generates a conflict resolution prompt for the AI.
+ */
+function generateConflictResolutionPrompt(branch: string, storyId: string): string {
+  return `Git merge conflicts were detected while merging branch "${branch}" for story ${storyId}.
+
+Please resolve the merge conflicts:
+
+1. Run \`git status\` to see which files have conflicts
+2. Read the conflicting files to understand what both branches intended
+3. Resolve each conflict by combining changes appropriately (don't just pick one side)
+4. Remove the conflict markers (<<<<<<<, =======, >>>>>>>)
+5. Run \`git add <resolved-files>\` to mark them as resolved
+6. Commit with message: "Resolve merge conflicts from ${branch}"
+
+Make sure to preserve the functionality from both branches. Test if possible.`
+}
+
+/** Timeout for conflict resolution (5 minutes) */
+const CONFLICT_RESOLUTION_TIMEOUT_MS = 5 * 60 * 1000
+
+/**
+ * Resolves merge conflicts using the CodebuffClient.
+ */
+async function resolveConflictsWithClient(
+  client: CodebuffClient,
+  cwd: string,
+  branch: string,
+  storyId: string,
+  onProgress?: OrchestraProgressCallback,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const progressMsg = `🔧 Using AI to resolve conflicts from ${branch}...`
+    onProgress?.(progressMsg)
+    logger.info({}, progressMsg)
+    
+    const prompt = generateConflictResolutionPrompt(branch, storyId)
+    
+    // Create a timeout promise
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Conflict resolution timed out after ${CONFLICT_RESOLUTION_TIMEOUT_MS / 1000}s`))
+      }, CONFLICT_RESOLUTION_TIMEOUT_MS)
+    })
+    
+    const result = await Promise.race([
+      client.run({
+        agent: 'codebuff/base@latest',
+        prompt,
+        cwd,
+      }),
+      timeoutPromise,
+    ])
+    
+    // Check if the run resulted in an error
+    if (result.output?.type === 'error') {
+      return { success: false, error: result.output.message }
+    }
+    
+    // Check if conflicts are actually resolved
+    const statusResult = await runGitCommand(['status', '--porcelain'], cwd)
+    const hasUnmerged = statusResult.stdout.split('\n').some(line => 
+      line.startsWith('UU') || line.startsWith('AA') || line.startsWith('DD')
+    )
+    
+    if (hasUnmerged) {
+      return { success: false, error: 'Conflicts still present after resolution attempt' }
+    }
+    
+    logger.info({}, `Conflicts resolved for ${branch}`)
+    return { success: true }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    logger.error({ error }, `Conflict resolution failed: ${errorMessage}`)
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Attempts to merge a branch with automatic conflict resolution.
+ */
+async function mergeWithConflictResolution(
+  client: CodebuffClient,
+  branch: string,
+  baseBranch: string,
+  storyId: string,
+  projectRoot: string,
+  onProgress: OrchestraProgressCallback,
+): Promise<{ success: boolean; error?: string }> {
+  // First checkout base branch
+  const checkoutResult = await runGitCommand(['checkout', baseBranch], projectRoot)
+  if (checkoutResult.exitCode !== 0) {
+    return { success: false, error: `Failed to checkout ${baseBranch}: ${checkoutResult.stderr}` }
+  }
+  
+  // Try to merge
+  const mergeResult = await runGitCommand(['merge', branch, '--no-edit'], projectRoot)
+  
+  if (mergeResult.exitCode === 0) {
+    onProgress?.(`✅ Merged ${branch} successfully`)
+    return { success: true }
+  }
+  
+  // Check if it's a conflict
+  const hasConflicts = mergeResult.stderr.includes('CONFLICT') || 
+                       mergeResult.stdout.includes('CONFLICT') ||
+                       mergeResult.stderr.includes('Automatic merge failed')
+  
+  if (!hasConflicts) {
+    return { success: false, error: mergeResult.stderr || 'Merge failed' }
+  }
+  
+  onProgress?.(`⚠️ Merge conflicts detected for ${branch}, attempting AI resolution...`)
+  
+  // Try to resolve conflicts with AI
+  const resolution = await resolveConflictsWithClient(client, projectRoot, branch, storyId, onProgress)
+  
+  if (!resolution.success) {
+    // Abort the merge if we couldn't resolve
+    await runGitCommand(['merge', '--abort'], projectRoot)
+    return { success: false, error: `Failed to resolve conflicts: ${resolution.error}` }
+  }
+  
+  onProgress?.(`✅ Conflicts resolved and merged for ${branch}`)
+  return { success: true }
+}
+
+/**
+ * Main orchestration function that runs stories in parallel batches using the SDK.
+ */
+export async function handleRalphOrchestra(
+  prdName: string,
+  parallelism: number = 2,
+  onProgress?: OrchestraProgressCallback,
+): Promise<{
+  postUserMessage: PostUserMessageFn
+}> {
+  // IMPORTANT: Log immediately to confirm function is being called
+  console.log('\n\n==========================================')
+  console.log('[Orchestra] handleRalphOrchestra ENTERED')
+  console.log(`[Orchestra] prdName: "${prdName}", parallelism: ${parallelism}`)
+  console.log('==========================================\n')
+  
+  // Collect all log messages to display in final output
+  const logMessages: string[] = []
+  const log = (msg: string) => {
+    logMessages.push(msg)
+    // Also log immediately for visibility
+    logger.info({}, `[Orchestra] ${msg}`)
+    // Print to console for immediate user feedback
+    console.log(`[Orchestra] ${msg}`)
+    onProgress?.(msg)
+  }
+  
+  log('Getting SDK client...')
+  
+  // Get the SDK client
+  const client = await getCodebuffClient()
+  if (!client) {
+    log('Failed to get SDK client - authentication required')
+    const postUserMessage: PostUserMessageFn = (prev) => [
+      ...prev,
+      getSystemMessage(
+        '❌ Orchestra mode requires authentication.\n\n' +
+        'Please log in with `codebuff auth login` first.'
+      ),
+    ]
+    return { postUserMessage }
+  }
+  
+  log('SDK client obtained successfully')
+  log(`PRD name: "${prdName}"`)
+  
+  if (!prdName.trim()) {
+    log('PRD name is empty!')
+    const postUserMessage: PostUserMessageFn = (prev) => [
+      ...prev,
+      getSystemMessage(
+        '❌ Please specify a PRD name.\n\n' +
+        'Usage: /ralph orchestra <prd-name> [--parallelism N]\n' +
+        'Example: /ralph orchestra my-feature --parallelism 3'
+      ),
+    ]
+    return { postUserMessage }
+  }
+
+  log(`Loading PRD: ${prdName}`)
+  let prd = loadPRD(prdName)
+  if (!prd) {
+    log(`PRD not found: ${prdName}`)
+    const postUserMessage: PostUserMessageFn = (prev) => [
+      ...prev,
+      getSystemMessage(`❌ PRD not found: ${prdName}\n\nUse /ralph list to see available PRDs.`),
+    ]
+    return { postUserMessage }
+  }
+  log(`PRD loaded: ${prd.project} with ${prd.userStories.length} stories`)
+
+  const projectRoot = getProjectRoot()
+  log(`Project root: ${projectRoot}`)
+  const baseBranch = await getCurrentBranch()
+  const outputLines: string[] = [
+    `🎭 Orchestra Mode: "${prd.project}"`,
+    `   Base branch: ${baseBranch}`,
+    `   Parallelism: ${parallelism}`,
+    '',
+  ]
+  
+  log(`🎭 Starting Orchestra for "${prd.project}" with parallelism ${parallelism}`)
+
+  // Process stories in batches until all complete
+  let batchNumber = 0
+  while (true) {
+    // Reload PRD to get latest status
+    prd = loadPRD(prdName)
+    if (!prd) break
+    
+    // Get pending stories sorted by priority
+    const pendingStories = prd.userStories
+      .filter(s => !s.passes)
+      .sort((a, b) => a.priority - b.priority)
+    
+    if (pendingStories.length === 0) {
+      log('🎉 All stories complete!')
+      outputLines.push('🎉 All stories complete!')
+      break
+    }
+    
+    batchNumber++
+    const batch = pendingStories.slice(0, parallelism)
+    const completedCount = prd.userStories.filter(s => s.passes).length
+    const totalCount = prd.userStories.length
+    
+    log(`\n📦 Batch ${batchNumber}: ${batch.map(s => s.id).join(', ')} (${completedCount}/${totalCount} done)`)
+    outputLines.push(`📦 Batch ${batchNumber}: ${batch.map(s => s.id).join(', ')}`)
+    
+    // Phase 1: Create worktrees for this batch
+    log('Creating worktrees...')
+    const worktreeResults: Array<{
+      story: UserStory
+      worktreePath: string
+      branch: string
+      createSuccess: boolean
+      error?: string
+    }> = []
+    
+    for (const story of batch) {
+      log(`   Creating worktree for ${story.id}...`)
+      const result = await createStoryWorktree(prdName, story)
+      worktreeResults.push({
+        story,
+        worktreePath: result.worktreePath,
+        branch: result.branch,
+        createSuccess: result.success,
+        error: result.error,
+      })
+      
+      if (result.success) {
+        log(`   ✓ Created worktree for ${story.id} at ${result.worktreePath}`)
+      } else {
+        log(`   ✗ Failed to create worktree for ${story.id}: ${result.error}`)
+        outputLines.push(`   ✗ ${story.id}: ${result.error}`)
+      }
+    }
+    
+    const successfulWorktrees = worktreeResults.filter(r => r.createSuccess)
+    
+    if (successfulWorktrees.length === 0) {
+      log('❌ Failed to create any worktrees in this batch')
+      outputLines.push('   ❌ Failed to create worktrees')
+      break
+    }
+    
+    // Phase 2: Run stories in parallel using the SDK client
+    log('\nRunning stories in parallel...')
+    
+    // Generate prompts for each story
+    const storyPrompts = new Map<string, string>()
+    for (const { story } of successfulWorktrees) {
+      // Reload PRD to get current state
+      const currentPrd = loadPRD(prdName)
+      if (currentPrd) {
+        const prompt = generateStoryExecutionPrompt(currentPrd, story, prdName)
+        storyPrompts.set(story.id, prompt)
+      }
+    }
+    
+    // Run all stories in parallel
+    const runPromises = successfulWorktrees.map(async ({ story, worktreePath }) => {
+      const prompt = storyPrompts.get(story.id)
+      if (!prompt) {
+        return { story, success: false, error: 'No prompt generated' }
+      }
+      
+      log(`   🚀 Starting ${story.id}: ${story.title}`)
+      const result = await runStoryWithClient(client, worktreePath, prompt, story.id, log)
+      
+      if (result.success) {
+        log(`   ✅ Completed ${story.id}`)
+      } else {
+        log(`   ❌ Failed ${story.id}: ${result.error}`)
+      }
+      
+      return { story, ...result }
+    })
+    
+    await Promise.all(runPromises)
+    
+    // Phase 3: Check for commits and merge completed work
+    log('\nMerging completed work...')
+    
+    for (const { story } of successfulWorktrees) {
+      const branch = getStoryBranchName(prdName, story.id)
+      
+      // Check if the branch has a commit with the story ID
+      const hasCommit = await checkBranchHasStoryCommit(branch, story.id, baseBranch)
+      
+      if (!hasCommit) {
+        log(`   ⏳ ${story.id}: No completion commit found, skipping merge`)
+        continue
+      }
+      
+      // Try to merge with automatic conflict resolution
+      const mergeResult = await mergeWithConflictResolution(
+        client,
+        branch,
+        baseBranch,
+        story.id,
+        projectRoot,
+        log,
+      )
+      
+      if (mergeResult.success) {
+        // Mark story as complete
+        const updatedPrd = loadPRD(prdName)
+        if (updatedPrd) {
+          const storyToMark = updatedPrd.userStories.find(s => s.id === story.id)
+          if (storyToMark) {
+            storyToMark.passes = true
+            savePRD(prdName, updatedPrd)
+          }
+        }
+        
+        // Clean up worktree and branch
+        await cleanupStoryWorktree(prdName, story.id)
+        await deleteBranch(branch)
+        
+        log(`   ✅ ${story.id}: Merged and cleaned up`)
+        outputLines.push(`   ✅ ${story.id}: Complete`)
+      } else {
+        log(`   ❌ ${story.id}: Merge failed - ${mergeResult.error}`)
+        outputLines.push(`   ❌ ${story.id}: ${mergeResult.error}`)
+        
+        // Clean up the failed worktree
+        await cleanupStoryWorktree(prdName, story.id)
+      }
+    }
+    
+    // Brief pause between batches
+    await new Promise(resolve => setTimeout(resolve, 1000))
+  }
+  
+  // Final summary
+  const finalPrd = loadPRD(prdName)
+  if (finalPrd) {
+    const completedCount = finalPrd.userStories.filter(s => s.passes).length
+    const totalCount = finalPrd.userStories.length
+    outputLines.push('')
+    outputLines.push(`📊 Final: ${completedCount}/${totalCount} stories complete`)
+    
+    if (completedCount === totalCount) {
+      outputLines.push('🎉 All done! PRD fully implemented.')
+    } else {
+      const remaining = finalPrd.userStories.filter(s => !s.passes).map(s => s.id)
+      outputLines.push(`⚠️  Remaining: ${remaining.join(', ')}`)
+    }
+  }
+  
+  // Include debug log messages in output
+  if (logMessages.length > 0) {
+    outputLines.push('')
+    outputLines.push('Debug log:')
+    outputLines.push(...logMessages.map(m => `  ${m}`))
+  }
+  
+  const postUserMessage: PostUserMessageFn = (prev) => [
+    ...prev,
+    getSystemMessage(outputLines.join('\n')),
+  ]
+
+  return { postUserMessage }
+}
+
+// ============================================================================
+// Handoff - Create PRD from chat history
+// ============================================================================
+
 export function handleRalphHandoff(): {
   postUserMessage: PostUserMessageFn
   prdPrompt?: string
@@ -744,6 +1901,7 @@ export function handleRalphCommand(args: string): {
   prompt?: string
   prdName?: string
   storyId?: string
+  asyncHandler?: () => Promise<{ postUserMessage: PostUserMessageFn }>
 } {
   const trimmedArgs = args.trim()
   const [subcommand, ...rest] = trimmedArgs.split(/\s+/)
@@ -777,7 +1935,7 @@ export function handleRalphCommand(args: string): {
       }
     }
     
-    case 'run':
+    case 'run': {
       const runResult = handleRalphRun(restArgs)
       return {
         postUserMessage: runResult.postUserMessage,
@@ -785,13 +1943,79 @@ export function handleRalphCommand(args: string): {
         prdName: runResult.prdName,
         storyId: runResult.storyId,
       }
+    }
     
-    case 'edit':
+    case 'parallel': {
+      // /ralph parallel <prd-name> [story-ids...]
+      const [prdName, ...storyIds] = restArgs.split(/\s+/).filter(Boolean)
+      // Return placeholder and async handler
+      const postUserMessage: PostUserMessageFn = (prev) => [
+        ...prev,
+        getSystemMessage(`⏳ Setting up parallel execution for "${prdName}"...`),
+      ]
+      return {
+        postUserMessage,
+        asyncHandler: () => handleRalphParallel(prdName || '', storyIds),
+      }
+    }
+    
+    case 'merge': {
+      const postUserMessage: PostUserMessageFn = (prev) => [
+        ...prev,
+        getSystemMessage(`⏳ Merging parallel branches for "${restArgs}"...`),
+      ]
+      return {
+        postUserMessage,
+        asyncHandler: () => handleRalphMerge(restArgs),
+      }
+    }
+    
+    case 'cleanup': {
+      const postUserMessage: PostUserMessageFn = (prev) => [
+        ...prev,
+        getSystemMessage(`⏳ Cleaning up worktrees for "${restArgs}"...`),
+      ]
+      return {
+        postUserMessage,
+        asyncHandler: () => handleRalphCleanup(restArgs),
+      }
+    }
+    
+    case 'orchestra': {
+      // Parse: /ralph orchestra <prd-name> [--parallelism N]
+      const orchestraArgs = restArgs.split(/\s+/).filter(Boolean)
+      const prdNameArg = orchestraArgs[0] || ''
+      let parallelism = 2 // default
+      
+      const parallelismIndex = orchestraArgs.findIndex(a => a === '--parallelism' || a === '-p')
+      if (parallelismIndex >= 0 && orchestraArgs[parallelismIndex + 1]) {
+        const parsed = parseInt(orchestraArgs[parallelismIndex + 1], 10)
+        if (!isNaN(parsed) && parsed > 0 && parsed <= 10) {
+          parallelism = parsed
+        }
+      }
+      
+      const postUserMessage: PostUserMessageFn = (prev) => [
+        ...prev,
+        getSystemMessage(
+          `🎭 Starting Orchestra mode for "${prdNameArg}"...\n` +
+          `   Parallelism: ${parallelism}\n` +
+          `   This will run autonomously until all stories are complete.`
+        ),
+      ]
+      return {
+        postUserMessage,
+        asyncHandler: () => handleRalphOrchestra(prdNameArg, parallelism),
+      }
+    }
+    
+    case 'edit': {
       const editResult = handleRalphEdit(restArgs)
       return {
         postUserMessage: editResult.postUserMessage,
         prompt: editResult.editPrompt,
       }
+    }
     
     case 'delete':
       return handleRalphDelete(restArgs)
