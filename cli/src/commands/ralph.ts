@@ -6,7 +6,10 @@ import { getProjectRoot } from '../project-files'
 import { logger } from '../utils/logger'
 import { useChatStore } from '../state/chat-store'
 import { getCodebuffClient } from '../utils/codebuff-client'
+import { AGENT_MODE_TO_ID } from '../utils/constants'
 import { getSystemMessage, getUserMessage } from '../utils/message-history'
+
+import type { AgentMode } from '../utils/constants'
 
 import type { CodebuffClient } from '@codebuff/sdk'
 
@@ -440,14 +443,18 @@ async function deleteBranch(branch: string): Promise<void> {
 // PRD Generation Prompt
 // ============================================================================
 
-function generatePrdCreationPrompt(featureDescription: string, initialPrompt?: string): string {
+function generatePrdCreationPrompt(prdName: string, featureDescription?: string, initialPrompt?: string): string {
   const initialContext = initialPrompt 
     ? `\n\nThe user has provided additional context:\n"${initialPrompt}"\n\nUse this information to reduce the number of clarifying questions needed.`
     : ''
 
+  const featureContext = featureDescription
+    ? `The user wants to build: "${featureDescription}"${initialContext}`
+    : `The user wants to create a new PRD named "${prdName}".${initialContext}`
+
   return `You are helping create a PRD (Product Requirements Document) for autonomous development.
 
-The user wants to build: "${featureDescription}"${initialContext}
+${featureContext}
 
 Your task:
 1. Ask 3-5 clarifying questions to understand the scope, constraints, and acceptance criteria${initialPrompt ? ' (skip questions already answered by the initial context)' : ''}
@@ -459,7 +466,7 @@ Each user story should:
 - Have clear acceptance criteria that can be verified
 - Be ordered by priority (dependencies first)
 
-After gathering requirements, create the PRD file at: prd/${slugify(featureDescription)}.json
+After gathering requirements, create the PRD file at: prd/${prdName}.json
 
 Use this exact JSON structure:
 {
@@ -672,29 +679,38 @@ export function handleRalphStatus(prdName?: string): {
   return { postUserMessage }
 }
 
-export function handleRalphNew(featureDescription: string, initialPrompt?: string): {
+export function handleRalphNew(prdName: string, featureDescription?: string, initialPrompt?: string): {
   postUserMessage: PostUserMessageFn
   prdPrompt?: string
 } {
-  if (!featureDescription.trim()) {
+  if (!prdName.trim()) {
     const postUserMessage: PostUserMessageFn = (prev) => [
       ...prev,
       getSystemMessage(
-        '❌ Please provide a feature description.\n\n' +
+        '❌ Please provide a PRD name.\n\n' +
         'Examples:\n' +
-        '  /ralph new Add task priority system\n' +
-        '  /ralph new Add auth -- use OAuth2 with Google and GitHub'
+        '  /ralph new my-feature\n' +
+        '  /ralph new auth-system Add user authentication\n' +
+        '  /ralph new auth -- use OAuth2 with Google and GitHub'
       ),
     ]
     return { postUserMessage }
   }
 
-  // Generate the prompt for PRD creation
-  const prdPrompt = generatePrdCreationPrompt(featureDescription, initialPrompt)
+  // Slugify the PRD name to ensure valid filename
+  const safePrdName = slugify(prdName)
 
-  const userMessageText = initialPrompt 
-    ? `/ralph new ${featureDescription} -- ${initialPrompt}`
-    : `/ralph new ${featureDescription}`
+  // Generate the prompt for PRD creation
+  const prdPrompt = generatePrdCreationPrompt(safePrdName, featureDescription, initialPrompt)
+
+  // Build the user message text
+  let userMessageText = `/ralph new ${prdName}`
+  if (featureDescription) {
+    userMessageText += ` ${featureDescription}`
+  }
+  if (initialPrompt) {
+    userMessageText += ` -- ${initialPrompt}`
+  }
 
   const postUserMessage: PostUserMessageFn = (prev) => [
     ...prev,
@@ -846,8 +862,9 @@ export function handleRalphHelp(): {
     '',
     'Commands:',
     '  /ralph              - List all PRDs (or create new)',
-    '  /ralph new [desc]   - Create a new PRD interactively',
-    '  /ralph new [desc] -- [context] - Create PRD with initial context',
+    '  /ralph new [name]   - Create a new PRD with given name',
+    '  /ralph new [name] [desc] - Create PRD with name and description',
+    '  /ralph new [name] -- [context] - Create PRD with initial context',
     '  /ralph handoff      - Create PRD from current chat context',
     '  /ralph list         - List all PRDs with status',
     '  /ralph status [name]- Show detailed PRD status',
@@ -865,8 +882,9 @@ export function handleRalphHelp(): {
     '     Runs stories in parallel batches, auto-merges, resolves conflicts',
     '',
     'Workflow:',
-    '  1. /ralph new "Add user authentication"',
-    '     or: /ralph new "Add auth" -- use OAuth2 with Google',
+    '  1. /ralph new auth-feature',
+    '     or: /ralph new auth Add user authentication',
+    '     or: /ralph new auth -- use OAuth2 with Google',
     '     or: /ralph handoff (after discussing feature in chat)',
     '     → Codebuff asks clarifying questions',
     '     → Generates PRD with user stories',
@@ -1402,7 +1420,30 @@ export type OrchestraProgressCallback = (message: string) => void
 const STORY_EXECUTION_TIMEOUT_MS = 10 * 60 * 1000
 
 /**
+ * Checks if an error is a recoverable tool error that shouldn't stop execution.
+ * These errors typically mean the agent tried to use a tool that isn't available
+ * in the current environment but may have still made progress on the story.
+ */
+function isRecoverableToolError(errorMessage: string): boolean {
+  const recoverablePatterns = [
+    'AI_NoSuchToolError',
+    'NoSuchToolError', 
+    'unavailable tool',
+    'tool not found',
+    'run_file_change_hooks', // This specific tool isn't critical
+  ]
+  const lowerMessage = errorMessage.toLowerCase()
+  return recoverablePatterns.some(pattern => 
+    lowerMessage.includes(pattern.toLowerCase())
+  )
+}
+
+/** Default agent mode for orchestra execution */
+const DEFAULT_ORCHESTRA_MODE: AgentMode = 'DEFAULT'
+
+/**
  * Runs a story using the CodebuffClient in a worktree directory.
+ * Uses the same agent as the TUI (base2) for full tool access.
  */
 async function runStoryWithClient(
   client: CodebuffClient,
@@ -1410,7 +1451,7 @@ async function runStoryWithClient(
   storyPrompt: string,
   storyId: string,
   onProgress?: OrchestraProgressCallback,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; partialSuccess?: boolean }> {
   try {
     const progressMsg = `Running story ${storyId} in ${worktreePath}...`
     onProgress?.(progressMsg)
@@ -1427,10 +1468,14 @@ async function runStoryWithClient(
       }, STORY_EXECUTION_TIMEOUT_MS)
     })
     
+    // Use the same agent as the TUI for full tool access
+    const agentId = AGENT_MODE_TO_ID[DEFAULT_ORCHESTRA_MODE]
+    logger.info({}, `[Orchestra] Using agent: ${agentId}`)
+    
     // Race between the run and timeout
     const result = await Promise.race([
       client.run({
-        agent: 'codebuff/base@latest',
+        agent: agentId,
         prompt: storyPrompt,
         cwd: worktreePath,
       }),
@@ -1439,15 +1484,32 @@ async function runStoryWithClient(
     
     // Check if the run resulted in an error
     if (result.output?.type === 'error') {
-      const errorMsg = `Story ${storyId} failed: ${result.output.message}`
-      logger.error({}, errorMsg)
-      return { success: false, error: result.output.message }
+      const errorMsg = result.output.message
+      
+      // Check if this is a recoverable tool error
+      // The agent may have still made progress even if a non-critical tool failed
+      if (isRecoverableToolError(errorMsg)) {
+        logger.warn({}, `Story ${storyId} had a tool error but may have partial progress: ${errorMsg}`)
+        onProgress?.(`⚠️ ${storyId}: Tool error (checking for progress anyway)`)
+        return { success: false, error: errorMsg, partialSuccess: true }
+      }
+      
+      logger.error({}, `Story ${storyId} failed: ${errorMsg}`)
+      return { success: false, error: errorMsg }
     }
     
     logger.info({}, `Story ${storyId} completed successfully`)
     return { success: true }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
+    
+    // Check if this is a recoverable tool error
+    if (isRecoverableToolError(errorMessage)) {
+      logger.warn({}, `Story ${storyId} threw a tool error but may have partial progress: ${errorMessage}`)
+      onProgress?.(`⚠️ ${storyId}: Tool error (checking for progress anyway)`)
+      return { success: false, error: errorMessage, partialSuccess: true }
+    }
+    
     logger.error({ error }, `Story execution failed: ${errorMessage}`)
     return { success: false, error: errorMessage }
   }
@@ -1498,9 +1560,12 @@ async function resolveConflictsWithClient(
       }, CONFLICT_RESOLUTION_TIMEOUT_MS)
     })
     
+    // Use the same agent as the TUI for full tool access
+    const agentId = AGENT_MODE_TO_ID[DEFAULT_ORCHESTRA_MODE]
+    
     const result = await Promise.race([
       client.run({
-        agent: 'codebuff/base@latest',
+        agent: agentId,
         prompt,
         cwd,
       }),
@@ -1925,10 +1990,16 @@ export function handleRalphCommand(args: string): {
     }
     
     case 'new': {
-      // Support syntax: /ralph new <feature> -- <initial prompt>
-      const [featureDesc, ...promptParts] = restArgs.split(' -- ')
+      // Support syntax: /ralph new <name> [description] [-- <initial prompt>]
+      const [mainPart, ...promptParts] = restArgs.split(' -- ')
       const initialPrompt = promptParts.join(' -- ').trim() || undefined
-      const newResult = handleRalphNew(featureDesc.trim(), initialPrompt)
+      
+      // First word is the PRD name, rest is optional feature description
+      const words = mainPart.trim().split(/\s+/)
+      const prdName = words[0] || ''
+      const featureDescription = words.slice(1).join(' ').trim() || undefined
+      
+      const newResult = handleRalphNew(prdName, featureDescription, initialPrompt)
       return {
         postUserMessage: newResult.postUserMessage,
         prompt: newResult.prdPrompt,
@@ -2026,11 +2097,16 @@ export function handleRalphCommand(args: string): {
       return handleRalphHelp()
     
     default: {
-      // Treat as "new" with the full args as feature description
-      // Support syntax: /ralph <feature> -- <initial prompt>
-      const [featureDesc, ...promptParts] = trimmedArgs.split(' -- ')
+      // Treat as "new" with the first word as PRD name, rest as description
+      // Support syntax: /ralph <name> [description] [-- <initial prompt>]
+      const [mainPart, ...promptParts] = trimmedArgs.split(' -- ')
       const initialPrompt = promptParts.join(' -- ').trim() || undefined
-      const defaultResult = handleRalphNew(featureDesc.trim(), initialPrompt)
+      
+      const words = mainPart.trim().split(/\s+/)
+      const prdName = words[0] || ''
+      const featureDescription = words.slice(1).join(' ').trim() || undefined
+      
+      const defaultResult = handleRalphNew(prdName, featureDescription, initialPrompt)
       return {
         postUserMessage: defaultResult.postUserMessage,
         prompt: defaultResult.prdPrompt,
