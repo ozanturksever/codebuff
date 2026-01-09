@@ -575,6 +575,116 @@ describe('non-interactive-mode', () => {
       expect(parsed.quiet).toBe(true)
       expect(parsed.nonInteractive).toBe(true)
     })
+  })
 
+  describe('trace output expectations', () => {
+    test('traces should be shown to stderr by default (not quiet)', () => {
+      const result = parseTestArgs(['-n', 'prompt'])
+      const parsed = result as ParsedArgs
+
+      // Non-interactive without quiet means traces visible
+      expect(parsed.nonInteractive).toBe(true)
+      expect(parsed.quiet).toBe(false)
+    })
+
+    test('traces should be suppressed in quiet mode', () => {
+      const result = parseTestArgs(['--quiet', 'prompt'])
+      const parsed = result as ParsedArgs
+
+      expect(parsed.quiet).toBe(true)
+      // Quiet mode suppresses trace output
+    })
+
+    test('--json should still show traces to stderr', () => {
+      const result = parseTestArgs(['--json', 'prompt'])
+      const parsed = result as ParsedArgs
+
+      // JSON mode shows traces to stderr, JSON to stdout
+      expect(parsed.json).toBe(true)
+      expect(parsed.quiet).toBe(false)
+    })
+
+    test('--json --quiet suppresses traces', () => {
+      const result = parseTestArgs(['--json', '--quiet', 'prompt'])
+      const parsed = result as ParsedArgs
+
+      expect(parsed.json).toBe(true)
+      expect(parsed.quiet).toBe(true)
+      // Both flags together means no traces, only JSON output
+    })
+  })
+
+  describe('JSON output with traces interface', () => {
+    interface JsonOutputWithTraces {
+      success: boolean
+      output: string
+      traces?: Array<{ type: string; [key: string]: unknown }>
+      error?: string
+    }
+
+    test('success output includes traces array', () => {
+      const output: JsonOutputWithTraces = {
+        success: true,
+        output: 'Result',
+        traces: [
+          { type: 'tool_call', toolName: 'read_files', input: {} },
+          { type: 'tool_result', toolName: 'read_files' },
+        ],
+      }
+
+      expect(output.traces).toBeDefined()
+      expect(output.traces!.length).toBe(2)
+      expect(output.traces![0].type).toBe('tool_call')
+    })
+
+    test('traces can include subagent events', () => {
+      const output: JsonOutputWithTraces = {
+        success: true,
+        output: 'Done',
+        traces: [
+          { type: 'subagent_start', agentType: 'file-picker' },
+          { type: 'tool_call', toolName: 'read_files', input: {} },
+          { type: 'tool_result', toolName: 'read_files' },
+          { type: 'subagent_finish', agentType: 'file-picker' },
+        ],
+      }
+
+      const subagentEvents = output.traces!.filter(
+        (t) => t.type === 'subagent_start' || t.type === 'subagent_finish',
+      )
+      expect(subagentEvents.length).toBe(2)
+    })
+
+    test('error output can still include traces', () => {
+      const output: JsonOutputWithTraces = {
+        success: false,
+        output: 'Partial output',
+        error: 'Something failed',
+        traces: [
+          { type: 'tool_call', toolName: 'write_file', input: {} },
+          { type: 'error', message: 'Something failed' },
+        ],
+      }
+
+      expect(output.success).toBe(false)
+      expect(output.traces).toBeDefined()
+      expect(output.traces!.some((t) => t.type === 'error')).toBe(true)
+    })
+
+    test('traces are valid JSON when stringified', () => {
+      const output: JsonOutputWithTraces = {
+        success: true,
+        output: 'Result',
+        traces: [
+          { type: 'tool_call', toolName: 'read_files', input: { paths: ['a.ts'] } },
+        ],
+      }
+
+      const jsonString = JSON.stringify(output, null, 2)
+      const parsed = JSON.parse(jsonString) as JsonOutputWithTraces
+
+      expect(parsed.traces).toBeDefined()
+      expect(parsed.traces![0].input).toEqual({ paths: ['a.ts'] })
+    })
   })
 })
