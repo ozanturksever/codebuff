@@ -175,6 +175,23 @@ export async function callMainPrompt(
     })
   }
 
+  // Determine the main agent type and template for the start event
+  const mainAgentType =
+    action.agentId ??
+    ({
+      ask: AgentTemplateTypes.ask,
+      lite: AgentTemplateTypes.base_lite,
+      normal: AgentTemplateTypes.base,
+      max: AgentTemplateTypes.base_max,
+      experimental: 'base2',
+    } as const)[action.costMode ?? 'normal']
+
+  const mainAgentTemplate = await getAgentTemplate({
+    ...params,
+    localAgentTemplates,
+    agentId: mainAgentType,
+  })
+
   sendAction({
     action: {
       type: 'response-chunk',
@@ -182,6 +199,7 @@ export async function callMainPrompt(
       chunk: {
         type: 'start',
         agentId: action.sessionState.mainAgentState.agentType ?? undefined,
+        model: mainAgentTemplate?.model,
         messageHistoryLength:
           action.sessionState.mainAgentState.messageHistory.length,
       },

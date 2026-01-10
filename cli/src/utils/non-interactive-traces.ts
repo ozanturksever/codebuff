@@ -70,7 +70,15 @@ export function formatTraceEvent(
   state: TraceState,
 ): FormattedTrace | null {
   switch (event.type) {
-    case 'start':
+    case 'start': {
+      // Show main agent start with model info
+      if (event.model) {
+        const agentLabel = event.agentId || 'agent'
+        return { type: 'line', text: dim(`[${cyan(agentLabel)}] (${event.model})`) }
+      }
+      return null
+    }
+
     case 'download':
     case 'reasoning_delta':
     case 'text':
@@ -79,6 +87,9 @@ export function formatTraceEvent(
 
     case 'subagent_start': {
       let line = dim(`[${cyan(event.agentType || 'agent')}]`)
+      if (event.model) {
+        line += dim(` (${event.model})`)
+      }
       if (event.prompt) {
         const promptPreview = event.prompt.length > 80 ? event.prompt.slice(0, 80) + '...' : event.prompt
         line += dim(` ${promptPreview}`)
@@ -165,10 +176,12 @@ export function simplifyEventForJson(
       return { type: 'tool_call', toolName: event.toolName, input: event.input }
     case 'tool_result':
       return { type: 'tool_result', toolName: event.toolName }
+    case 'start':
+      return event.model ? { type: 'start', agentId: event.agentId, model: event.model } : null
     case 'subagent_start':
-      return { type: 'subagent_start', agentType: event.agentType }
+      return { type: 'subagent_start', agentType: event.agentType, model: event.model }
     case 'subagent_finish':
-      return { type: 'subagent_finish', agentType: event.agentType }
+      return { type: 'subagent_finish', agentType: event.agentType, model: event.model }
     case 'error':
       return { type: 'error', message: event.message }
     default:

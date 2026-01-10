@@ -31,6 +31,7 @@ export const resolveSpawnAgentToReal = (options: {
   parentAgentId?: string
   params?: Record<string, unknown>
   prompt?: string
+  model?: string
 }): ContentBlock[] => {
   const {
     blocks,
@@ -39,6 +40,7 @@ export const resolveSpawnAgentToReal = (options: {
     parentAgentId,
     params: agentParams,
     prompt,
+    model,
   } = options
 
   return moveSpawnAgentBlock(
@@ -48,5 +50,6 @@ export const resolveSpawnAgentToReal = (options: {
     parentAgentId,
     agentParams,
     prompt,
+    model,
   )
 }

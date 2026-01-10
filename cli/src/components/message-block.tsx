@@ -788,6 +788,7 @@ const AgentBranchWrapper = memo(
           name={agentBlock.agentName}
           prompt={agentBlock.initialPrompt}
           agentId={agentBlock.agentId}
+          model={agentBlock.model}
           isCollapsed={isCollapsed}
           isStreaming={isStreaming}
           streamingPreview={streamingPreview}

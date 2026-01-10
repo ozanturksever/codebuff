@@ -41,6 +41,8 @@ export type AgentContentBlock = {
   agentId: string
   agentName: string
   agentType: string
+  /** The AI model used by this agent (e.g. 'anthropic/claude-sonnet-4.5') */
+  model?: string
   content: string
   status: 'running' | 'complete' | 'failed'
   blocks?: ContentBlock[]

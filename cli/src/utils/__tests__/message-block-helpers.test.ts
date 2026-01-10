@@ -772,6 +772,115 @@ describe('moveSpawnAgentBlock', () => {
     expect(result[1]).toMatchObject({ agentId: 'real-b' })
     expect(result[2]).toMatchObject({ agentId: 'real-c' })
   })
+
+  test('propagates model when provided', () => {
+    const blocks: ContentBlock[] = [
+      {
+        type: 'agent',
+        agentId: 'temp',
+        agentName: 'Temp',
+        agentType: 'file-picker',
+        content: '',
+        status: 'running',
+        blocks: [],
+        initialPrompt: '',
+      },
+    ]
+    const result = moveSpawnAgentBlock(
+      blocks,
+      'temp',
+      'real',
+      undefined,
+      undefined,
+      undefined,
+      'anthropic/claude-sonnet-4.5',
+    )
+    expect((result[0] as any).model).toBe('anthropic/claude-sonnet-4.5')
+  })
+
+  test('propagates model along with params and prompt', () => {
+    const blocks: ContentBlock[] = [
+      {
+        type: 'agent',
+        agentId: 'temp',
+        agentName: 'Temp',
+        agentType: 'commander',
+        content: '',
+        status: 'running',
+        blocks: [],
+        initialPrompt: '',
+      },
+    ]
+    const result = moveSpawnAgentBlock(
+      blocks,
+      'temp',
+      'real',
+      undefined,
+      { command: 'echo hello' },
+      'Run a command',
+      'openai/gpt-4o',
+    )
+    const block = result[0] as any
+    expect(block.agentId).toBe('real')
+    expect(block.params).toEqual({ command: 'echo hello' })
+    expect(block.initialPrompt).toBe('Run a command')
+    expect(block.model).toBe('openai/gpt-4o')
+  })
+
+  test('propagates model when nesting under parent', () => {
+    const blocks: ContentBlock[] = [
+      {
+        type: 'agent',
+        agentId: 'parent',
+        agentName: 'Parent',
+        agentType: 'parent',
+        content: '',
+        status: 'running',
+        blocks: [
+          {
+            type: 'agent',
+            agentId: 'temp',
+            agentName: 'Child',
+            agentType: 'thinker',
+            content: '',
+            status: 'running',
+            blocks: [],
+            initialPrompt: '',
+          },
+        ],
+        initialPrompt: '',
+      },
+    ]
+    const result = moveSpawnAgentBlock(
+      blocks,
+      'temp',
+      'real',
+      'parent',
+      undefined,
+      undefined,
+      'anthropic/claude-opus-4',
+    )
+    const parent = result[0] as any
+    expect(parent.blocks[0].agentId).toBe('real')
+    expect(parent.blocks[0].model).toBe('anthropic/claude-opus-4')
+  })
+
+  test('does not set model when not provided', () => {
+    const blocks: ContentBlock[] = [
+      {
+        type: 'agent',
+        agentId: 'temp',
+        agentName: 'Temp',
+        agentType: 'file-picker',
+        content: '',
+        status: 'running',
+        blocks: [],
+        initialPrompt: '',
+      },
+    ]
+    const result = moveSpawnAgentBlock(blocks, 'temp', 'real')
+    expect((result[0] as any).model).toBeUndefined()
+  })
 })
 
 describe('extractBlockById', () => {
