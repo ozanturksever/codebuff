@@ -95,12 +95,16 @@ const definition: AgentDefinition = {
       properties: {
         mode: {
           type: 'string',
-          enum: ['create', 'run', 'status', 'parallel'],
-          description: 'Operation mode: create (new PRD), run (next story), status (show progress), parallel (run multiple stories)',
+          enum: ['create', 'run', 'status', 'list', 'parallel'],
+          description: 'Operation mode: create (new PRD), run (next story), status (show progress), list (show PRDs), parallel (run multiple stories)',
         },
         prdName: {
           type: 'string',
           description: 'Name of the PRD file (without .json extension)',
+        },
+        featureDescription: {
+          type: 'string',
+          description: 'Description of the feature for create mode',
         },
         parallelism: {
           type: 'number',
@@ -209,15 +213,243 @@ Be proactive, thorough, and guide the user through the entire feature developmen
   handleSteps: function* ({ prompt, params, logger }) {
     const mode = params?.mode as string | undefined
     const prdName = params?.prdName as string | undefined
+    const featureDescription = params?.featureDescription as string | undefined
     const parallelism = Math.min(Math.max((params?.parallelism as number) || 2, 1), 5)
     const storyIds = params?.storyIds as string[] | undefined
 
-    // Only use programmatic handleSteps for explicit parallel mode with structured params
-    // For all other modes (create, run, status, etc.), let the LLM handle naturally
-    // This avoids issues with STEP_ALL and interactive tools like ask_user
+    // Handle different modes with programmatic steps
+    // This ensures Ralph provides concrete, actionable prompts like oldralph does
+
+    // ========== LIST MODE ==========
+    if (mode === 'list') {
+      logger.info('Listing PRDs...')
+      
+      // List the prd directory
+      const { toolResult: listResult } = yield {
+        toolName: 'list_directory',
+        input: { path: 'prd' },
+      } as ToolCall<'list_directory'>
+
+      const listPrompt = `List all PRD files in the prd/ directory and show their status.
+
+Directory contents: ${JSON.stringify(listResult)}
+
+For each .json file found:
+1. Read the PRD file
+2. Count total stories and completed stories (passes=true)
+3. Show a formatted list like:
+   📋 PRDs
+   
+   ✅ prd-name - Description (if all complete)
+   2/5 prd-name - Description (if incomplete)
+
+If no PRDs found, suggest creating one with /ralph new <name>.`
+
+      yield { type: 'STEP_TEXT', text: listPrompt } as StepText
+      yield 'STEP_ALL'
+      return
+    }
+
+    // ========== STATUS MODE ==========
+    if (mode === 'status' && prdName) {
+      logger.info(`Getting status for PRD: ${prdName}`)
+      
+      const { toolResult: prdReadResult } = yield {
+        toolName: 'read_files',
+        input: { paths: [`prd/${prdName}.json`] },
+      } as ToolCall<'read_files'>
+
+      const prdContent = prdReadResult?.[0]
+      if (!prdContent || (typeof prdContent === 'object' && 'error' in prdContent)) {
+        yield {
+          toolName: 'set_output',
+          input: { message: `PRD not found: ${prdName}. Use /ralph list to see available PRDs.` },
+        } as ToolCall<'set_output'>
+        return
+      }
+
+      const statusPrompt = `Show the status of PRD "${prdName}".
+
+PRD Content:
+${typeof prdContent === 'string' ? prdContent : JSON.stringify(prdContent, null, 2)}
+
+Provide a formatted status report:
+1. PRD name and description
+2. Progress: X/Y stories complete
+3. List all stories with status icons:
+   ✅ [priority] story-id: title (if passes=true)
+   ○ [priority] story-id: title (if passes=false)
+4. Show which story is next (lowest priority with passes=false)
+5. Suggest using /ralph run ${prdName} to execute the next story`
+
+      yield { type: 'STEP_TEXT', text: statusPrompt } as StepText
+      yield 'STEP_ALL'
+      return
+    }
+
+    // ========== CREATE MODE ==========
+    if (mode === 'create' && prdName) {
+      logger.info(`Creating new PRD: ${prdName}`)
+      
+      const featureContext = featureDescription
+        ? `The user wants to build: "${featureDescription}"`
+        : `The user wants to create a new PRD named "${prdName}".`
+
+      const createPrompt = `You are helping create a PRD (Product Requirements Document) for autonomous development.
+
+${featureContext}
+
+Your task:
+1. Ask 3-5 clarifying questions to understand the scope, constraints, and acceptance criteria
+2. Use the ask_user tool to get answers
+3. Based on the answers, generate a PRD with well-scoped user stories
+
+Each user story should:
+- Be small enough to complete in one context window (single focused change)
+- Have clear acceptance criteria that can be verified
+- Be ordered by priority (dependencies first)
+
+After gathering requirements, create the PRD file at: prd/${prdName}.json
+
+Use this exact JSON structure:
+${PRD_JSON_SCHEMA}
+
+Start by asking clarifying questions about the feature.`
+
+      yield { type: 'STEP_TEXT', text: createPrompt } as StepText
+      yield 'STEP_ALL'
+      return
+    }
+
+    // ========== RUN MODE ==========
+    if (mode === 'run' && prdName) {
+      logger.info(`Running next story for PRD: ${prdName}`)
+      
+      // Step 1: Read the PRD file
+      const { toolResult: prdReadResult } = yield {
+        toolName: 'read_files',
+        input: { paths: [`prd/${prdName}.json`] },
+      } as ToolCall<'read_files'>
+
+      const prdContent = prdReadResult?.[0]
+      if (!prdContent || (typeof prdContent === 'object' && 'error' in prdContent)) {
+        yield {
+          toolName: 'set_output',
+          input: { message: `PRD not found: ${prdName}. Use /ralph list to see available PRDs.` },
+        } as ToolCall<'set_output'>
+        return
+      }
+
+      // Step 2: Parse the PRD
+      let prd: { 
+        project: string
+        description: string
+        userStories: Array<{ 
+          id: string
+          title: string
+          description: string
+          acceptanceCriteria: string[]
+          priority: number
+          passes: boolean
+          notes?: string
+        }> 
+      }
+      try {
+        const content = typeof prdContent === 'string' ? prdContent : JSON.stringify(prdContent)
+        prd = JSON.parse(content)
+      } catch {
+        yield {
+          toolName: 'set_output',
+          input: { message: `Failed to parse PRD: ${prdName}` },
+        } as ToolCall<'set_output'>
+        return
+      }
+
+      // Step 3: Find next pending story
+      const pendingStories = prd.userStories
+        .filter(s => !s.passes)
+        .sort((a, b) => a.priority - b.priority)
+
+      if (pendingStories.length === 0) {
+        yield {
+          toolName: 'set_output',
+          input: { message: `🎉 All stories in "${prd.project}" are complete!` },
+        } as ToolCall<'set_output'>
+        return
+      }
+
+      const nextStory = pendingStories[0]
+      const completedCount = prd.userStories.filter(s => s.passes).length
+      const totalCount = prd.userStories.length
+      const isLastStory = completedCount + 1 === totalCount
+
+      logger.info(`Running story ${nextStory.id}: ${nextStory.title} (${completedCount + 1}/${totalCount})`)
+
+      // Step 4: Generate detailed execution prompt (like generateStoryExecutionPrompt)
+      const storyPrompt = `You are working on PRD: "${prd.project}" (${completedCount}/${totalCount} stories complete)
+
+## Current Story: ${nextStory.id} - ${nextStory.title}
+
+**Description:** ${nextStory.description}
+
+**Acceptance Criteria:**
+${nextStory.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+
+${nextStory.notes ? `**Notes:** ${nextStory.notes}` : ''}
+
+## Development Approach: Test-Driven Development (TDD)
+
+Follow TDD principles strictly:
+
+1. **Write tests FIRST** - Before implementing any feature code:
+   - Write unit tests for the core logic/functions
+   - Write e2e/integration tests for the user-facing behavior
+   - Tests should initially fail (red phase)
+
+2. **Implement minimal code** - Write just enough code to make tests pass (green phase)
+
+3. **Refactor** - Clean up while keeping tests green
+
+### Testing Guidelines:
+
+- **Prefer real implementations over mocks** - Only use mocks when absolutely necessary (e.g., external APIs, payment systems)
+- **Unit tests** for business logic, utilities, and pure functions
+- **E2E/Integration tests** for API endpoints, user flows, and feature behavior
+- **All acceptance criteria must have corresponding tests**
+
+### Validation Before Proceeding:
+
+- All tests must pass before marking the story complete
+- Run the full test suite for affected areas
+- Typecheck and lint must also pass
+
+## Instructions
+
+1. Write failing tests for this story's acceptance criteria
+2. Implement the feature to make tests pass
+3. Refactor if needed while keeping tests green
+4. Run quality checks (typecheck, lint, test)
+5. If all checks pass, commit with message: "feat: ${nextStory.id} - ${nextStory.title}"
+6. Update any relevant knowledge files with learnings
+
+After completing the story:
+- Use str_replace to update the PRD: Mark story ${nextStory.id} as passes: true
+- The PRD file is at: prd/${prdName}.json
+
+Keep changes focused and minimal. Only implement what's needed for this story.
+
+${isLastStory 
+        ? '\n**This is the last story!** After completing it, suggest followups for next steps the user might want to take.'
+        : '\n**Important:** After completing this story successfully, use suggest_followups to suggest "Continue to next story" as the first option so Ralph can automatically proceed to the next story.'}`
+
+      yield { type: 'STEP_TEXT', text: storyPrompt } as StepText
+      yield 'STEP_ALL'
+      return
+    }
+
+    // ========== PARALLEL MODE ==========
     if (mode !== 'parallel' || !prdName) {
-      // Return immediately - no programmatic steps needed
-      // The LLM will handle everything based on the instructionsPrompt
+      // No recognized mode with required params - let LLM handle based on prompt
       return
     }
 

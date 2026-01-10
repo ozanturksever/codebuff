@@ -577,43 +577,37 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
       params.saveToHistory(params.inputValue.trim())
       clearInput(params)
 
-      // Build the prompt to spawn the Ralph agent
-      // If user provided arguments, include them in the prompt
-      let prompt: string
-      if (trimmedArgs) {
-        if (subcommand === 'run') {
-          const prdName = words.slice(1).join(' ') || ''
-          prompt = `@ralph Run the next pending story in PRD "${prdName}"`
-        } else if (subcommand === 'new' || subcommand === 'create') {
-          const featureDesc = words.slice(1).join(' ') || ''
-          prompt = `@ralph Create a new PRD${featureDesc ? ` for: ${featureDesc}` : ''}`
-        } else if (subcommand === 'status') {
-          const prdName = words.slice(1).join(' ') || ''
-          prompt = `@ralph Show status of PRD "${prdName}"`
-        } else if (subcommand === 'list') {
-          prompt = '@ralph List all PRDs in this project'
-        } else if (subcommand === 'help') {
-          prompt = '@ralph Show help and usage information'
+      // Use the same approach as oldralph - delegate to handleRalphCommand for concrete prompts
+      // This ensures we get the same detailed prompts that actually work
+      const result = handleRalphCommand(trimmedArgs)
+
+      // If there's a prompt to send (new PRD creation, run story, edit)
+      if (result.prompt) {
+        // If running a story, start a Ralph session for auto-continue
+        if (result.prdName && result.storyId) {
+          useRalphStore.getState().startSession(result.prdName, result.storyId)
         } else {
-          // Treat as a general request to Ralph
-          prompt = `@ralph ${trimmedArgs}`
+          // Clear any existing session for other commands (new, edit)
+          useRalphStore.getState().clearSession()
         }
-      } else {
-        // No args - show help/list PRDs
-        prompt = '@ralph List all PRDs and show how I can help with PRD-driven development'
+
+        // Clear messages for fresh context, then send the prompt
+        params.setMessages(() => [])
+        params.clearMessages()
+        params.setCanProcessQueue(true)
+        params.sendMessage({
+          content: result.prompt,
+          agentMode: useAgentMode,
+          postUserMessage: result.postUserMessage,
+        })
+        setTimeout(() => {
+          params.scrollToLatest()
+        }, 0)
+        return
       }
 
-      // Clear messages for fresh context and send to Ralph agent (or Ralph Lite if lite subcommand)
-      params.setMessages(() => [])
-      params.clearMessages()
-      params.setCanProcessQueue(true)
-      params.sendMessage({
-        content: prompt,
-        agentMode: useAgentMode,
-      })
-      setTimeout(() => {
-        params.scrollToLatest()
-      }, 0)
+      // Otherwise just show the message (list, status, delete, help)
+      params.setMessages((prev) => result.postUserMessage(prev))
     },
   }),
   defineCommandWithArgs({
