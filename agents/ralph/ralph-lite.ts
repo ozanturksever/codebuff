@@ -23,7 +23,10 @@ const PRD_JSON_SCHEMA = `{
   "updatedAt": "ISO timestamp"
 }`
 
-const STORY_WORKER_PROMPT = `You are working on a single user story from a PRD. Follow these steps:
+// Worker prompt types
+type WorkerPromptType = 'tdd' | 'e2e' | 'minimal'
+
+const STORY_WORKER_PROMPT_TDD = `You are working on a single user story from a PRD. Follow these steps:
 
 1. **Write tests FIRST** - Before implementing any feature code:
    - Write unit tests for the core logic/functions
@@ -42,6 +45,58 @@ const STORY_WORKER_PROMPT = `You are working on a single user story from a PRD. 
 5. **Update PRD**: Mark the story's \`passes\` field as \`true\` in the PRD file
 
 Keep changes focused and minimal. Only implement what's needed for this story.`
+
+const STORY_WORKER_PROMPT_E2E = `You are working on a single user story from a PRD. Follow these steps:
+
+1. **Write E2E tests FIRST** - Before implementing any feature code:
+   - Write e2e/integration tests for the user-facing behavior
+   - Focus on testing from the user's perspective
+   - Skip unit tests - focus on end-to-end behavior
+   - Use Docker, docker-compose, or Testcontainers for real dependencies
+   - Prefer real implementations over mocks - only mock when absolutely unavoidable
+   - Use test/sandbox API keys where available, or generate temporary test credentials
+   - Tests should initially fail (red phase)
+
+2. **Implement minimal code** - Write just enough code to make tests pass (green phase)
+
+3. **Refactor** - Clean up while keeping tests green
+
+4. **Validation**:
+   - All e2e tests must pass
+   - Typecheck and lint must pass
+   - Commit with message: "feat: <story-id> - <story-title>"
+
+5. **Update PRD**: Mark the story's \`passes\` field as \`true\` in the PRD file
+
+Keep changes focused and minimal. Only implement what's needed for this story.`
+
+const STORY_WORKER_PROMPT_MINIMAL = `You are working on a single user story from a PRD. Follow these steps:
+
+1. **Implement the feature directly** - No tests required:
+   - Build what's needed to satisfy the acceptance criteria
+   - Focus on getting it working, not on test coverage
+   - This is for quick prototyping and proof-of-concept work
+
+2. **Keep it simple** - Write clean, working code
+
+3. **Manual verification** - Verify the feature works by running it manually
+
+4. **Validation**:
+   - Feature works as expected
+   - Typecheck and lint must pass
+   - Commit with message: "feat: <story-id> - <story-title>"
+
+5. **Update PRD**: Mark the story's \`passes\` field as \`true\` in the PRD file
+
+Keep changes focused and minimal. Only implement what's needed for this story.
+
+⚠️ Note: Tests should be added before merging to production.`
+
+function getWorkerPrompt(type: WorkerPromptType): string {
+  if (type === 'e2e') return STORY_WORKER_PROMPT_E2E
+  if (type === 'minimal') return STORY_WORKER_PROMPT_MINIMAL
+  return STORY_WORKER_PROMPT_TDD
+}
 
 const definition: AgentDefinition = {
   id: 'ralph-lite',
@@ -110,6 +165,11 @@ const definition: AgentDefinition = {
           type: 'array',
           items: { type: 'string' },
           description: 'Specific story IDs to run in parallel (optional, defaults to next N pending stories)',
+        },
+        workerPromptType: {
+          type: 'string',
+          enum: ['tdd', 'e2e', 'minimal'],
+          description: 'Worker prompt type: tdd (unit + e2e tests, default), e2e (e2e tests only), minimal (no tests, prototyping)',
         },
       },
     },
@@ -199,6 +259,7 @@ Be proactive, thorough, and guide the user through the entire feature developmen
     const featureDescription = params?.featureDescription as string | undefined
     const parallelism = Math.min(Math.max((params?.parallelism as number) || 2, 1), 5)
     const storyIds = params?.storyIds as string[] | undefined
+    const workerPromptType = (params?.workerPromptType as WorkerPromptType) || 'tdd'
 
     // Handle different modes with programmatic steps
     // This ensures Ralph provides concrete, actionable prompts like oldralph does
@@ -366,21 +427,67 @@ Start by asking clarifying questions about the feature.`
       const totalCount = prd.userStories.length
       const isLastStory = completedCount + 1 === totalCount
 
-      logger.info(`Running story ${nextStory.id}: ${nextStory.title} (${completedCount + 1}/${totalCount})`)
+      const workerLabel = workerPromptType === 'tdd' ? 'TDD (unit + e2e tests)' : workerPromptType === 'e2e' ? 'E2E-only' : 'Minimal (no tests)'
+      logger.info(`Running story ${nextStory.id}: ${nextStory.title} (${completedCount + 1}/${totalCount}) [${workerLabel}]`)
 
-      // Step 4: Generate detailed execution prompt (like generateStoryExecutionPrompt)
-      const storyPrompt = `You are working on PRD: "${prd.project}" (${completedCount}/${totalCount} stories complete)
+      // Generate testing approach based on worker prompt type
+      const testingApproach = workerPromptType === 'minimal'
+        ? `## Development Approach: Minimal (Quick Prototyping)
 
-## Current Story: ${nextStory.id} - ${nextStory.title}
+**No tests required** - Focus on rapid implementation:
 
-**Description:** ${nextStory.description}
+1. **Implement the feature directly** - Build what's needed to satisfy the acceptance criteria
+2. **Keep it simple** - Write clean, working code without test coverage
+3. **Manual verification** - Verify the feature works by running it manually
 
-**Acceptance Criteria:**
-${nextStory.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+### Guidelines:
 
-${nextStory.notes ? `**Notes:** ${nextStory.notes}` : ''}
+- **Skip writing tests** - This is for quick prototyping and proof-of-concept work
+- **Focus on functionality** - Get the feature working first
+- **Code quality still matters** - Write readable, maintainable code even without tests
 
-## Development Approach: Test-Driven Development (TDD)
+### Validation Before Proceeding:
+
+- Feature works as expected (manual verification)
+- Typecheck and lint must pass
+
+**⚠️ Note:** Tests should be added before merging to production.`
+        : workerPromptType === 'e2e' 
+        ? `## Development Approach: E2E-First Development
+
+Focus on end-to-end and integration tests only - skip unit tests:
+
+1. **Write E2E tests FIRST** - Before implementing any feature code:
+   - Write e2e/integration tests for the user-facing behavior
+   - Test the feature from the user's perspective
+   - Tests should initially fail (red phase)
+
+2. **Implement minimal code** - Write just enough code to make tests pass (green phase)
+
+3. **Refactor** - Clean up while keeping tests green
+
+### Testing Guidelines:
+
+- **E2E/Integration tests only** - No unit tests needed
+- **Prefer real implementations over mocks** - Only mock when absolutely unavoidable (e.g., third-party payment APIs in production mode)
+- **Use Docker, docker-compose, and Testcontainers** - Spin up real databases, message queues, and services instead of mocking them
+- **Test keys and credentials** - Use test/sandbox API keys where available, or generate temporary test credentials for test runs
+- **Test from user perspective** - Focus on API endpoints, user flows, and feature behavior
+- **All acceptance criteria must have corresponding e2e tests**
+
+### Infrastructure for Testing:
+
+- Use docker-compose for local multi-service test environments
+- Use Testcontainers for programmatic container management in tests
+- Set up test fixtures with real data, not mocked responses
+- Clean up test data after each test run
+
+### Validation Before Proceeding:
+
+- All e2e tests must pass before marking the story complete
+- Run the full test suite for affected areas
+- Typecheck and lint must also pass`
+        : `## Development Approach: Test-Driven Development (TDD)
 
 Follow TDD principles strictly:
 
@@ -404,7 +511,21 @@ Follow TDD principles strictly:
 
 - All tests must pass before marking the story complete
 - Run the full test suite for affected areas
-- Typecheck and lint must also pass
+- Typecheck and lint must also pass`
+
+      // Step 4: Generate detailed execution prompt (like generateStoryExecutionPrompt)
+      const storyPrompt = `You are working on PRD: "${prd.project}" (${completedCount}/${totalCount} stories complete)
+
+## Current Story: ${nextStory.id} - ${nextStory.title}
+
+**Description:** ${nextStory.description}
+
+**Acceptance Criteria:**
+${nextStory.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+
+${nextStory.notes ? `**Notes:** ${nextStory.notes}` : ''}
+
+${testingApproach}
 
 ## Instructions
 
@@ -524,6 +645,7 @@ ${isLastStory
     }
 
     // Step 4: Spawn editor agents in parallel - one for each story
+    const workerPrompt = getWorkerPrompt(workerPromptType)
     const editorAgents = worktreeInfos.map(({ story, path }) => ({
       agent_type: 'editor',
       prompt: `Work in directory: ${path}
@@ -535,7 +657,7 @@ Implement story ${story.id}: ${story.title}
 **Acceptance Criteria:**
 ${story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
 
-${STORY_WORKER_PROMPT}
+${workerPrompt}
 
 IMPORTANT: 
 - Run all commands from the worktree directory: ${path}
