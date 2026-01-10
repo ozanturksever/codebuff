@@ -603,10 +603,10 @@ export function handleRalphList(): {
     }),
     '',
     'Commands:',
-    '  /ralph run [name]    - Execute a PRD',
+    '  /ralph lite run [name] - Execute a PRD (lite mode)',
     '  /ralph edit [name]   - Edit a PRD',
     '  /ralph delete [name] - Delete a PRD',
-    '  /ralph new [feature] - Create a new PRD',
+    '  /ralph lite new [feature] - Create a new PRD (lite mode)',
   ]
 
   const postUserMessage: PostUserMessageFn = (prev) => [
@@ -877,7 +877,7 @@ export function handleRalphHelp(): {
     'MANAGING PRDs',
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     '  /ralph                         List all PRDs',
-    '  /ralph list                    List all PRDs with status',
+    '  /ralph lite list               List all PRDs (lite mode)',
     '  /ralph status <name>           Show detailed PRD status',
     '  /ralph edit <name>             Edit an existing PRD',
     '  /ralph delete <name>           Delete a PRD',

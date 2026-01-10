@@ -518,12 +518,118 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
   }),
   defineCommandWithArgs({
     name: 'ralph',
+    aliases: ['r'],
     handler: async (params, args) => {
-      const result = handleRalphCommand(args)
+      let trimmedArgs = args.trim()
+      let words = trimmedArgs.split(/\s+/)
+      let subcommand = words[0]?.toLowerCase()
+
+      // For 'parallel' and 'orchestra' subcommands, delegate to the oldralph implementation
+      // which has proper worktree-based parallel execution with SDK
+      let useAgentMode: AgentMode = params.agentMode
+
+      // Handle lite mode - switch to LITE agent mode and parse remaining args
+      if (subcommand === 'lite') {
+        useAgentMode = 'LITE'
+        const liteArgs = words.slice(1).join(' ')
+        trimmedArgs = liteArgs
+        words = liteArgs.split(/\s+/)
+        subcommand = words[0]?.toLowerCase()
+      }
+
+      if (subcommand === 'parallel' || subcommand === 'orchestra') {
+        // Convert 'parallel' to 'orchestra' for oldralph
+        const orchestraArgs = subcommand === 'parallel' 
+          ? 'orchestra ' + words.slice(1).join(' ')
+          : trimmedArgs
+        
+        const result = handleRalphCommand(orchestraArgs)
+
+        // Handle async commands (orchestra uses asyncHandler)
+        if (result.asyncHandler) {
+          params.saveToHistory(params.inputValue.trim())
+          clearInput(params)
+          
+          // Show the initial "starting..." message
+          params.setMessages((prev) => result.postUserMessage(prev))
+          
+          // Run the async handler and update with results
+          try {
+            const asyncResult = await result.asyncHandler()
+            params.setMessages((prev) => asyncResult.postUserMessage(prev))
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error)
+            params.setMessages((prev) => [
+              ...prev,
+              getSystemMessage(`❌ Error: ${errorMessage}`),
+            ])
+          }
+          return
+        }
+
+        // Fallback for non-async result
+        params.setMessages((prev) => result.postUserMessage(prev))
+        params.saveToHistory(params.inputValue.trim())
+        clearInput(params)
+        return
+      }
+
+      params.saveToHistory(params.inputValue.trim())
+      clearInput(params)
+
+      // Build the prompt to spawn the Ralph agent
+      // If user provided arguments, include them in the prompt
+      let prompt: string
+      if (trimmedArgs) {
+        if (subcommand === 'run') {
+          const prdName = words.slice(1).join(' ') || ''
+          prompt = `@ralph Run the next pending story in PRD "${prdName}"`
+        } else if (subcommand === 'new' || subcommand === 'create') {
+          const featureDesc = words.slice(1).join(' ') || ''
+          prompt = `@ralph Create a new PRD${featureDesc ? ` for: ${featureDesc}` : ''}`
+        } else if (subcommand === 'status') {
+          const prdName = words.slice(1).join(' ') || ''
+          prompt = `@ralph Show status of PRD "${prdName}"`
+        } else if (subcommand === 'list') {
+          prompt = '@ralph List all PRDs in this project'
+        } else if (subcommand === 'help') {
+          prompt = '@ralph Show help and usage information'
+        } else {
+          // Treat as a general request to Ralph
+          prompt = `@ralph ${trimmedArgs}`
+        }
+      } else {
+        // No args - show help/list PRDs
+        prompt = '@ralph List all PRDs and show how I can help with PRD-driven development'
+      }
+
+      // Clear messages for fresh context and send to Ralph agent (or Ralph Lite if lite subcommand)
+      params.setMessages(() => [])
+      params.clearMessages()
+      params.setCanProcessQueue(true)
+      params.sendMessage({
+        content: prompt,
+        agentMode: useAgentMode,
+      })
+      setTimeout(() => {
+        params.scrollToLatest()
+      }, 0)
+    },
+  }),
+  defineCommandWithArgs({
+    name: 'oldralph',
+    handler: async (params, args) => {
+      let useAgentMode: AgentMode = params.agentMode
+      let handlerArgs = args
+      if (handlerArgs.trim().startsWith('lite ')) {
+        useAgentMode = 'LITE'
+        handlerArgs = handlerArgs.trim().slice(5)
+      }
+      const result = handleRalphCommand(handlerArgs)
 
       // Handle async commands (parallel, merge, cleanup, orchestra)
       if (result.asyncHandler) {
-        console.log('[Ralph Command] asyncHandler detected, about to execute...')
+        console.log('[OldRalph Command] asyncHandler detected, about to execute...')
         params.saveToHistory(params.inputValue.trim())
         clearInput(params)
         
@@ -532,12 +638,12 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
         
         // Run the async handler and update with results
         try {
-          console.log('[Ralph Command] Calling asyncHandler now...')
+          console.log('[OldRalph Command] Calling asyncHandler now...')
           const asyncResult = await result.asyncHandler()
-          console.log('[Ralph Command] asyncHandler completed successfully')
+          console.log('[OldRalph Command] asyncHandler completed successfully')
           params.setMessages((prev) => asyncResult.postUserMessage(prev))
         } catch (error) {
-          console.log('[Ralph Command] asyncHandler threw error:', error)
+          console.log('[OldRalph Command] asyncHandler threw error:', error)
           const errorMessage = error instanceof Error ? error.message : String(error)
           params.setMessages((prev) => [
             ...prev,
@@ -565,8 +671,8 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
         params.clearMessages()
         params.setCanProcessQueue(true)
         params.sendMessage({
-          content: result.prompt,
-          agentMode: params.agentMode,
+          content: result.prompt.replace(/@ralph/g, '@ralph-lite'),
+          agentMode: useAgentMode,
           postUserMessage: result.postUserMessage,
         })
         setTimeout(() => {
