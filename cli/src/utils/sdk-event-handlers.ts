@@ -198,6 +198,7 @@ const handleSubagentStart = (
         parentAgentId: event.parentAgentId,
         params: event.params,
         prompt: event.prompt,
+        model: event.model,
       }),
     )
 
@@ -229,6 +230,7 @@ const handleSubagentStart = (
     const newAgentBlock = createAgentBlock({
       agentId: event.agentId,
       agentType: event.agentType || '',
+      model: event.model,
       prompt: event.prompt,
       params: event.params,
       parentAgentType,

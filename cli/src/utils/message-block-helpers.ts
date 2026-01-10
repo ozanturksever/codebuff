@@ -280,6 +280,8 @@ export const findAgentTypeById = (
 export interface CreateAgentBlockOptions {
   agentId: string
   agentType: string
+  /** The AI model used by this agent (e.g. 'anthropic/claude-sonnet-4.5') */
+  model?: string
   prompt?: string
   params?: Record<string, unknown>
   /** The spawn_agents tool call ID that created this block */
@@ -296,7 +298,7 @@ export interface CreateAgentBlockOptions {
 export const createAgentBlock = (
   options: CreateAgentBlockOptions,
 ): AgentContentBlock => {
-  const { agentId, agentType, prompt, params, spawnToolCallId, spawnIndex, parentAgentType } = options
+  const { agentId, agentType, model, prompt, params, spawnToolCallId, spawnIndex, parentAgentType } = options
   const shouldCollapse =
     shouldCollapseByDefault(agentType || '') ||
     shouldCollapseForParent(agentType || '', parentAgentType)
@@ -305,6 +307,7 @@ export const createAgentBlock = (
     agentId,
     agentName: agentType || 'Agent',
     agentType: agentType || 'unknown',
+    ...(model && { model }),
     content: '',
     status: 'running' as const,
     blocks: [] as ContentBlock[],
@@ -466,6 +469,7 @@ export const moveSpawnAgentBlock = (
   parentId?: string,
   params?: Record<string, unknown>,
   prompt?: string,
+  model?: string,
 ): ContentBlock[] => {
   const updateAgentBlock = (block: ContentBlock): ContentBlock => {
     if (block.type !== 'agent') {
@@ -482,6 +486,10 @@ export const moveSpawnAgentBlock = (
 
     if (prompt && block.initialPrompt === '') {
       updatedBlock.initialPrompt = prompt
+    }
+
+    if (model) {
+      updatedBlock.model = model
     }
 
     return updatedBlock

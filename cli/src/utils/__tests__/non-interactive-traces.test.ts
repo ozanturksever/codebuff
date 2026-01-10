@@ -180,12 +180,40 @@ describe('non-interactive-traces', () => {
       state = createTraceState()
     })
 
-    describe('events that return null', () => {
-      test('returns null for start event', () => {
+    describe('start event', () => {
+      test('returns null for start event without model', () => {
         const event: PrintModeEvent = { type: 'start', messageHistoryLength: 0 }
         expect(formatTraceEvent(event, state)).toBeNull()
       })
 
+      test('formats start event with model', () => {
+        const event: PrintModeEvent = {
+          type: 'start',
+          agentId: 'base',
+          model: 'anthropic/claude-sonnet-4.5',
+          messageHistoryLength: 0,
+        }
+        const result = formatTraceEvent(event, state)
+        expect(result).not.toBeNull()
+        expect(result!.type).toBe('line')
+        expect(result!.text).toContain('base')
+        expect(result!.text).toContain('anthropic/claude-sonnet-4.5')
+      })
+
+      test('uses "agent" as default when agentId is missing', () => {
+        const event: PrintModeEvent = {
+          type: 'start',
+          model: 'openai/gpt-5.1',
+          messageHistoryLength: 0,
+        }
+        const result = formatTraceEvent(event, state)
+        expect(result).not.toBeNull()
+        expect(result!.text).toContain('agent')
+        expect(result!.text).toContain('openai/gpt-5.1')
+      })
+    })
+
+    describe('events that return null', () => {
       test('returns null for download event', () => {
         const event: PrintModeEvent = { type: 'download', version: '1.0.0', status: 'complete' }
         expect(formatTraceEvent(event, state)).toBeNull()
@@ -237,6 +265,16 @@ describe('non-interactive-traces', () => {
         }
         const result = formatTraceEvent(event, state)
         expect(result!.text).toContain('Think about this problem')
+      })
+
+      test('includes model when present', () => {
+        const event: PrintModeEvent = {
+          ...baseSubagentStart,
+          agentType: 'thinker',
+          model: 'anthropic/claude-sonnet-4.5',
+        }
+        const result = formatTraceEvent(event, state)
+        expect(result!.text).toContain('anthropic/claude-sonnet-4.5')
       })
 
       test('truncates long prompt to 80 chars', () => {
@@ -535,6 +573,25 @@ describe('non-interactive-traces', () => {
       expect(result).toEqual({
         type: 'subagent_start',
         agentType: 'thinker',
+        model: undefined,
+      })
+    })
+
+    test('simplifies subagent_start event with model', () => {
+      const event: PrintModeEvent = {
+        type: 'subagent_start',
+        agentId: 'agent-1',
+        agentType: 'thinker',
+        displayName: 'Thinker',
+        model: 'anthropic/claude-sonnet-4.5',
+        onlyChild: false,
+        prompt: 'long prompt here',
+      }
+      const result = simplifyEventForJson(event)
+      expect(result).toEqual({
+        type: 'subagent_start',
+        agentType: 'thinker',
+        model: 'anthropic/claude-sonnet-4.5',
       })
     })
 
@@ -550,6 +607,24 @@ describe('non-interactive-traces', () => {
       expect(result).toEqual({
         type: 'subagent_finish',
         agentType: 'editor',
+        model: undefined,
+      })
+    })
+
+    test('simplifies subagent_finish event with model', () => {
+      const event: PrintModeEvent = {
+        type: 'subagent_finish',
+        agentId: 'agent-1',
+        agentType: 'editor',
+        displayName: 'Editor',
+        model: 'openai/gpt-5.1',
+        onlyChild: false,
+      }
+      const result = simplifyEventForJson(event)
+      expect(result).toEqual({
+        type: 'subagent_finish',
+        agentType: 'editor',
+        model: 'openai/gpt-5.1',
       })
     })
 
@@ -565,9 +640,24 @@ describe('non-interactive-traces', () => {
       })
     })
 
-    test('returns null for start event', () => {
+    test('returns null for start event without model', () => {
       const event: PrintModeEvent = { type: 'start', messageHistoryLength: 0 }
       expect(simplifyEventForJson(event)).toBeNull()
+    })
+
+    test('simplifies start event with model', () => {
+      const event: PrintModeEvent = {
+        type: 'start',
+        agentId: 'base',
+        model: 'anthropic/claude-sonnet-4.5',
+        messageHistoryLength: 5,
+      }
+      const result = simplifyEventForJson(event)
+      expect(result).toEqual({
+        type: 'start',
+        agentId: 'base',
+        model: 'anthropic/claude-sonnet-4.5',
+      })
     })
 
     test('returns null for text event', () => {

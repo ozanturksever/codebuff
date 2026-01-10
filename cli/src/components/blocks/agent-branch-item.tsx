@@ -13,6 +13,8 @@ interface AgentBranchItemProps {
   children?: ReactNode
   prompt?: string
   agentId?: string
+  /** The AI model used by this agent (e.g. 'anthropic/claude-sonnet-4.5') */
+  model?: string
   isCollapsed: boolean
   isStreaming: boolean
   streamingPreview: string
@@ -30,6 +32,7 @@ export const AgentBranchItem = memo((props: AgentBranchItemProps) => {
     children,
     prompt,
     agentId,
+    model,
     isCollapsed,
     isStreaming,
     streamingPreview,
@@ -203,6 +206,11 @@ export const AgentBranchItem = memo((props: AgentBranchItemProps) => {
             >
               {name}
             </span>
+            {model ? (
+              <span fg={theme.muted} attributes={TextAttributes.DIM}>
+                {` (${model})`}
+              </span>
+            ) : null}
             {titleSuffix ? (
               <span fg={theme.foreground} attributes={TextAttributes.BOLD}>
                 {` ${titleSuffix}`}

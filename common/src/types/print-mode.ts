@@ -5,6 +5,7 @@ import { toolResultOutputSchema } from './messages/content-part'
 export const printModeStartSchema = z.object({
   type: z.literal('start'),
   agentId: z.string().optional(),
+  model: z.string().optional(),
   messageHistoryLength: z.number(),
 })
 export type PrintModeStart = z.infer<typeof printModeStartSchema>
@@ -72,6 +73,7 @@ export const printModeSubagentStartSchema = z.object({
   agentId: z.string(),
   agentType: z.string(),
   displayName: z.string(),
+  model: z.string().optional(),
   onlyChild: z.boolean(),
   parentAgentId: z.string().optional(),
   params: z.record(z.string(), z.any()).optional(),
@@ -86,6 +88,7 @@ export const printModeSubagentFinishSchema = z.object({
   agentId: z.string(),
   agentType: z.string(),
   displayName: z.string(),
+  model: z.string().optional(),
   onlyChild: z.boolean(),
   parentAgentId: z.string().optional(),
   params: z.record(z.string(), z.any()).optional(),
