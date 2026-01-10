@@ -503,13 +503,50 @@ function slugify(text: string): string {
 }
 
 // ============================================================================
+// Worker Prompt Types
+// ============================================================================
+
+/**
+ * Available worker prompt types for story execution.
+ * - tdd: Full TDD with unit tests + e2e tests (default)
+ * - e2e: E2E/integration tests only, no unit tests
+ */
+/**
+ * Available worker prompt types for story execution.
+ * - tdd: Full TDD with unit tests + e2e tests (default)
+ * - e2e: E2E/integration tests only, no unit tests
+ * - minimal: No tests, just implement the feature quickly (for prototyping)
+ */
+export type WorkerPromptType = 'tdd' | 'e2e' | 'minimal'
+
+export const WORKER_PROMPT_TYPES: WorkerPromptType[] = ['tdd', 'e2e', 'minimal']
+
+export const DEFAULT_WORKER_PROMPT_TYPE: WorkerPromptType = 'tdd'
+
+export function isValidWorkerPromptType(type: string): type is WorkerPromptType {
+  return WORKER_PROMPT_TYPES.includes(type as WorkerPromptType)
+}
+
+// ============================================================================
 // Story Execution Prompt
 // ============================================================================
 
-function generateStoryExecutionPrompt(prd: PRD, story: UserStory, prdName: string): string {
+function generateStoryExecutionPrompt(
+  prd: PRD,
+  story: UserStory,
+  prdName: string,
+  workerPromptType: WorkerPromptType = 'tdd'
+): string {
   const completedCount = prd.userStories.filter(s => s.passes).length
   const totalCount = prd.userStories.length
   const isLastStory = completedCount + 1 === totalCount
+
+  // Generate the testing approach section based on worker prompt type
+  const testingApproach = workerPromptType === 'e2e' 
+    ? generateE2EOnlyTestingApproach()
+    : workerPromptType === 'minimal'
+    ? generateMinimalTestingApproach()
+    : generateTDDTestingApproach()
 
   return `You are working on PRD: "${prd.project}" (${completedCount}/${totalCount} stories complete)
 
@@ -522,7 +559,33 @@ ${story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
 
 ${story.notes ? `**Notes:** ${story.notes}` : ''}
 
-## Development Approach: Test-Driven Development (TDD)
+${testingApproach}
+
+## Instructions
+
+1. Write failing tests for this story's acceptance criteria
+2. Implement the feature to make tests pass
+3. Refactor if needed while keeping tests green
+4. Run quality checks (typecheck, lint, test)
+5. If all checks pass, commit with message: "feat: ${story.id} - ${story.title}"
+6. Update any relevant AGENTS.md files with learnings
+
+After completing the story:
+- Use write_file to update the PRD: Mark story ${story.id} as passes: true
+- The PRD file is at: prd/${prdName}.json
+
+Keep changes focused and minimal. Only implement what's needed for this story.
+
+${isLastStory 
+    ? '\n**This is the last story!** After completing it, suggest followups for next steps the user might want to take.'
+    : '\n**Important:** After completing this story successfully, use suggest_followups to suggest "Continue to next story" as the first option so Ralph can automatically proceed to the next story.'}`
+}
+
+/**
+ * Generates the testing approach section for full TDD (unit tests + e2e tests).
+ */
+function generateTDDTestingApproach(): string {
+  return `## Development Approach: Test-Driven Development (TDD)
 
 Follow TDD principles strictly:
 
@@ -547,26 +610,75 @@ Follow TDD principles strictly:
 
 - All tests must pass before marking the story complete
 - Run the full test suite for affected areas
-- Typecheck and lint must also pass
+- Typecheck and lint must also pass`
+}
 
-## Instructions
+/**
+ * Generates the testing approach section for E2E-only testing (no unit tests).
+ */
+function generateE2EOnlyTestingApproach(): string {
+  return `## Development Approach: E2E-First Development
 
-1. Write failing tests for this story's acceptance criteria
-2. Implement the feature to make tests pass
-3. Refactor if needed while keeping tests green
-4. Run quality checks (typecheck, lint, test)
-5. If all checks pass, commit with message: "feat: ${story.id} - ${story.title}"
-6. Update any relevant AGENTS.md files with learnings
+Focus on end-to-end and integration tests only - skip unit tests:
 
-After completing the story:
-- Use write_file to update the PRD: Mark story ${story.id} as passes: true
-- The PRD file is at: prd/${prdName}.json
+1. **Write E2E tests FIRST** - Before implementing any feature code:
+   - Write e2e/integration tests for the user-facing behavior
+   - Test the feature from the user's perspective
+   - Tests should initially fail (red phase)
 
-Keep changes focused and minimal. Only implement what's needed for this story.
+2. **Implement minimal code** - Write just enough code to make tests pass (green phase)
 
-${isLastStory 
-    ? '\n**This is the last story!** After completing it, suggest followups for next steps the user might want to take.'
-    : '\n**Important:** After completing this story successfully, use suggest_followups to suggest "Continue to next story" as the first option so Ralph can automatically proceed to the next story.'}`
+3. **Refactor** - Clean up while keeping tests green
+
+### Testing Guidelines:
+
+- **E2E/Integration tests only** - No unit tests needed
+- **Prefer real implementations over mocks** - Only mock when absolutely unavoidable (e.g., third-party payment APIs in production mode)
+- **Use Docker, docker-compose, and Testcontainers** - Spin up real databases, message queues, and services instead of mocking them
+- **Test keys and credentials** - Use test/sandbox API keys where available, or generate temporary test credentials for test runs
+- **Test from user perspective** - Focus on API endpoints, user flows, and feature behavior
+- **All acceptance criteria must have corresponding e2e tests**
+
+### Infrastructure for Testing:
+
+- Use \`docker-compose\` for local multi-service test environments
+- Use \`Testcontainers\` for programmatic container management in tests
+- Set up test fixtures with real data, not mocked responses
+- Clean up test data after each test run
+
+### Validation Before Proceeding:
+
+- All e2e tests must pass before marking the story complete
+- Run the full test suite for affected areas
+- Typecheck and lint must also pass`
+}
+
+/**
+ * Generates the testing approach section for minimal/no-test mode (quick prototyping).
+ */
+function generateMinimalTestingApproach(): string {
+  return `## Development Approach: Minimal (Quick Prototyping)
+
+**No tests required** - Focus on rapid implementation:
+
+1. **Implement the feature directly** - Build what's needed to satisfy the acceptance criteria
+2. **Keep it simple** - Write clean, working code without test coverage
+3. **Manual verification** - Verify the feature works by running it manually
+
+### Guidelines:
+
+- **Skip writing tests** - This is for quick prototyping and proof-of-concept work
+- **Focus on functionality** - Get the feature working first
+- **Code quality still matters** - Write readable, maintainable code even without tests
+- **Document assumptions** - Note any edge cases or limitations for future testing
+
+### Validation Before Proceeding:
+
+- Feature works as expected (manual verification)
+- Typecheck and lint must pass
+- No breaking changes to existing functionality
+
+**⚠️ Note:** Tests should be added before merging to production. This mode is for prototyping only.`
 }
 
 // ============================================================================
@@ -720,7 +832,10 @@ export function handleRalphNew(prdName: string, featureDescription?: string, ini
   return { postUserMessage, prdPrompt }
 }
 
-export function handleRalphRun(prdName: string): {
+export function handleRalphRun(
+  prdName: string,
+  workerPromptType: WorkerPromptType = 'tdd'
+): {
   postUserMessage: PostUserMessageFn
   storyPrompt?: string
   prdName?: string
@@ -758,14 +873,16 @@ export function handleRalphRun(prdName: string): {
   const completedCount = prd.userStories.filter(s => s.passes).length
   const totalCount = prd.userStories.length
 
-  // Generate prompt for story execution
-  const storyPrompt = generateStoryExecutionPrompt(prd, nextStory, prdName)
+  // Generate prompt for story execution with the specified worker prompt type
+  const storyPrompt = generateStoryExecutionPrompt(prd, nextStory, prdName, workerPromptType)
 
+  const workerLabel = workerPromptType === 'tdd' ? 'TDD' : workerPromptType === 'e2e' ? 'E2E-only' : 'Minimal (no tests)'
   const postUserMessage: PostUserMessageFn = (prev) => [
     ...prev,
     getSystemMessage(
       `🚀 Starting Ralph: ${prd.project}\n` +
-      `   Story ${completedCount + 1}/${totalCount}: ${nextStory.id} - ${nextStory.title}`
+      `   Story ${completedCount + 1}/${totalCount}: ${nextStory.id} - ${nextStory.title}\n` +
+      `   Mode: ${workerLabel}`
     ),
   ]
 
@@ -885,7 +1002,10 @@ export function handleRalphHelp(): {
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     'EXECUTING STORIES',
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-    '  /ralph run <name>              Execute next story in PRD',
+    '  /ralph run <name>              Execute next story (TDD mode)',
+    '  /ralph run:tdd <name>          Execute with unit + e2e tests',
+    '  /ralph run:e2e <name>          Execute with e2e tests only',
+    '  /ralph run:minimal <name>      Execute without tests (prototyping)',
     '',
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     'PARALLEL EXECUTION (Manual)',
@@ -2049,6 +2169,37 @@ export function handleRalphCommand(args: string): {
     
     case 'run': {
       const runResult = handleRalphRun(restArgs)
+      return {
+        postUserMessage: runResult.postUserMessage,
+        prompt: runResult.storyPrompt,
+        prdName: runResult.prdName,
+        storyId: runResult.storyId,
+      }
+    }
+    
+    // Handle run:xxx variants (e.g., run:e2e, run:tdd, run:minimal)
+    case 'run:tdd': {
+      const runResult = handleRalphRun(restArgs, 'tdd')
+      return {
+        postUserMessage: runResult.postUserMessage,
+        prompt: runResult.storyPrompt,
+        prdName: runResult.prdName,
+        storyId: runResult.storyId,
+      }
+    }
+    
+    case 'run:e2e': {
+      const runResult = handleRalphRun(restArgs, 'e2e')
+      return {
+        postUserMessage: runResult.postUserMessage,
+        prompt: runResult.storyPrompt,
+        prdName: runResult.prdName,
+        storyId: runResult.storyId,
+      }
+    }
+    
+    case 'run:minimal': {
+      const runResult = handleRalphRun(restArgs, 'minimal')
       return {
         postUserMessage: runResult.postUserMessage,
         prompt: runResult.storyPrompt,
