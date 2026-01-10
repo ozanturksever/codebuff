@@ -130,6 +130,12 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'ralph',
     label: 'ralph',
-    description: 'PRD-driven autonomous development',
+    description: 'PRD-driven autonomous development (ralph lite for faster base2-lite orchestrator)',
+    aliases: ['r'],
+  },
+  {
+    id: 'oldralph',
+    label: 'oldralph',
+    description: 'Legacy PRD-driven development (oldralph lite for faster base2-lite)',
   },
 ]
