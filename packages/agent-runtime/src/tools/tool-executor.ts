@@ -274,7 +274,7 @@ export function parseRawCustomToolCall(params: {
 
   if (
     !(customToolDefs && toolName in customToolDefs) &&
-    !toolName.includes('/')
+    !toolName.includes('__')
   ) {
     return {
       toolName,
@@ -370,8 +370,8 @@ export async function executeCustomToolCall(
     !(agentTemplate.toolNames as string[]).includes(toolCall.toolName) &&
     !fromHandleSteps &&
     !(
-      toolCall.toolName.includes('/') &&
-      toolCall.toolName.split('/')[0] in agentTemplate.mcpServers
+      toolCall.toolName.includes('__') &&
+      toolCall.toolName.split('__')[0] in agentTemplate.mcpServers
     )
   ) {
     // Emit an error event instead of tool call/result pair
@@ -415,15 +415,15 @@ export async function executeCustomToolCall(
         return null
       }
 
-      const toolName = toolCall.toolName.includes('/')
-        ? toolCall.toolName.split('/').slice(1).join('/')
+      const toolName = toolCall.toolName.includes('__')
+        ? toolCall.toolName.split('__').slice(1).join('__')
         : toolCall.toolName
       const clientToolResult = await requestToolCall({
         userInputId,
         toolName,
         input: toolCall.input,
-        mcpConfig: toolCall.toolName.includes('/')
-          ? agentTemplate.mcpServers[toolCall.toolName.split('/')[0]]
+        mcpConfig: toolCall.toolName.includes('__')
+          ? agentTemplate.mcpServers[toolCall.toolName.split('__')[0]]
           : undefined,
       })
       return clientToolResult.output satisfies ToolResultOutput[]

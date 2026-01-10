@@ -71,6 +71,8 @@ export function createBase2(
       'glob-matcher',
       'researcher-web',
       'researcher-docs',
+      'chrome-devtools',
+      'chrome-devtools-remote',
       isLite ? 'commander-lite' : 'commander',
       isDefault && 'thinker',
       isLite && 'editor-gpt-5',
