@@ -24,11 +24,11 @@ export async function getMCPToolData(
 
   const requestedToolsByMcp: Record<string, string[] | undefined> = {}
   for (const t of toolNames) {
-    if (!t.includes('/')) {
+    if (!t.includes('__')) {
       continue
     }
-    const [mcpName, ...remaining] = t.split('/')
-    const toolName = remaining.join('/')
+    const [mcpName, ...remaining] = t.split('__')
+    const toolName = remaining.join('__')
     if (!requestedToolsByMcp[mcpName]) {
       requestedToolsByMcp[mcpName] = []
     }
@@ -45,7 +45,7 @@ export async function getMCPToolData(
         })
 
         for (const { name, description, inputSchema } of mcpData) {
-          writeTo[mcpName + '/' + name] = {
+          writeTo[mcpName + '__' + name] = {
             inputSchema: convertJsonSchemaToZod(inputSchema as any) as any,
             endsAgentStep: true,
             description,
