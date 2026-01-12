@@ -288,7 +288,7 @@ async function runNonInteractive({
           const jsonOutput: JsonOutput = { success: true, output }
           console.log(JSON.stringify(jsonOutput, null, 2))
         } else if (outputFile) {
-          await fs.writeFile(outputFile, output, 'utf-8')
+          await fs.promises.writeFile(outputFile, output, 'utf-8')
         } else {
           console.log(output)
         }
@@ -318,7 +318,7 @@ async function runNonInteractive({
         const jsonOutput: JsonOutput = { success: true, output }
         console.log(JSON.stringify(jsonOutput, null, 2))
       } else if (outputFile) {
-        await fs.writeFile(outputFile, output, 'utf-8')
+        await fs.promises.writeFile(outputFile, output, 'utf-8')
       } else {
         console.log(output)
       }
@@ -426,7 +426,7 @@ async function runNonInteractive({
           )
         : responseText
 
-      await fs.writeFile(outputFile, outputContent, 'utf-8')
+      await fs.promises.writeFile(outputFile, outputContent, 'utf-8')
 
       if (output.type === 'error') {
         console.error(`Error: ${output.message}`)
