@@ -208,7 +208,7 @@ When running a story, follow TDD principles strictly:
 
 #### Testing Guidelines:
 - **Prefer real implementations over mocks** - Only use mocks when absolutely necessary
-- **Unit tests** for business logic, utilities, and pure functions
+- **Unit tests** for business logic, utilities, and pure functions (skip unit tests for documentation-only stories; documentation can be updated directly and verified manually without TDD)
 - **E2E/Integration tests** for API endpoints, user flows, and feature behavior
 - **All acceptance criteria must have corresponding tests**
 
@@ -503,7 +503,7 @@ Follow TDD principles strictly:
 ### Testing Guidelines:
 
 - **Prefer real implementations over mocks** - Only use mocks when absolutely necessary (e.g., external APIs, payment systems)
-- **Unit tests** for business logic, utilities, and pure functions
+- **Unit tests** for business logic, utilities, and pure functions (skip unit tests for documentation-only stories; documentation can be updated directly and verified manually without TDD)
 - **E2E/Integration tests** for API endpoints, user flows, and feature behavior
 - **All acceptance criteria must have corresponding tests**
 
