@@ -20,7 +20,7 @@ const definition: AgentDefinition = {
 
   outputMode: 'last_message',
   includeMessageHistory: true,
-  inheritParentSystemPrompt: true,
+  inheritParentSystemPrompt: false,
 
   toolNames: [
     'read_files',
