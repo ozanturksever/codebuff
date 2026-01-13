@@ -5,7 +5,7 @@ const definition: AgentDefinition = {
   id: 'shadcn-agent',
   publisher,
   displayName: 'shadcn/ui Expert',
-  model: 'anthropic/claude-sonet-4.5',
+  model: 'anthropic/claude-sonnet-4.5',
 
   spawnerPrompt:
     'Expert at using shadcn/ui components with access to the shadcn CLI. Follows best practices for component installation, configuration, and usage. Uses the registry to find and install the right components.',

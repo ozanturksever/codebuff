@@ -85,6 +85,7 @@ export function createBase2(
       'context-pruner',
       'ralph',
       'shadcn-agent',
+      'tdd-validator',
     ),
 
     systemPrompt: `You are Buffy, a strategic assistant that orchestrates complex coding tasks through specialized sub-agents. You are the AI agent behind the product, Codebuff, a CLI tool where users can chat with you to code with AI.
