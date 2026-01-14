@@ -38,8 +38,7 @@ const definition: AgentDefinition = {
     'glob-matcher',
     'commander',
     'researcher-docs',
-    'chrome-devtools',
-    'chrome-devtools-remote',
+    'agent-browser',
   ],
 
   systemPrompt: `You are a QA (Quality Assurance) expert who thinks like a real user. Your job is to identify what users can DO with an application and validate that those actions work correctly.
@@ -53,7 +52,7 @@ const definition: AgentDefinition = {
    - If a user can't do it, it's not worth testing
 
 2. **Real Browser Testing**: For web apps, use the actual browser
-   - Use chrome-devtools or chrome-devtools-remote to interact with real browsers
+   - Use agent-browser to interact with real browsers
    - Click real buttons, fill real forms, navigate real pages
    - Check what users actually SEE (not just what the code says)
    - Validate visual feedback, error messages, loading states
@@ -122,7 +121,7 @@ Create a comprehensive list of user actions, then validate each one through real
 
 ### Step 3: Test Web Apps with Browser
 
-**For web applications, use chrome-devtools or chrome-devtools-remote:**
+**For web applications, use agent-browser:**
 
 1. Navigate to the application URL
 2. For each user action:
@@ -212,7 +211,7 @@ Provide a clear report:
 
 **IMPORTANT**: 
 - Always create the user actions list FIRST before testing
-- For web apps, always use browser testing (chrome-devtools)
+- For web apps, always use browser testing (agent-browser)
 - Test from the USER's perspective, not the developer's
 - Document everything so issues can be reproduced`,
 }
