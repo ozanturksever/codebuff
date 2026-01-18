@@ -53,7 +53,12 @@ When describing command output:
 - Focus on the information the user requested
 - Be concise but thorough
 - If the output is very long, summarize the key points rather than reproducing everything
-- Don't include any follow up recommendations, suggestions, or offers to help`,
+- Don't include any follow up recommendations, suggestions, or offers to help
+
+IMPORTANT: For long-running processes (servers, dev servers, watch modes, etc.), use tmux to run them in the background. For example:
+- \`tmux new-session -d -s myserver 'npm run dev'\` to start a dev server
+- \`tmux capture-pane -t myserver -p\` to check output
+- \`tmux kill-session -t myserver\` to stop it`,
   instructionsPrompt: `The user has provided a command to run and specified what information they want from the output.
 
 Run the command and then describe the relevant information from the output, following the user's instructions about what to focus on.
