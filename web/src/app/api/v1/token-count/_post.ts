@@ -125,6 +125,11 @@ async function countTokensViaAnthropic(params: {
   // Convert messages to Anthropic format
   const anthropicMessages = convertToAnthropicMessages(messages)
 
+  // Check if Anthropic API key is configured
+  if (!env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY not configured')
+  }
+
   // Use the count_tokens endpoint (beta) or make a minimal request
   const response = await fetch(
     'https://api.anthropic.com/v1/messages/count_tokens',

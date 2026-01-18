@@ -36,7 +36,7 @@ const bodySchema = z.object({
 })
 
 export type GravityEnv = {
-  GRAVITY_API_KEY: string
+  GRAVITY_API_KEY?: string
   CB_ENVIRONMENT: string
 }
 
