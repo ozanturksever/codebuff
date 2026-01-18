@@ -204,8 +204,10 @@ describe('Convex Subagent Spawning', () => {
         'package.json': '{}',
       }
       const result = buildSystemPrompt(undefined, projectFiles)
-      expect(result).toContain('Available Files')
-      expect(result).toContain('src/index.ts')
+      expect(result).toContain('Project Files')
+      // Files are displayed in a hierarchical tree format
+      expect(result).toContain('src/')
+      expect(result).toContain('index.ts')
       expect(result).toContain('package.json')
     })
 
