@@ -91,9 +91,58 @@ async function build() {
     plugins: [],
   })
 
+  // Convex bundle has additional externals to avoid tree-sitter/WASM dependencies
+  const convexExternal = [
+    ...external,
+    '@codebuff/code-map',
+    '@codebuff/code-map/parse',
+    'web-tree-sitter',
+    '@vscode/tree-sitter-wasm',
+  ]
+
+  // Disable source maps for Convex builds to prevent Convex bundler from
+  // following source map paths to monorepo packages like @codebuff/code-map
+  console.log('📦 Building Convex ESM format...')
+  await Bun.build({
+    entrypoints: ['src/convex.ts'],
+    outdir: 'dist',
+    target: 'node',
+    format: 'esm',
+    minify: false,
+    sourcemap: 'none',
+    external: convexExternal,
+    naming: '[dir]/convex.mjs',
+    env: 'NEXT_PUBLIC_*',
+    loader: {
+      '.scm': 'text',
+    },
+    plugins: [],
+  })
+
+  console.log('📦 Building Convex CJS format...')
+  await Bun.build({
+    entrypoints: ['src/convex.ts'],
+    outdir: 'dist',
+    target: 'node',
+    format: 'cjs',
+    minify: false,
+    sourcemap: 'none',
+    external: convexExternal,
+    naming: '[dir]/convex.cjs',
+    define: {
+      'import.meta.url': 'undefined',
+      'import.meta': 'undefined',
+    },
+    env: 'NEXT_PUBLIC_*',
+    loader: {
+      '.scm': 'text',
+    },
+    plugins: [],
+  })
+
   console.log('📝 Generating and bundling TypeScript declarations...')
   try {
-    const [bundle] = generateDtsBundle(
+    const bundles = generateDtsBundle(
       [
         {
           filePath: 'src/index.ts',
@@ -110,14 +159,29 @@ async function build() {
             ],
           },
         },
+        {
+          filePath: 'src/convex.ts',
+          output: {
+            exportReferencedTypes: false,
+          },
+          libraries: {
+            importedLibraries: [
+              '@codebuff/common',
+              '@codebuff/agent-runtime',
+              '@codebuff/code-map',
+            ],
+          },
+        },
       ],
       {
         preferredConfigPath: join(import.meta.dir, '..', 'tsconfig.json'),
       },
     )
 
-    await writeFile('dist/index.d.ts', bundle)
+    await writeFile('dist/index.d.ts', bundles[0])
+    await writeFile('dist/convex.d.ts', bundles[1])
     await fixDuplicateImports()
+    await fixConvexDuplicateImports()
     console.log('  ✓ Created bundled type definitions')
   } catch (error) {
     console.warn('⚠ TypeScript declaration bundling failed:', error.message)
@@ -133,6 +197,9 @@ async function build() {
   console.log('  📄 dist/index.mjs (ESM)')
   console.log('  📄 dist/index.cjs (CJS)')
   console.log('  📄 dist/index.d.ts (Types)')
+  console.log('  📄 dist/convex.mjs (Convex ESM)')
+  console.log('  📄 dist/convex.cjs (Convex CJS)')
+  console.log('  📄 dist/convex.d.ts (Convex Types)')
 }
 
 /**
@@ -160,6 +227,36 @@ async function fixDuplicateImports() {
   } catch (error) {
     console.warn(
       '  ⚠ Warning: Could not fix duplicate imports:',
+      error.message,
+    )
+  }
+}
+
+/**
+ * Fix duplicate imports in the generated convex.d.ts file
+ */
+async function fixConvexDuplicateImports() {
+  try {
+    let content = await readFile('dist/convex.d.ts', 'utf-8')
+
+    // Remove any duplicate zod default imports (handle various whitespace)
+    const zodDefaultImportRegex = /import\s+z\s+from\s+['"]zod\/v4['"];?\n?/g
+    const zodNamedImportRegex =
+      /import\s+\{\s*z\s*\}\s+from\s+['"]zod\/v4['"];?/
+
+    // If we have both imports, remove all default imports and keep only the named one
+    if (
+      content.match(zodNamedImportRegex) &&
+      content.match(zodDefaultImportRegex)
+    ) {
+      content = content.replace(zodDefaultImportRegex, '')
+    }
+
+    await writeFile('dist/convex.d.ts', content)
+    console.log('  ✓ Fixed duplicate imports in convex bundled types')
+  } catch (error) {
+    console.warn(
+      '  ⚠ Warning: Could not fix convex duplicate imports:',
       error.message,
     )
   }

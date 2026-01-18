@@ -1,11 +1,11 @@
-# @codebuff/sdk
+# @fatagnus/codebuff
 
 Official SDK for Codebuff - AI coding agent and framework
 
 ## Installation
 
 ```bash
-npm install @codebuff/sdk
+npm install @fatagnus/codebuff
 ```
 
 ## Prerequisites
@@ -17,7 +17,7 @@ npm install @codebuff/sdk
 ### Basic Example
 
 ```typescript
-import { CodebuffClient } from '@codebuff/sdk'
+import { CodebuffClient } from '@fatagnus/codebuff'
 
 async function main() {
   const client = new CodebuffClient({
@@ -59,9 +59,9 @@ Here, we create a full agent and custom tools that can be reused between runs.
 ```typescript
 import { z } from 'zod/v4'
 
-import { CodebuffClient, getCustomToolDefinition } from '@codebuff/sdk'
+import { CodebuffClient, getCustomToolDefinition } from '@fatagnus/codebuff'
 
-import type { AgentDefinition } from '@codebuff/sdk'
+import type { AgentDefinition } from '@fatagnus/codebuff'
 
 async function main() {
   const client = new CodebuffClient({
@@ -178,7 +178,7 @@ const client = new CodebuffClient({
 Loads agent definitions from `.agents` directories on disk.
 
 ```typescript
-import { loadLocalAgents, CodebuffClient } from '@codebuff/sdk'
+import { loadLocalAgents, CodebuffClient } from '@fatagnus/codebuff'
 
 // Load from default locations (.agents in cwd, parent, or home)
 const agents = await loadLocalAgents({ verbose: true })
@@ -260,6 +260,215 @@ The `RunState` object contains:
 
 - `sessionState`: Internal state to be passed to the next run
 - `output`: The agent's output (text, error, or other types)
+
+## Convex Compatibility
+
+This SDK includes a special entry point for running agents in [Convex](https://convex.dev) backend actions. Convex actions run in a sandboxed Node.js environment without access to the file system or `child_process`, so we provide a `ConvexCodebuffClient` that works within these constraints.
+
+### Installation for Convex
+
+```bash
+npm install @fatagnus/codebuff
+```
+
+### Basic Convex Example
+
+```typescript
+import { ConvexCodebuffClient } from '@fatagnus/codebuff/convex'
+
+// In a Convex action
+export async function analyzeCode(apiKey: string, codeToAnalyze: string) {
+  const client = new ConvexCodebuffClient({
+    apiKey,
+    // In Convex, provide project files as a plain object since there's no file system
+    projectFiles: {
+      'code-to-analyze.ts': codeToAnalyze,
+    },
+  })
+
+  const result = await client.run({
+    agent: 'codebuff/base-lite@1.0.0',
+    prompt: 'Please analyze the code in code-to-analyze.ts and explain what it does.',
+  })
+
+  if (result.output.type === 'error') {
+    throw new Error(`Agent error: ${result.output.message}`)
+  }
+
+  return result.output
+}
+```
+
+### Full Convex Action Example
+
+```typescript
+import { action } from "./_generated/server"
+import { v } from "convex/values"
+import { ConvexCodebuffClient } from "@fatagnus/codebuff/convex"
+
+export const analyzeCode = action({
+  args: {
+    code: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const apiKey = process.env.CODEBUFF_API_KEY
+    if (!apiKey) throw new Error("CODEBUFF_API_KEY not configured")
+
+    const client = new ConvexCodebuffClient({
+      apiKey,
+      projectFiles: { "input.ts": args.code },
+      maxAgentSteps: 10, // Limit steps to stay within Convex's timeout
+    })
+
+    const result = await client.run({
+      agent: "codebuff/base-lite@1.0.0",
+      prompt: "Analyze this code and suggest improvements.",
+    })
+
+    if (result.output.type === "error") {
+      throw new Error(result.output.message)
+    }
+
+    return result.output
+  },
+})
+```
+
+### Multi-turn Conversations in Convex
+
+```typescript
+import { ConvexCodebuffClient } from '@fatagnus/codebuff/convex'
+
+export async function multiTurnConversation(
+  apiKey: string,
+  projectFiles: Record<string, string>,
+) {
+  const client = new ConvexCodebuffClient({
+    apiKey,
+    projectFiles,
+  })
+
+  // First turn
+  const run1 = await client.run({
+    agent: 'codebuff/base-lite@1.0.0',
+    prompt: 'What files are in this project?',
+  })
+
+  // Second turn - continues the conversation
+  const run2 = await client.run({
+    agent: 'codebuff/base-lite@1.0.0',
+    prompt: 'Now explain the main entry point.',
+    previousRun: run1, // Pass the previous run state to continue the conversation
+  })
+
+  return run2
+}
+```
+
+### Subagent Spawning in Convex
+
+The Convex runtime supports spawning subagents using the `spawn_agents` tool. To use this feature:
+
+1. Define your agents with `spawnableAgents` arrays
+2. Include all agent definitions in `agentDefinitions`
+
+```typescript
+import { ConvexCodebuffClient } from '@fatagnus/codebuff/convex'
+import type { AgentDefinition } from '@fatagnus/codebuff/convex'
+
+const helperAgent: AgentDefinition = {
+  id: 'helper',
+  displayName: 'Helper Agent',
+  systemPrompt: 'You are a helpful assistant that answers questions.',
+  toolNames: ['read_files', 'end_turn'],
+}
+
+const orchestratorAgent: AgentDefinition = {
+  id: 'orchestrator',
+  displayName: 'Orchestrator',
+  systemPrompt: 'You coordinate tasks by spawning helper agents.',
+  toolNames: ['spawn_agents', 'read_files', 'end_turn'],
+  spawnableAgents: ['helper'], // Can spawn the helper agent
+}
+
+const client = new ConvexCodebuffClient({
+  apiKey,
+  projectFiles: myFiles,
+  agentDefinitions: [helperAgent, orchestratorAgent],
+})
+
+const result = await client.run({
+  agent: orchestratorAgent,
+  prompt: 'Analyze this codebase by spawning helpers for each file.',
+})
+```
+
+**Subagent limitations in Convex:**
+- Maximum nesting depth of 5 levels
+- Subagents can only be spawned from `agentDefinitions` (no database lookups)
+- Subagents run in parallel using `Promise.allSettled`
+
+### Convex Limitations & Workarounds
+
+Convex runs in a sandboxed Node.js environment without WASM support, file system access, or `child_process`. Here's how the SDK handles this:
+
+**Token Scoring Unavailable**: The standard SDK uses `web-tree-sitter` (WASM) to parse source files and extract symbol importance scores. In Convex, this is replaced with:
+- A hierarchical file tree in the system prompt
+- The `read_subtree` tool for exploring project structure
+
+**Unavailable Tools** (will throw `ConvexUnsupportedToolError`):
+
+- `run_terminal_command` - No `child_process` access
+- `code_search` - Requires ripgrep and file system
+- `write_file` / `str_replace` - No file system write access
+- `list_directory` / `glob` - No file system access
+
+You can provide custom implementations via `overrideTools` if needed:
+
+```typescript
+const client = new ConvexCodebuffClient({
+  apiKey,
+  projectFiles: myFiles,
+  overrideTools: {
+    read_files: async ({ filePaths }) => {
+      // Custom implementation to fetch files from your database
+      const result: Record<string, string | null> = {}
+      for (const path of filePaths) {
+        result[path] = await fetchFileFromDatabase(path)
+      }
+      return result
+    },
+  },
+})
+```
+
+### ConvexCodebuffClient API
+
+#### Constructor Options
+
+- **`apiKey`** (string, required): Your Codebuff API key
+- **`projectFiles`** (object, optional): Files as `{ path: content }` - required since there's no file system
+- **`knowledgeFiles`** (object, optional): Knowledge files to inject into context
+- **`agentDefinitions`** (array, optional): Custom agent definitions
+- **`maxAgentSteps`** (number, optional): Max steps before stopping (recommended: 10-20 for Convex timeout limits)
+- **`handleEvent`** (function, optional): Event callback for streaming
+- **`handleStreamChunk`** (function, optional): Chunk callback for real-time updates. Receives text chunks and subagent events (`subagent_start`, `subagent_chunk`, `subagent_finish`)
+- **`overrideTools`** (object, optional): Custom tool implementations
+- **`customToolDefinitions`** (array, optional): Custom tool definitions
+
+#### Methods
+
+- **`run(options)`**: Run an agent (same options as standard `CodebuffClient.run()`)
+- **`checkConnection()`**: Check if the Codebuff backend is reachable
+
+#### Built-in Tools
+
+The Convex SDK includes these tools by default:
+
+- **`read_files`**: Read contents of specific files
+- **`read_subtree`**: Explore directory structure and contents (compensates for lack of token scoring)
+- **`end_turn`**: Signal task completion
+- **`spawn_agents`**: Spawn subagents (when `spawnableAgents` is configured)
 
 ## License
 

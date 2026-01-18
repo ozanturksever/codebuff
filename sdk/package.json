@@ -1,7 +1,7 @@
 {
-  "name": "@codebuff/sdk",
+  "name": "@fatagnus/codebuff",
   "private": false,
-  "version": "0.10.2",
+  "version": "1.0.6",
   "description": "Official SDK for Codebuff — AI coding agent & framework",
   "license": "Apache-2.0",
   "type": "module",
@@ -12,6 +12,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
+    },
+    "./convex": {
+      "types": "./dist/convex.d.ts",
+      "import": "./dist/convex.mjs",
+      "require": "./dist/convex.cjs"
     },
     "./package.json": "./package.json"
   },
@@ -60,15 +65,14 @@
   "dependencies": {
     "@ai-sdk/anthropic": "2.0.50",
     "@jitl/quickjs-wasmfile-release-sync": "0.31.0",
-    "@vscode/tree-sitter-wasm": "0.1.4",
     "ai": "^5.0.0",
     "diff": "8.0.2",
     "ignore": "7.0.5",
     "micromatch": "^4.0.8",
-    "web-tree-sitter": "0.25.6",
     "ws": "^8.18.0",
     "zod": "^4.2.1"
   },
+
   "devDependencies": {
     "@types/bun": "^1.3.5",
     "@types/diff": "8.0.0",

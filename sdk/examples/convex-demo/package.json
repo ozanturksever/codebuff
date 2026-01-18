@@ -1,0 +1,15 @@
+{
+  "name": "convex-codebuff-demo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx convex dev",
+    "deploy": "npx convex deploy",
+    "run-action": "npx convex run actions:analyzeCode"
+  },
+  "dependencies": {
+    "@fatagnus/codebuff": "^1.0.6",
+    "convex": "^1.17.4"
+  }
+}

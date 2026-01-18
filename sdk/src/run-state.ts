@@ -1,7 +1,6 @@
 import * as os from 'os'
 import path from 'path'
 
-import { getFileTokenScores } from '@codebuff/code-map/parse'
 import {
   KNOWLEDGE_FILE_NAMES,
   KNOWLEDGE_FILE_NAMES_LOWERCASE,
@@ -132,10 +131,13 @@ function processCustomToolDefinitions(
 
 /**
  * Computes project file indexes (file tree and token scores)
+ * Uses dynamic import for @codebuff/code-map to avoid loading web-tree-sitter
+ * in environments where it's not available (e.g., Convex runtime).
  */
 async function computeProjectIndex(
   cwd: string,
   projectFiles: Record<string, string>,
+  options?: { skipTokenScoring?: boolean },
 ): Promise<{
   fileTree: FileTreeNode[]
   fileTokenScores: Record<string, any>
@@ -146,8 +148,16 @@ async function computeProjectIndex(
   let fileTokenScores = {}
   let tokenCallers = {}
 
+  // Skip token scoring if explicitly disabled (e.g., in Convex runtime)
+  if (options?.skipTokenScoring) {
+    return { fileTree, fileTokenScores, tokenCallers }
+  }
+
   if (filePaths.length > 0) {
     try {
+      // Dynamic import to avoid loading web-tree-sitter at module initialization
+      // This allows the Convex bundle to exclude the tree-sitter dependency
+      const { getFileTokenScores } = await import('@codebuff/code-map/parse')
       const tokenData = await getFileTokenScores(
         cwd,
         filePaths,
@@ -615,14 +625,18 @@ export async function applyOverridesToSessionState(
   // Apply projectFiles override (recomputes file tree and token scores)
   if (overrides.projectFiles !== undefined) {
     if (cwd) {
+      // Skip token scoring when cwd is provided but we're in a constrained environment
+      // The caller can set skipTokenScoring via the options if needed
       const { fileTree, fileTokenScores, tokenCallers } =
         await computeProjectIndex(cwd, overrides.projectFiles)
       sessionState.fileContext.fileTree = fileTree
       sessionState.fileContext.fileTokenScores = fileTokenScores
       sessionState.fileContext.tokenCallers = tokenCallers
     } else {
-      // If projectFiles are provided but no cwd, reset file context fields
-      sessionState.fileContext.fileTree = []
+      // If projectFiles are provided but no cwd, just build the file tree
+      // Skip token scoring since it requires a valid cwd
+      const filePaths = Object.keys(overrides.projectFiles).sort()
+      sessionState.fileContext.fileTree = buildFileTree(filePaths)
       sessionState.fileContext.fileTokenScores = {}
       sessionState.fileContext.tokenCallers = {}
     }
