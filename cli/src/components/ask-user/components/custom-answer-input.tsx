@@ -2,9 +2,12 @@
  * Custom answer input component - MultilineInput wrapper for custom text answers
  */
 
-import React, { memo } from 'react'
+import React, { memo, useCallback, useMemo } from 'react'
 
 import { MultilineInput } from '../../multiline-input'
+import { createTextPasteHandler } from '../../../utils/strings'
+
+import type { InputValue } from '../../../state/chat-store'
 
 export interface CustomAnswerInputProps {
   value: string
@@ -13,7 +16,6 @@ export interface CustomAnswerInputProps {
   optionIndent: number
   onChange: (text: string, cursorPosition: number) => void
   onSubmit: () => void
-  onPaste: (text: string) => void
 }
 
 export const CustomAnswerInput: React.FC<CustomAnswerInputProps> = memo(
@@ -24,22 +26,27 @@ export const CustomAnswerInput: React.FC<CustomAnswerInputProps> = memo(
     optionIndent,
     onChange,
     onSubmit,
-    onPaste,
   }) => {
+    const handleInputChange = useCallback(
+      (inputValue: InputValue) => {
+        onChange(inputValue.text, inputValue.cursorPosition)
+      },
+      [onChange],
+    )
+
+    const handlePaste = useMemo(
+      () => createTextPasteHandler(value, cursorPosition, handleInputChange),
+      [value, cursorPosition, handleInputChange],
+    )
+
     return (
       <box style={{ flexDirection: 'column', paddingLeft: optionIndent + 2 }}>
         <MultilineInput
           value={value}
           cursorPosition={cursorPosition}
-          onChange={(inputValue) => {
-            onChange(inputValue.text, inputValue.cursorPosition)
-          }}
+          onChange={handleInputChange}
           onSubmit={onSubmit}
-          onPaste={(text) => {
-            if (text) {
-              onPaste(text)
-            }
-          }}
+          onPaste={handlePaste}
           focused={focused}
           maxHeight={3}
           minHeight={1}

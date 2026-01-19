@@ -119,7 +119,8 @@ export function resolveChatKeyboardAction(
 ): ChatKeyboardAction {
   const isEscape = key.name === 'escape'
   const isCtrlC = key.ctrl && key.name === 'c'
-  const isCtrlV = key.ctrl && key.name === 'v'
+  // Ctrl+V or Cmd+V (meta on macOS) for paste
+  const isCtrlV = (key.ctrl || key.meta) && key.name === 'v'
   const isBackspace = key.name === 'backspace'
   const isUp = key.name === 'up' && !hasModifier(key)
   const isDown = key.name === 'down' && !hasModifier(key)

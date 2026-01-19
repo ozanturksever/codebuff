@@ -2,7 +2,7 @@
  * Accordion-style question component that can expand/collapse
  */
 
-import React, { useCallback } from 'react'
+import React from 'react'
 
 import { CustomAnswerInput } from './custom-answer-input'
 import { OptionsList } from './options-list'
@@ -92,18 +92,6 @@ export const AccordionQuestion: React.FC<AccordionQuestionProps> = ({
 
   const isCustomSelected = answer?.isCustom ?? false
 
-  const handlePaste = useCallback(
-    (text: string) => {
-      const currentText = answer?.customText || ''
-      const newText =
-        currentText.slice(0, customCursorPosition) +
-        text +
-        currentText.slice(customCursorPosition)
-      onSetCustomText(newText, customCursorPosition + text.length)
-    },
-    [answer?.customText, customCursorPosition, onSetCustomText],
-  )
-
   return (
     <box style={{ flexDirection: 'column', marginBottom: 1, width: '100%' }}>
       {/* Question header - always visible */}
@@ -139,7 +127,6 @@ export const AccordionQuestion: React.FC<AccordionQuestionProps> = ({
               optionIndent={optionIndent}
               onChange={onSetCustomText}
               onSubmit={onCustomSubmit}
-              onPaste={handlePaste}
             />
           )}
         </box>
