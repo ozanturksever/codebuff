@@ -1,3 +1,4 @@
+import path from 'path'
 import React from 'react'
 
 import { useTheme } from '../hooks/use-theme'
@@ -26,10 +27,7 @@ export const BottomStatusLine: React.FC<BottomStatusLineProps> = ({
 }) => {
   const theme = useTheme()
 
-  // Don't render if there's nothing to show
-  if (!isClaudeConnected) {
-    return null
-  }
+  const directoryName = path.basename(process.cwd())
 
   // Use the more restrictive of the two quotas (5-hour window is usually the limiting factor)
   const displayRemaining = claudeQuota
@@ -69,22 +67,27 @@ export const BottomStatusLine: React.FC<BottomStatusLineProps> = ({
           gap: 0,
         }}
       >
-        <text style={{ fg: dotColor }}>●</text>
-        <text style={{ fg: theme.muted }}> Claude subscription</text>
-        {isExhausted && resetTime ? (
-          <text style={{ fg: theme.muted }}>{` · resets in ${formatResetTime(resetTime)}`}</text>
-        ) : displayRemaining !== null ? (
-          <text
-            style={{
-              fg:
-                displayRemaining <= 10
-                  ? theme.error
-                  : displayRemaining <= 25
-                    ? theme.warning
-                    : theme.muted,
-            }}
-          >{` ${Math.round(displayRemaining)}%`}</text>
-        ) : null}
+        <text style={{ fg: theme.muted }}>{directoryName}</text>
+        {isClaudeConnected && (
+          <>
+            <text style={{ fg: dotColor }}> ●</text>
+            <text style={{ fg: theme.muted }}> Claude</text>
+            {isExhausted && resetTime ? (
+              <text style={{ fg: theme.muted }}>{` · resets in ${formatResetTime(resetTime)}`}</text>
+            ) : displayRemaining !== null ? (
+              <text
+                style={{
+                  fg:
+                    displayRemaining <= 10
+                      ? theme.error
+                      : displayRemaining <= 25
+                        ? theme.warning
+                        : theme.muted,
+                }}
+              >{` ${Math.round(displayRemaining)}%`}</text>
+            ) : null}
+          </>
+        )}
       </box>
     </box>
   )
