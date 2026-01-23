@@ -1,4 +1,3 @@
-import { insertTrace } from '@codebuff/bigquery'
 import { AnalyticsEvent } from '@codebuff/common/constants/analytics-events'
 import { supportsCacheControl } from '@codebuff/common/old-constants'
 import { TOOLS_WHICH_WONT_FORCE_NEXT_STEP } from '@codebuff/common/tools/constants'
@@ -26,7 +25,6 @@ import {
 } from './util/messages'
 import { countTokensJson } from './util/token-counter'
 
-import type { AgentResponseTrace } from '@codebuff/bigquery'
 import type { AgentTemplate } from '@codebuff/common/types/agent-template'
 import type { TrackEventFn } from '@codebuff/common/types/contracts/analytics'
 import type {
@@ -260,11 +258,11 @@ export const runAgentStep = async (
   logger.debug(
     {
       iteration: iterationNum,
-      agentId: agentState.agentId,
+      runId: agentState.runId,
       model,
       duration: Date.now() - startTime,
       contextTokenCount: agentState.contextTokenCount,
-      agentMessages: agentState.messageHistory,
+      agentMessages: agentState.messageHistory.concat().reverse(),
       system,
       prompt,
       params: spawnParams,
@@ -352,22 +350,6 @@ export const runAgentStep = async (
 
   fullResponse = fullResponseAfterStream
 
-  const agentResponseTrace: AgentResponseTrace = {
-    type: 'agent-response',
-    created_at: new Date(),
-    agent_step_id: agentStepId,
-    user_id: userId ?? '',
-    id: crypto.randomUUID(),
-    payload: {
-      output: fullResponse,
-      user_input_id: userInputId,
-      client_session_id: clientSessionId,
-      fingerprint_id: fingerprintId,
-    },
-  }
-
-  insertTrace({ trace: agentResponseTrace, logger })
-
   agentState.messageHistory = expireMessages(
     agentState.messageHistory,
     'agentStep',
@@ -432,7 +414,7 @@ export const runAgentStep = async (
       shouldEndTurn,
       duration: Date.now() - startTime,
       fullResponse,
-      finalMessageHistoryWithToolResults: agentState.messageHistory,
+      finalMessageHistoryWithToolResults: agentState.messageHistory.concat().reverse(),
       toolCalls,
       toolResults,
       agentContext,
@@ -767,6 +749,7 @@ export async function loopAgentSteps(
       const tokenCountResult = await callTokenCountAPI({
         messages: messagesWithStepPrompt,
         system,
+        model: agentTemplate.model,
         fetch,
         logger,
         env: { clientEnv, ciEnv },

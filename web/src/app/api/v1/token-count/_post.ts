@@ -1,4 +1,8 @@
 import { AnalyticsEvent } from '@codebuff/common/constants/analytics-events'
+import {
+  isClaudeModel,
+  toAnthropicModelId,
+} from '@codebuff/common/constants/claude-oauth'
 import { getErrorObject } from '@codebuff/common/util/error'
 import { env } from '@codebuff/internal/env'
 import { NextResponse } from 'next/server'
@@ -70,23 +74,24 @@ export async function postTokenCount(params: {
 
   const { messages, system, model } = bodyResult.data
 
-  trackEvent({
-    event: AnalyticsEvent.TOKEN_COUNT_REQUEST,
-    userId,
-    properties: {
-      messageCount: messages.length,
-      hasSystem: !!system,
-      model: model ?? 'claude-sonnet-4-20250514',
-    },
-    logger,
-  })
-
   try {
     const inputTokens = await countTokensViaAnthropic({
       messages,
       system,
       model,
       fetch,
+      logger,
+    })
+
+    trackEvent({
+      event: AnalyticsEvent.TOKEN_COUNT_REQUEST,
+      userId,
+      properties: {
+        messageCount: messages.length,
+        hasSystem: !!system,
+        model: model ?? 'claude-opus-4-5-20251101',
+        inputTokens,
+      },
       logger,
     })
 
@@ -113,6 +118,9 @@ export async function postTokenCount(params: {
   }
 }
 
+// Buffer to add to token count for non-Anthropic models since tokenizers differ
+const NON_ANTHROPIC_TOKEN_BUFFER = 0.3
+
 async function countTokensViaAnthropic(params: {
   messages: TokenCountRequest['messages']
   system: string | undefined
@@ -130,6 +138,14 @@ async function countTokensViaAnthropic(params: {
     throw new Error('ANTHROPIC_API_KEY not configured')
   }
 
+  // Convert model from OpenRouter format (e.g. "anthropic/claude-opus-4.5") to Anthropic format (e.g. "claude-opus-4-5-20251101")
+  // For non-Anthropic models, use the default Anthropic model for token counting
+  const DEFAULT_ANTHROPIC_MODEL = 'claude-opus-4-5-20251101'
+  const isNonAnthropicModel = !model || !isClaudeModel(model)
+  const anthropicModelId = isNonAnthropicModel
+    ? DEFAULT_ANTHROPIC_MODEL
+    : toAnthropicModelId(model)
+
   // Use the count_tokens endpoint (beta) or make a minimal request
   const response = await fetch(
     'https://api.anthropic.com/v1/messages/count_tokens',
@@ -142,7 +158,7 @@ async function countTokensViaAnthropic(params: {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: model ?? 'claude-opus-4-5-20251101',
+        model: anthropicModelId,
         messages: anthropicMessages,
         ...(system && { system }),
       }),
@@ -165,7 +181,14 @@ async function countTokensViaAnthropic(params: {
   }
 
   const data = await response.json()
-  return data.input_tokens
+  const baseTokens = data.input_tokens
+
+  // Add 30% buffer for non-Anthropic models since tokenizers differ
+  if (isNonAnthropicModel) {
+    return Math.ceil(baseTokens * (1 + NON_ANTHROPIC_TOKEN_BUFFER))
+  }
+
+  return baseTokens
 }
 
 export function convertToAnthropicMessages(
@@ -240,7 +263,10 @@ export function convertContentToAnthropic(
       // Handle image content - the image field can be base64 data or a URL string
       const imageData = part.image
       if (typeof imageData === 'string' && imageData) {
-        if (imageData.startsWith('http://') || imageData.startsWith('https://')) {
+        if (
+          imageData.startsWith('http://') ||
+          imageData.startsWith('https://')
+        ) {
           // URL-based image
           anthropicContent.push({
             type: 'image',

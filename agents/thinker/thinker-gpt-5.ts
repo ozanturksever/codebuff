@@ -5,34 +5,47 @@ import type { SecretAgentDefinition } from '../types/secret-agent-definition'
 const definition: SecretAgentDefinition = {
   id: 'thinker-gpt-5',
   publisher,
-  model: 'openai/gpt-5.1',
-  displayName: 'Theo the Theorizer',
+  model: 'openai/gpt-5.2',
+  displayName: 'GPT-5 Thinker',
   spawnerPrompt:
-    'Does deep thinking given the current messages and a specific prompt to focus on. Use this to help you solve a specific problem.',
+    'Does deep thinking given the prompt and optionally provided files. Use this to help you solve a specific problem that requires extended reasoning.',
   inputSchema: {
     prompt: {
       type: 'string',
       description: 'The problem you are trying to solve',
     },
+    params: {
+      type: 'object',
+      properties: {
+        filePaths: {
+          type: 'array',
+          items: {
+            type: 'string',
+            description: 'The path to a file',
+          },
+          description:
+            'An optional list of relevant file paths to read before thinking. Try to provide as many as possible that could be relevant to your request.',
+        },
+      },
+    },
   },
   outputMode: 'last_message',
-  inheritParentSystemPrompt: true,
-  includeMessageHistory: true,
-  spawnableAgents: [],
+  spawnableAgents: ['researcher-web', 'researcher-docs', 'file-picker', 'code-searcher', 'directory-lister', 'glob-matcher', 'commander'],
+  toolNames: ['spawn_agents', 'read_files'],
 
-  instructionsPrompt: `
-Think deeply, step by step, about the user request and how best to approach it.
+  handleSteps: function* ({ params }) {
+    const filePaths = params?.filePaths as string[] | undefined
 
-Consider edge cases, potential issues, and alternative approaches. Also, propose reading files or spawning agents to get more context that would be helpful for solving the problem.
+    if (filePaths && filePaths.length > 0) {
+      yield {
+        toolName: 'read_files',
+        input: { paths: filePaths },
+      }
+    }
 
-Come up with a list of insights that would help someone arrive at the best solution.
-
-Try not to be too prescriptive or confident in one solution. Instead, give clear arguments and reasoning.
-
-You must be extremely concise and to the point.
-
-**Important**: Do not use any tools! You are only thinking!
-`.trim(),
+    // Allow multiple steps for extended reasoning
+    yield 'STEP_ALL'
+  },
 }
 
 export default definition

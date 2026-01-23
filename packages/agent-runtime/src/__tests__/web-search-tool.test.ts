@@ -1,4 +1,3 @@
-import * as bigquery from '@codebuff/bigquery'
 import * as analytics from '@codebuff/common/analytics'
 import { TEST_USER_ID } from '@codebuff/common/old-constants'
 import { TEST_AGENT_RUNTIME_IMPL } from '@codebuff/common/testing/impl/agent-runtime'
@@ -16,7 +15,7 @@ import {
 } from 'bun:test'
 
 import { createToolCallChunk, mockFileContext } from './test-utils'
-import researcherAgent from '../../../../agents/researcher/researcher'
+import researcherAgent from '../../../../agents-graveyard/researcher/researcher'
 import * as webApi from '../llm-api/codebuff-web-api'
 import { runAgentStep } from '../run-agent-step'
 import { assembleLocalAgentTemplates } from '../templates/agent-registry'
@@ -72,11 +71,8 @@ describe('web_search tool with researcher agent (via web API facade)', () => {
       userInputId: 'test-input',
     }
 
-    // Mock analytics and tracing
+    // Mock analytics
     spyOn(analytics, 'trackEvent').mockImplementation(() => {})
-    spyOn(bigquery, 'insertTrace').mockImplementation(() =>
-      Promise.resolve(true),
-    )
 
     // Mock websocket actions
     runAgentStepBaseParams.requestFiles = async () => ({})

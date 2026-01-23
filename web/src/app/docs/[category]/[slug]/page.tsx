@@ -11,7 +11,10 @@ import { getDocsByCategory } from '@/lib/docs'
 import { allDocs } from '.contentlayer/generated'
 
 // Generate static params for all doc pages at build time
-export function generateStaticParams(): Array<{ category: string; slug: string }> {
+export function generateStaticParams(): Array<{
+  category: string
+  slug: string
+}> {
   return allDocs
     .filter((doc) => !doc.slug.startsWith('_'))
     .map((doc) => ({
@@ -33,9 +36,13 @@ const FAQ_ITEMS = [
       'Multiple. The orchestrator ("Buffy") uses Claude Opus 4.5 in Default and Max modes, or Grok 4.1 Fast in Lite mode. Subagents are matched to their tasks: GPT-5.1 and Claude Opus 4.5 for code editing, Gemini 2.5 Pro for deep reasoning, Grok 4 Fast for terminal commands and research, and Relace AI for fast file rewrites.',
   },
   {
-    question: 'Is Codebuff open source?',
+    question: 'Can I use my Claude Pro or Max subscription with Codebuff?',
     answer:
-      "Yes. It's Apache 2.0 at github.com/CodebuffAI/codebuff.",
+      "Yes! If you have a Claude Pro or Max subscription, you can connect it to Codebuff and use your subscription for Claude model requests. This lets you save credits while still benefiting from Codebuff's intelligent orchestration. Run /connect:claude in the CLI to link your subscription.",
+  },
+  {
+    question: 'Is Codebuff open source?',
+    answer: "Yes. It's Apache 2.0 at github.com/CodebuffAI/codebuff.",
   },
   {
     question: 'Do you store my data?',
@@ -200,7 +207,11 @@ const DocNavigation = ({
   )
 }
 
-export default async function DocPage({ params }: { params: Promise<{ category: string; slug: string }> }) {
+export default async function DocPage({
+  params,
+}: {
+  params: Promise<{ category: string; slug: string }>
+}) {
   const { category, slug } = await params
   const docs = getDocsByCategory(category)
   const doc = docs.find((d: Doc) => d.slug === slug)

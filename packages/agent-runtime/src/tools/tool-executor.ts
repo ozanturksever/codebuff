@@ -3,6 +3,7 @@ import { toolParams } from '@codebuff/common/tools/list'
 import { generateCompactId } from '@codebuff/common/util/string'
 import { cloneDeep } from 'lodash'
 
+import { MCP_TOOL_SEPARATOR } from '../mcp-constants'
 import { getMCPToolData } from '../mcp'
 import { getAgentShortName } from '../templates/prompts'
 import { codebuffToolHandlers } from './handlers/list'
@@ -231,10 +232,6 @@ export function executeToolCall<T extends ToolName>(
       toolCallId: toolCall.toolCallId,
       content: output,
     }
-    logger.debug(
-      { input, toolResult },
-      `${toolName} tool call & result (${toolResult.toolCallId})`,
-    )
 
     onResponseChunk({
       type: 'tool_result',
@@ -274,7 +271,7 @@ export function parseRawCustomToolCall(params: {
 
   if (
     !(customToolDefs && toolName in customToolDefs) &&
-    !toolName.includes('__')
+    !toolName.includes(MCP_TOOL_SEPARATOR)
   ) {
     return {
       toolName,
@@ -370,8 +367,8 @@ export async function executeCustomToolCall(
     !(agentTemplate.toolNames as string[]).includes(toolCall.toolName) &&
     !fromHandleSteps &&
     !(
-      toolCall.toolName.includes('__') &&
-      toolCall.toolName.split('__')[0] in agentTemplate.mcpServers
+      toolCall.toolName.includes(MCP_TOOL_SEPARATOR) &&
+      toolCall.toolName.split(MCP_TOOL_SEPARATOR)[0] in agentTemplate.mcpServers
     )
   ) {
     // Emit an error event instead of tool call/result pair
@@ -415,15 +412,15 @@ export async function executeCustomToolCall(
         return null
       }
 
-      const toolName = toolCall.toolName.includes('__')
-        ? toolCall.toolName.split('__').slice(1).join('__')
+      const toolName = toolCall.toolName.includes(MCP_TOOL_SEPARATOR)
+        ? toolCall.toolName.split(MCP_TOOL_SEPARATOR).slice(1).join(MCP_TOOL_SEPARATOR)
         : toolCall.toolName
       const clientToolResult = await requestToolCall({
         userInputId,
         toolName,
         input: toolCall.input,
-        mcpConfig: toolCall.toolName.includes('__')
-          ? agentTemplate.mcpServers[toolCall.toolName.split('__')[0]]
+        mcpConfig: toolCall.toolName.includes(MCP_TOOL_SEPARATOR)
+          ? agentTemplate.mcpServers[toolCall.toolName.split(MCP_TOOL_SEPARATOR)[0]]
           : undefined,
       })
       return clientToolResult.output satisfies ToolResultOutput[]

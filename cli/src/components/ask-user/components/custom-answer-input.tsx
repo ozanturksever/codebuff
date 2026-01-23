@@ -4,6 +4,7 @@
 
 import React, { memo, useCallback, useMemo } from 'react'
 
+import { useTheme } from '../../../hooks/use-theme'
 import { MultilineInput } from '../../multiline-input'
 import { createTextPasteHandler } from '../../../utils/strings'
 
@@ -27,6 +28,8 @@ export const CustomAnswerInput: React.FC<CustomAnswerInputProps> = memo(
     onChange,
     onSubmit,
   }) => {
+    const theme = useTheme()
+
     const handleInputChange = useCallback(
       (inputValue: InputValue) => {
         onChange(inputValue.text, inputValue.cursorPosition)
@@ -41,6 +44,14 @@ export const CustomAnswerInput: React.FC<CustomAnswerInputProps> = memo(
 
     return (
       <box style={{ flexDirection: 'column', paddingLeft: optionIndent + 2 }}>
+        <box
+          style={{
+            borderStyle: 'single',
+            borderColor: theme.muted,
+            paddingLeft: 1,
+            paddingRight: 1,
+          }}
+        >
         <MultilineInput
           value={value}
           cursorPosition={cursorPosition}
@@ -48,10 +59,12 @@ export const CustomAnswerInput: React.FC<CustomAnswerInputProps> = memo(
           onSubmit={onSubmit}
           onPaste={handlePaste}
           focused={focused}
-          maxHeight={3}
+          maxHeight={5}
           minHeight={1}
           placeholder="Type your answer..."
+          showScrollbar={true}
         />
+        </box>
       </box>
     )
   },

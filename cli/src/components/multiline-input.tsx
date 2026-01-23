@@ -142,6 +142,12 @@ function isAltModifier(key: KeyEvent): boolean {
   )
 }
 
+// Helper type for scrollbox with focus/blur methods (not exposed in OpenTUI types but available at runtime)
+interface FocusableScrollBox {
+  focus?: () => void
+  blur?: () => void
+}
+
 interface MultilineInputProps {
   value: string
   onChange: (value: InputValue) => void
@@ -154,10 +160,12 @@ interface MultilineInputProps {
   maxHeight?: number
   minHeight?: number
   cursorPosition: number
+  showScrollbar?: boolean
 }
 
 export type MultilineInputHandle = {
   focus: () => void
+  blur: () => void
 }
 
 export const MultilineInput = forwardRef<
@@ -176,6 +184,7 @@ export const MultilineInput = forwardRef<
     minHeight = 1,
     onKeyIntercept,
     cursorPosition,
+    showScrollbar = false,
   }: MultilineInputProps,
   forwardedRef,
 ) {
@@ -224,14 +233,26 @@ export const MultilineInput = forwardRef<
       ).lineInfo
     : null
 
+  // Focus/blur scrollbox when focused prop changes
+  const prevFocusedRef = useRef(false)
+  useEffect(() => {
+    if (focused && !prevFocusedRef.current) {
+      (scrollBoxRef.current as FocusableScrollBox | null)?.focus?.()
+    } else if (!focused && prevFocusedRef.current) {
+      (scrollBoxRef.current as FocusableScrollBox | null)?.blur?.()
+    }
+    prevFocusedRef.current = focused
+  }, [focused])
+
+  // Expose focus/blur for imperative use cases
   useImperativeHandle(
     forwardedRef,
     () => ({
       focus: () => {
-        const node = scrollBoxRef.current
-        if (node && typeof (node as any).focus === 'function') {
-          ;(node as any).focus()
-        }
+        (scrollBoxRef.current as FocusableScrollBox | null)?.focus?.()
+      },
+      blur: () => {
+        (scrollBoxRef.current as FocusableScrollBox | null)?.blur?.()
       },
     }),
     [],
@@ -491,6 +512,7 @@ export const MultilineInput = forwardRef<
       const hasBackslashBeforeCursor =
         cursorPosition > 0 && value[cursorPosition - 1] === '\\'
 
+      // Plain Enter: no modifiers, sequence is '\r' (macOS) or '\n' (Linux)
       const isPlainEnter =
         isEnterKey &&
         !key.shift &&
@@ -499,10 +521,9 @@ export const MultilineInput = forwardRef<
         !key.option &&
         !isAltLikeModifier &&
         !hasEscapePrefix &&
-        key.sequence === '\r' &&
+        (key.sequence === '\r' || key.sequence === '\n') &&
         !hasBackslashBeforeCursor
-      const isShiftEnter =
-        isEnterKey && (Boolean(key.shift) || key.sequence === '\n')
+      const isShiftEnter = isEnterKey && Boolean(key.shift)
       const isOptionEnter =
         isEnterKey && (isAltLikeModifier || hasEscapePrefix)
       const isBackslashEnter = isEnterKey && hasBackslashBeforeCursor
@@ -1015,9 +1036,13 @@ export const MultilineInput = forwardRef<
 
     const heightLines = Math.max(effectiveMinHeight, rawHeight)
 
+    // Content is scrollable when total lines exceed max height
+    const isScrollable = totalLines > safeMaxHeight
+
     return {
       heightLines,
       gutterEnabled,
+      isScrollable,
     }
   })()
 
@@ -1037,6 +1062,10 @@ export const MultilineInput = forwardRef<
       stickyScroll={true}
       stickyStart="bottom"
       scrollbarOptions={{ visible: false }}
+      verticalScrollbarOptions={{
+        visible: showScrollbar && layoutMetrics.isScrollable,
+        trackOptions: { width: 1 },
+      }}
       onPaste={(event) => onPaste(event.text)}
       onMouseDown={handleMouseDown}
       style={{

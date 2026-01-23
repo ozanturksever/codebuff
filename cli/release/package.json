@@ -1,6 +1,6 @@
 {
   "name": "codebuff",
-  "version": "1.0.589",
+  "version": "1.0.594",
   "description": "AI coding agent",
   "license": "MIT",
   "bin": {
@@ -29,7 +29,7 @@
     "node": ">=16"
   },
   "dependencies": {
-    "tar": "^6.2.0"
+    "tar": "^7.0.0"
   },
   "repository": {
     "type": "git",
