@@ -10,6 +10,11 @@ export interface SlashCommand {
    * input matches the command id exactly (no arguments).
    */
   implicitCommand?: boolean
+  /**
+   * If set, selecting this command inserts this text into the input field
+   * instead of executing a command. Useful for agent shortcuts.
+   */
+  insertText?: string
 }
 
 // Generate mode commands from the AGENT_MODES constant
@@ -73,7 +78,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'new',
     label: 'new',
-    description: 'Start a fresh conversation session',
+    description: 'Clear the conversation history and start a new chat',
     aliases: ['n', 'clear', 'c', 'reset'],
     implicitCommand: true,
   },
@@ -82,6 +87,18 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     label: 'history',
     description: 'Browse and resume past conversations',
     aliases: ['chats'],
+  },
+  {
+    id: 'agent:gpt-5',
+    label: 'agent:gpt-5',
+    description: 'Spawn the GPT-5 agent to help solve complex problems',
+    insertText: '@GPT-5 Agent ',
+  },
+  {
+    id: 'agent:opus',
+    label: 'agent:opus',
+    description: 'Spawn the Opus agent to help solve any problem',
+    insertText: '@Opus Agent ',
   },
   {
     id: 'feedback',

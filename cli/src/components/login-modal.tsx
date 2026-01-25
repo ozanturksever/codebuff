@@ -1,9 +1,9 @@
 import { useRenderer } from '@opentui/react'
-import open from 'open'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 
-import { TerminalLink } from './terminal-link'
+import { Button } from './button'
 import { useLoginMutation } from '../hooks/use-auth-query'
+import { useClipboard } from '../hooks/use-clipboard'
 import { useFetchLoginUrl } from '../hooks/use-fetch-login-url'
 import { useLoginKeyboardHandlers } from '../hooks/use-login-keyboard-handlers'
 import { useLoginPolling } from '../hooks/use-login-polling'
@@ -63,6 +63,9 @@ export const LoginModal = ({
   // Generate fingerprint ID (only once on mount)
   const [fingerprintId] = useState(() => generateFingerprintId())
 
+  // Track hover state for copy button
+  const [isCopyButtonHovered, setIsCopyButtonHovered] = useState(false)
+
   // Use TanStack Query for login mutation
   const loginMutation = useLoginMutation()
 
@@ -95,11 +98,8 @@ export const LoginModal = ({
           setJustCopied(false)
         }, 3000)
       } catch (err) {
+        // Silently fail - the URL is visible for manual copying
         logger.error(err, 'Failed to copy to clipboard')
-        setCopyMessage('✗ Failed to copy to clipboard')
-        setTimeout(() => {
-          setCopyMessage(null)
-        }, 3000)
       }
     },
     [setHasClickedLink, setJustCopied, setCopyMessage],
@@ -192,12 +192,6 @@ export const LoginModal = ({
     onCopyUrl: copyToClipboard,
   })
 
-  // Auto-copy URL when browser is opened
-  useEffect(() => {
-    if (hasOpenedBrowser && loginUrl) {
-      copyToClipboard(loginUrl)
-    }
-  }, [hasOpenedBrowser, loginUrl, copyToClipboard])
 
   // Calculate terminal width and height for responsive display
   const terminalWidth = renderer?.width || 80
@@ -221,19 +215,6 @@ export const LoginModal = ({
     [maxUrlWidth],
   )
 
-  // Handle login URL activation
-  const handleActivateLoginUrl = useCallback(async () => {
-    if (!loginUrl) {
-      return
-    }
-    try {
-      await open(loginUrl)
-    } catch (err) {
-      logger.error(err, 'Failed to open browser on link click')
-    }
-    return copyToClipboard(loginUrl)
-  }, [loginUrl, copyToClipboard])
-
   // Use custom hook for sheen animation
   const blockColor = getLogoBlockColor(theme.name)
   const accentColor = getLogoAccentColor(theme.name)
@@ -252,6 +233,10 @@ export const LoginModal = ({
     applySheenToChar,
     textColor: theme.foreground,
   })
+
+  // Enable auto-copy when user selects text (drag to select)
+  // hasSelection provides visual feedback when text is being selected
+  const { hasSelection } = useClipboard()
 
   // Format URL for display (wrap if needed)
   return (
@@ -363,15 +348,13 @@ export const LoginModal = ({
           >
             <text style={{ wrapMode: 'word' }}>
               <span fg={'#00cc00'}>
-                {isNarrow
-                  ? 'Press ENTER to login...'
-                  : 'Press ENTER to open your browser and login...'}
+                Press ENTER to login...
               </span>
             </text>
           </box>
         )}
 
-        {/* After opening browser - show URL as fallback */}
+        {/* After pressing enter - show URL prominently for all users */}
         {!loading && !error && loginUrl && hasOpenedBrowser && (
           <box
             style={{
@@ -384,56 +367,64 @@ export const LoginModal = ({
             }}
           >
             <text style={{ wrapMode: 'word' }}>
-              <span fg={theme.secondary}>
+              <span fg={theme.foreground}>
                 {isNarrow
-                  ? 'Opening browser...'
-                  : 'Opening browser to complete login...'}
+                  ? 'Open this URL to login:'
+                  : 'Open this URL in your browser to login:'}
               </span>
             </text>
             <box
               style={{
-                marginTop: 0,
+                width: '100%',
+                flexShrink: 0,
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+              }}
+            >
+              {formatLoginUrlLines(loginUrl, maxUrlWidth).map((line, index) => (
+                <text key={index} style={{ wrapMode: 'none' }}>
+                  <span
+                    fg={
+                      justCopied
+                        ? theme.success
+                        : hasSelection
+                          ? theme.info
+                          : theme.primary
+                    }
+                  >
+                    {line}
+                  </span>
+                </text>
+              ))}
+            </box>
+            <box
+              style={{
+                flexDirection: 'column',
+                alignItems: 'center',
                 width: '100%',
                 flexShrink: 0,
               }}
             >
-              <TerminalLink
-                text={loginUrl}
-                maxWidth={maxUrlWidth}
-                formatLines={formatLoginUrlLines}
-                color={hasClickedLink ? theme.success : theme.link}
-                activeColor={theme.success}
-                underlineOnHover={true}
-                isActive={justCopied}
-                onActivate={handleActivateLoginUrl}
-                containerStyle={{
-                  alignItems: 'flex-start',
-                  flexShrink: 0,
-                }}
-              />
-            </box>
-            {copyMessage && (
-              <box
-                style={{
-                  marginTop: isVerySmall ? 0 : 1,
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  width: '100%',
-                  flexShrink: 0,
-                }}
+              <Button
+                onClick={() => copyToClipboard(loginUrl)}
+                onMouseOver={() => setIsCopyButtonHovered(true)}
+                onMouseOut={() => setIsCopyButtonHovered(false)}
               >
-                <text style={{ wrapMode: 'none' }}>
+                <text>
                   <span
                     fg={
-                      copyMessage.startsWith('✓') ? theme.success : theme.error
+                      justCopied
+                        ? theme.foreground
+                        : isCopyButtonHovered
+                          ? theme.foreground
+                          : theme.primary
                     }
                   >
-                    {copyMessage}
+                    {justCopied ? '[ ✓ Copied! ]' : '[ Copy link (c) ]'}
                   </span>
                 </text>
-              </box>
-            )}
-            {/* Show raw URL as fallback for devices where open() doesn't work */}
+              </Button>
+            </box>
             <box
               style={{
                 marginTop: isVerySmall ? 1 : 2,
@@ -443,14 +434,9 @@ export const LoginModal = ({
                 flexShrink: 0,
               }}
             >
-              <text style={{ wrapMode: 'word' }}>
-                <span fg={theme.muted}>
-                  {isNarrow ? 'Or copy URL:' : "Or copy this URL if browser didn't open:"}
-                </span>
-              </text>
-              <text style={{ wrapMode: 'word' }}>
-                <span fg={theme.muted}>
-                  {loginUrl}
+              <text style={{ wrapMode: 'none' }}>
+                <span fg={theme.secondary}>
+                  Waiting for login...
                 </span>
               </text>
             </box>
