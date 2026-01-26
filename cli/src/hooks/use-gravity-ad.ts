@@ -2,6 +2,7 @@ import { Message, WEBSITE_URL } from '@codebuff/sdk'
 import { useEffect, useRef, useState } from 'react'
 
 import { getAdsEnabled } from '../commands/ads'
+import { useTerminalLayout } from './use-terminal-layout'
 import { useChatStore } from '../state/chat-store'
 import { isUserActive, subscribeToActivity } from '../utils/activity-tracker'
 import { getAuthToken } from '../utils/auth'
@@ -69,6 +70,17 @@ export const useGravityAd = (): GravityAdState => {
   const [ad, setAd] = useState<AdResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
+  // Check if terminal height is too small to show ads
+  const { terminalHeight } = useTerminalLayout()
+  const isVeryCompactHeight = terminalHeight <= 17
+
+  // Get agent mode - FREE mode always shows ads even on compact screens
+  const agentMode = useChatStore((s) => s.agentMode)
+  const isFreeMode = agentMode === 'FREE'
+
+  // Skip ads on very compact screens unless in FREE mode (where ads are mandatory)
+  const shouldHideAds = isVeryCompactHeight && !isFreeMode
+
   // Use Zustand selector instead of manual subscription - only rerenders when value changes
   const hasUserMessaged = useChatStore((s) =>
     s.messages.some((m) => m.variant === 'user'),
@@ -87,8 +99,15 @@ export const useGravityAd = (): GravityAdState => {
   // Ref for the tick function (avoids useCallback dependency issues)
   const tickRef = useRef<() => void>(() => { })
 
+  // Ref to track whether ads should be hidden for use in async code
+  const shouldHideAdsRef = useRef(shouldHideAds)
+  shouldHideAdsRef.current = shouldHideAds
+
   // Fire impression and update credits (called when showing an ad)
   const recordImpressionOnce = (impUrl: string): void => {
+    // Don't record impressions when ads should be hidden
+    if (shouldHideAdsRef.current) return
+
     const ctrl = ctrlRef.current
     if (ctrl.impressionsFired.has(impUrl)) return
     ctrl.impressionsFired.add(impUrl)
@@ -99,13 +118,16 @@ export const useGravityAd = (): GravityAdState => {
       return
     }
 
+    // Include mode in request - FREE mode should not grant credits
+    const agentMode = useChatStore.getState().agentMode
+
     fetch(`${WEBSITE_URL}/api/v1/ads/impression`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${authToken}`,
       },
-      body: JSON.stringify({ impUrl }),
+      body: JSON.stringify({ impUrl, mode: agentMode }),
     })
       .then((res) => res.json())
       .then((data) => {
@@ -134,6 +156,8 @@ export const useGravityAd = (): GravityAdState => {
 
   // Fetch an ad via web API
   const fetchAd = async (): Promise<AdResponse | null> => {
+    // Don't fetch ads when they should be hidden
+    if (shouldHideAdsRef.current) return null
     if (!getAdsEnabled()) return null
 
     const authToken = getAuthToken()
@@ -249,7 +273,7 @@ export const useGravityAd = (): GravityAdState => {
 
   // Start rotation when user sends first message
   useEffect(() => {
-    if (!hasUserMessaged || !getAdsEnabled()) return
+    if (!hasUserMessaged || !getAdsEnabled() || shouldHideAds) return
 
     setIsLoading(true)
 
@@ -272,9 +296,10 @@ export const useGravityAd = (): GravityAdState => {
       clearInterval(id)
       ctrlRef.current.intervalId = null
     }
-  }, [hasUserMessaged])
+  }, [hasUserMessaged, shouldHideAds])
 
-  return { ad: hasUserMessaged ? ad : null, isLoading }
+  // Don't return ad when ads should be hidden
+  return { ad: hasUserMessaged && !shouldHideAds ? ad : null, isLoading }
 }
 
 type AdMessage = { role: 'user' | 'assistant'; content: string }

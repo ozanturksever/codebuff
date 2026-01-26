@@ -89,6 +89,7 @@ export const runAgentStep = async (
     userId: string | undefined
     userInputId: string
     clientSessionId: string
+    costMode?: string
     fingerprintId: string
     repoId: string | undefined
     onResponseChunk: (chunk: string | PrintModeEvent) => void
@@ -320,6 +321,7 @@ export const runAgentStep = async (
   const stream = getAgentStreamFromTemplate({
     ...params,
     agentId: agentState.parentId ? agentState.agentId : undefined,
+    costMode: params.costMode,
     includeCacheControl: supportsCacheControl(agentTemplate.model),
     messages: [systemMessage(system), ...agentState.messageHistory],
     template: agentTemplate,
@@ -441,6 +443,7 @@ export async function loopAgentSteps(
     clearUserPromptMessagesAfterResponse?: boolean
     clientSessionId: string
     content?: Array<TextPart | ImagePart>
+    costMode?: string
     fileContext: ProjectFileContext
     finishAgentRun: FinishAgentRunFn
     localAgentTemplates: Record<string, AgentTemplate>
@@ -624,7 +627,7 @@ export async function loopAgentSteps(
   const tools = useParentTools
     ? parentTools
     : await getToolSet({
-        toolNames: agentTemplate.toolNames,
+      toolNames: agentTemplate.toolNames,
         additionalToolDefinitions: async () => {
           if (!cachedAdditionalToolDefinitions) {
             cachedAdditionalToolDefinitions = await additionalToolDefinitions({
@@ -635,6 +638,7 @@ export async function loopAgentSteps(
           return cachedAdditionalToolDefinitions
         },
         agentTools,
+        skills: fileContext.skills ?? {},
       })
 
   const hasUserMessage = Boolean(

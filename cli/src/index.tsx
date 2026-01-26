@@ -30,6 +30,7 @@ import { resetCodebuffClient } from './utils/codebuff-client'
 import { AGENT_MODE_TO_ID } from './utils/constants'
 import { getCliEnv } from './utils/env'
 import { initializeAgentRegistry, loadAgentDefinitions } from './utils/local-agent-registry'
+import { initializeSkillRegistry } from './utils/skill-registry'
 import { clearLogFile, logger } from './utils/logger'
 import { shouldShowProjectPicker } from './utils/project-picker'
 import { saveRecentProject } from './utils/recent-projects'
@@ -128,7 +129,8 @@ function parseArgs(): ParsedArgs {
       '--cwd <directory>',
       'Set the working directory (default: current directory)',
     )
-    .option('--lite', 'Start in LITE mode')
+    .option('--free', 'Start in FREE mode')
+    .option('--lite', 'Start in FREE mode (deprecated, use --free)')
     .option('--max', 'Start in MAX mode')
     .option('--plan', 'Start in PLAN mode')
     .option(
@@ -163,7 +165,7 @@ function parseArgs(): ParsedArgs {
 
   // Determine initial mode from flags (last flag wins if multiple specified)
   let initialMode: AgentMode | undefined
-  if (options.lite) initialMode = 'LITE'
+  if (options.free || options.lite) initialMode = 'FREE'
   if (options.max) initialMode = 'MAX'
   if (options.plan) initialMode = 'PLAN'
 
@@ -577,6 +579,9 @@ async function main(): Promise<void> {
   if (isPublishCommand || !hasAgentOverride) {
     await initializeAgentRegistry()
   }
+
+  // Initialize skill registry (loads skills from .agents/skills)
+  await initializeSkillRegistry()
 
   // Handle publish command before rendering the app
   if (isPublishCommand) {
