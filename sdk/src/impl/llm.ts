@@ -1,3 +1,4 @@
+import { AnalyticsEvent } from '@codebuff/common/constants/analytics-events'
 import { models, PROFIT_MARGIN } from '@codebuff/common/old-constants'
 import { buildArray } from '@codebuff/common/util/array'
 import { getErrorObject } from '@codebuff/common/util/error'
@@ -15,7 +16,6 @@ import {
   TypeValidationError,
 } from 'ai'
 
-import { AnalyticsEvent } from '@codebuff/common/constants/analytics-events'
 import { getModelForRequest, markClaudeOAuthRateLimited, fetchClaudeOAuthResetTime } from './model-provider'
 import { getValidClaudeOAuthCredentials } from '../credentials'
 import { getErrorStatusCode } from '../error-utils'
@@ -350,7 +350,7 @@ export async function* promptAiSdkStream(
     },
   })
 
-  let content = ''
+  let _content = ''
   const stopSequenceHandler = new StopSequenceHandler(params.stopSequences)
 
   // Track if we've yielded any content - if so, we can't safely fall back
@@ -361,7 +361,7 @@ export async function* promptAiSdkStream(
       const flushed = stopSequenceHandler.flush()
       if (flushed) {
         hasYieldedContent = true
-        content += flushed
+        _content += flushed
         yield {
           type: 'text',
           text: flushed,
@@ -509,7 +509,7 @@ export async function* promptAiSdkStream(
     }
     if (chunkValue.type === 'text-delta') {
       if (!params.stopSequences) {
-        content += chunkValue.text
+        _content += chunkValue.text
         if (chunkValue.text) {
           hasYieldedContent = true
           yield {
@@ -524,7 +524,7 @@ export async function* promptAiSdkStream(
       const stopSequenceResult = stopSequenceHandler.process(chunkValue.text)
       if (stopSequenceResult.text) {
         hasYieldedContent = true
-        content += stopSequenceResult.text
+        _content += stopSequenceResult.text
         yield {
           type: 'text',
           text: stopSequenceResult.text,
@@ -538,7 +538,7 @@ export async function* promptAiSdkStream(
   }
   const flushed = stopSequenceHandler.flush()
   if (flushed) {
-    content += flushed
+    _content += flushed
     yield {
       type: 'text',
       text: flushed,

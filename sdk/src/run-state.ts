@@ -2,7 +2,6 @@ import * as os from 'os'
 import path from 'path'
 
 import {
-  KNOWLEDGE_FILE_NAMES,
   KNOWLEDGE_FILE_NAMES_LOWERCASE,
   isKnowledgeFile,
 } from '@codebuff/common/constants/knowledge'

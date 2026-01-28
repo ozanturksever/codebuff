@@ -2,6 +2,7 @@ import { TextAttributes } from '@opentui/core'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { defineToolComponent } from './types'
+import { useTerminalDimensions } from '../../hooks/use-terminal-dimensions'
 import { useTheme } from '../../hooks/use-theme'
 import {
   getLatestFollowupToolCallId,
@@ -13,7 +14,6 @@ import type { ToolRenderConfig } from './types'
 import type { ChatMessage } from '../../types/chat'
 import type { SuggestedFollowup } from '../../state/chat-store'
 import type { FollowupHookContext, TodoItem, FileChange } from '../../utils/project-hooks'
-import { useTerminalDimensions } from '../../hooks/use-terminal-dimensions'
 
 const EMPTY_CLICKED_SET = new Set<number>()
 

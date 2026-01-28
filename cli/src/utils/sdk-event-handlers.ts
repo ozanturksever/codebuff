@@ -40,7 +40,6 @@ import type {
   PrintModeFinish,
   PrintModeSubagentFinish,
   PrintModeSubagentStart,
-  PrintModeText,
   PrintModeToolCall,
   PrintModeToolProgress,
   PrintModeToolResult,

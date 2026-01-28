@@ -4,10 +4,11 @@ import { callMainPrompt } from '@codebuff/agent-runtime/main-prompt'
 import {
   buildUserMessageContent,
   getCancelledAdditionalMessages,
+  withSystemTags,
 } from '@codebuff/agent-runtime/util/messages'
 import { MAX_AGENT_STEPS_DEFAULT } from '@codebuff/common/constants/agents'
-import { callMCPTool, getMCPClient, listMCPTools } from '@codebuff/common/mcp/client'
 import { toOptionalFile } from '@codebuff/common/constants/paths'
+import { getMCPClient, listMCPTools, callMCPTool } from '@codebuff/common/mcp/client'
 import { toolNames } from '@codebuff/common/tools/constants'
 import { clientToolCallSchema } from '@codebuff/common/tools/list'
 import { AgentOutputSchema } from '@codebuff/common/types/session-state'
@@ -24,10 +25,10 @@ import { listDirectory } from './tools/list-directory'
 import { getFiles } from './tools/read-files'
 import { runTerminalCommand } from './tools/run-terminal-command'
 
-import type { FileFilter } from './tools/read-files'
 
 import type { CustomToolDefinition } from './custom-tool'
 import type { RunState } from './run-state'
+import type { FileFilter } from './tools/read-files'
 import type { ServerAction } from '@codebuff/common/actions'
 import type { AgentDefinition } from '@codebuff/common/templates/initial-agents-dir/types/agent-definition'
 import type {
@@ -255,10 +256,10 @@ async function runOnce({
   }
 
   let resolve: (value: RunReturnType) => any = () => { }
-  let reject: (error: any) => any = () => { }
+  let _reject: (error: any) => any = () => { }
   const promise = new Promise<RunReturnType>((res, rej) => {
     resolve = res
-    reject = rej
+    _reject = rej
   })
 
   async function onError(error: { message: string }) {
@@ -431,6 +432,8 @@ async function runOnce({
           resolve,
           onError,
           initialSessionState: sessionState,
+          signal,
+          pendingAgentResponse,
         })
         return
       }
@@ -440,6 +443,8 @@ async function runOnce({
           resolve,
           onError,
           initialSessionState: sessionState,
+          signal,
+          pendingAgentResponse,
         })
         return
       }
@@ -478,9 +483,6 @@ async function runOnce({
 
   const userId = userInfo.id
 
-  signal?.addEventListener('abort', () => {
-    resolve(getCancelledRunState())
-  })
   if (signal?.aborted) {
     return getCancelledRunState()
   }
@@ -768,11 +770,15 @@ async function handlePromptResponse({
   resolve,
   onError,
   initialSessionState,
+  signal,
+  pendingAgentResponse,
 }: {
   action: ServerAction<'prompt-response'> | ServerAction<'prompt-error'>
   resolve: (value: RunReturnType) => any
   onError: (error: { message: string }) => void
   initialSessionState: SessionState
+  signal?: AbortSignal
+  pendingAgentResponse: string
 }) {
   if (action.type === 'prompt-error') {
     onError({ message: action.message })
@@ -806,7 +812,30 @@ async function handlePromptResponse({
       })
       return
     }
-    const { sessionState, output } = action
+    let { sessionState, output } = action
+
+    // If the request was aborted by the user, preserve partial streamed content
+    // and append an interruption message so the next prompt knows what happened.
+    // The session state from the server already contains all tool calls and results.
+    if (signal?.aborted && sessionState) {
+      sessionState = cloneDeep(sessionState)
+      
+      // If there was partial streamed text, add it as an assistant message
+      // so the context includes what was being written when interrupted
+      if (pendingAgentResponse.trim()) {
+        const partialAssistantMessage = {
+          role: 'assistant' as const,
+          content: [{ type: 'text' as const, text: pendingAgentResponse }],
+        }
+        sessionState.mainAgentState.messageHistory.push(partialAssistantMessage)
+      }
+      
+      const interruptionMessage = {
+        role: 'user' as const,
+        content: [{ type: 'text' as const, text: withSystemTags('User interrupted the response. The assistant\'s previous work has been preserved.') }],
+      }
+      sessionState.mainAgentState.messageHistory.push(interruptionMessage)
+    }
 
     const state: RunState = {
       sessionState,

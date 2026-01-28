@@ -1,15 +1,15 @@
+import { getErrorObject } from '@codebuff/common/util/error'
+
 import { getProjectRoot } from '../../project-files'
 import { useChatStore } from '../../state/chat-store'
 import { processBashContext } from '../../utils/bash-context-processor'
+import { markRunningAgentsAsCancelled } from '../../utils/block-operations'
 import {
   createErrorMessage,
   isContextOverflowError,
   isOutOfCreditsError,
   OUT_OF_CREDITS_MESSAGE,
 } from '../../utils/error-handling'
-import { invalidateActivityQuery } from '../use-activity-query'
-import { usageQueryKeys } from '../use-usage-query'
-import { markRunningAgentsAsCancelled } from '../../utils/block-operations'
 import { formatElapsedTime } from '../../utils/format-elapsed-time'
 import { processImagesForMessage } from '../../utils/image-processor'
 import { logger } from '../../utils/logger'
@@ -21,7 +21,8 @@ import {
 } from '../../utils/message-updater'
 import { createModeDividerMessage } from '../../utils/send-message-helpers'
 import { yieldToEventLoop } from '../../utils/yield-to-event-loop'
-import { getErrorObject } from '@codebuff/common/util/error'
+import { invalidateActivityQuery } from '../use-activity-query'
+import { usageQueryKeys } from '../use-usage-query'
 
 import type {
   PendingAttachment,
@@ -30,7 +31,6 @@ import type {
 } from '../../state/chat-store'
 import type { ChatMessage } from '../../types/chat'
 import type { AgentMode } from '../../utils/constants'
-
 import type { SendMessageTimerController } from '../../utils/send-message-timer'
 import type { StreamController } from '../stream-state'
 import type { StreamStatus } from '../use-message-queue'
@@ -222,7 +222,6 @@ export const setupStreamingContext = (params: {
   setStreamingAgents: (updater: (prev: Set<string>) => Set<string>) => void
 }) => {
   const {
-    aiMessageId,
     timerController,
     setMessages,
     streamRefs,
@@ -235,6 +234,7 @@ export const setupStreamingContext = (params: {
     setIsRetrying,
     setStreamingAgents,
   } = params
+  const { aiMessageId } = params
 
   streamRefs.reset()
   timerController.start(aiMessageId)
@@ -296,7 +296,6 @@ export const handleRunCompletion = (params: {
     agentMode,
     timerController,
     updater,
-    aiMessageId,
     streamRefs,
     setStreamStatus,
     setCanProcessQueue,
@@ -306,6 +305,12 @@ export const handleRunCompletion = (params: {
     isProcessingQueueRef,
     isQueuePausedRef,
   } = params
+
+  // If user aborted, the abort handler already handled UI updates (interruption notice, etc.)
+  // Don't process the server response as it would interfere with the abort handler's work.
+  if (streamRefs.state.wasAbortedByUser) {
+    return
+  }
 
   const output = runState.output
   const finalizeAfterError = () => {
@@ -328,9 +333,6 @@ export const handleRunCompletion = (params: {
   }
 
   if (output.type === 'error') {
-    if (streamRefs.state.wasAbortedByUser) {
-      return
-    }
 
     if (isOutOfCreditsError(output)) {
       updater.setError(OUT_OF_CREDITS_MESSAGE)

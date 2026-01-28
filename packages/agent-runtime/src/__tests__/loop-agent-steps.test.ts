@@ -3,8 +3,8 @@ import { TEST_USER_ID } from '@codebuff/common/old-constants'
 import { createTestAgentRuntimeParams } from '@codebuff/common/testing/fixtures/agent-runtime'
 import {
   clearMockedModules,
-  mockModule,
 } from '@codebuff/common/testing/mock-modules'
+import { setupDbSpies } from '@codebuff/common/testing/mocks/database'
 import { getInitialSessionState } from '@codebuff/common/types/session-state'
 import { assistantMessage, userMessage } from '@codebuff/common/util/messages'
 import db from '@codebuff/internal/db'
@@ -26,6 +26,7 @@ import { clearAgentGeneratorCache } from '../run-programmatic-step'
 import { createToolCallChunk, mockFileContext } from './test-utils'
 
 import type { AgentTemplate } from '../templates/types'
+import type { DbSpies } from '@codebuff/common/testing/mocks/database'
 import type { StepGenerator } from '@codebuff/common/types/agent-template'
 import type { AgentState } from '@codebuff/common/types/session-state'
 
@@ -33,8 +34,14 @@ describe('loopAgentSteps - runAgentStep vs runProgrammaticStep behavior', () => 
   let mockTemplate: AgentTemplate
   let mockAgentState: AgentState
   let llmCallCount: number
-  let agentRuntimeImpl: any
-  let loopAgentStepsBaseParams: any
+  let agentRuntimeImpl: Omit<
+    ReturnType<typeof createTestAgentRuntimeParams>,
+    'agentTemplate' | 'localAgentTemplates'
+  > & {
+    promptAiSdkStream?: ReturnType<typeof mock>
+  }
+  let loopAgentStepsBaseParams: Parameters<typeof loopAgentSteps>[0]
+  let dbSpies: DbSpies
 
   beforeAll(async () => {
     // Set up mocks.
@@ -42,40 +49,26 @@ describe('loopAgentSteps - runAgentStep vs runProgrammaticStep behavior', () => 
 
   beforeEach(() => {
     const {
-      agentTemplate: _agentTemplate,
-      localAgentTemplates: _localAgentTemplates,
+      agentTemplate: _,
+      localAgentTemplates: __,
       ...baseRuntimeParams
     } = createTestAgentRuntimeParams()
 
     agentRuntimeImpl = {
       ...baseRuntimeParams,
-      sendAction: () => {},
-      requestFiles: async () => ({}),
     }
 
     llmCallCount = 0
 
-    // Setup spies for database operations
-    spyOn(db, 'insert').mockReturnValue({
-      values: mock(() => {
-        return Promise.resolve({ id: 'test-run-id' })
-      }),
-    } as any)
+    // Setup spies for database operations using typed helper
+    dbSpies = setupDbSpies(db)
 
-    spyOn(db, 'update').mockReturnValue({
-      set: mock(() => ({
-        where: mock(() => {
-          return Promise.resolve()
-        }),
-      })),
-    } as any)
-
-    agentRuntimeImpl.promptAiSdkStream = async function* ({}) {
+    agentRuntimeImpl.promptAiSdkStream = mock(async function* ({}) {
       llmCallCount++
       yield { type: 'text' as const, text: 'LLM response\n\n' }
       yield createToolCallChunk('end_turn', {})
       return 'mock-message-id'
-    }
+    })
 
     // Mock analytics
     spyOn(analytics, 'trackEvent').mockImplementation(() => {})
@@ -102,7 +95,7 @@ describe('loopAgentSteps - runAgentStep vs runProgrammaticStep behavior', () => 
       instructionsPrompt: 'Test user prompt',
       stepPrompt: 'Test agent step prompt',
       handleSteps: undefined, // Will be set in individual tests
-    } as AgentTemplate
+    } satisfies AgentTemplate as AgentTemplate
 
     // Create mock agent state
     const sessionState = getInitialSessionState(mockFileContext)
@@ -119,6 +112,8 @@ describe('loopAgentSteps - runAgentStep vs runProgrammaticStep behavior', () => 
 
     loopAgentStepsBaseParams = {
       ...agentRuntimeImpl,
+      agentType: 'test-agent',
+      localAgentTemplates: { 'test-agent': mockTemplate },
       repoId: undefined,
       repoUrl: undefined,
       userInputId: 'test-user-input',
@@ -137,13 +132,16 @@ describe('loopAgentSteps - runAgentStep vs runProgrammaticStep behavior', () => 
 
   afterEach(() => {
     clearAgentGeneratorCache(agentRuntimeImpl)
+    dbSpies.restore()
     mock.restore()
     const {
-      agentTemplate: _agentTemplate,
-      localAgentTemplates: _localAgentTemplates,
+      agentTemplate: _,
+      localAgentTemplates: __,
       ...baseRuntimeParams
     } = createTestAgentRuntimeParams()
-    agentRuntimeImpl = { ...baseRuntimeParams }
+    agentRuntimeImpl = {
+      ...baseRuntimeParams,
+    }
   })
 
   afterAll(() => {
@@ -447,7 +445,7 @@ describe('loopAgentSteps - runAgentStep vs runProgrammaticStep behavior', () => 
     })
 
     // Verify that stepsComplete was passed correctly:
-    // After yielding STEP and LLM running (which calls end_turn), 
+    // After yielding STEP and LLM running (which calls end_turn),
     // the generator receives stepsComplete: true
     expect(stepsCompleteValues).toHaveLength(1)
     expect(stepsCompleteValues[0]).toBe(true)
@@ -534,7 +532,10 @@ describe('loopAgentSteps - runAgentStep vs runProgrammaticStep behavior', () => 
       llmCallNumber++
       if (llmCallNumber === 1) {
         // First call: agent tries to end turn without setting output
-        yield { type: 'text' as const, text: 'First response without output\n\n' }
+        yield {
+          type: 'text' as const,
+          text: 'First response without output\n\n',
+        }
         yield createToolCallChunk('end_turn', {})
       } else if (llmCallNumber === 2) {
         // Second call: agent sets output after being reminded
@@ -546,7 +547,10 @@ describe('loopAgentSteps - runAgentStep vs runProgrammaticStep behavior', () => 
           }
         }
         yield { type: 'text' as const, text: 'Setting output now\n\n' }
-        yield createToolCallChunk('set_output', { result: 'test result', status: 'success' })
+        yield createToolCallChunk('set_output', {
+          result: 'test result',
+          status: 'success',
+        })
         yield { type: 'text' as const, text: '\n\n' }
         yield createToolCallChunk('end_turn', {})
       } else {
