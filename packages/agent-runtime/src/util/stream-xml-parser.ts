@@ -9,6 +9,12 @@ import {
   toolNameParam,
   toolXmlName,
 } from '@codebuff/common/tools/constants'
+import {
+  filterKimiTokensStreaming,
+  createKimiFilterState,
+} from '@codebuff/common/util/kimi-model-override'
+
+import type { KimiFilterState } from '@codebuff/common/util/kimi-model-override'
 
 // Use flexible tag matching without requiring specific newlines
 const startToolTag = `<${toolXmlName}>`
@@ -24,6 +30,10 @@ export type StreamParserState = {
   buffer: string
   /** Whether we're currently inside a tool call tag */
   insideToolCall: boolean
+  /** Whether to filter Kimi internal tokens from the stream */
+  filterKimiTokens: boolean
+  /** State for Kimi token filtering (handles partial tokens across chunks) */
+  kimiFilterState: KimiFilterState
 }
 
 export type ParseResult = {
@@ -35,11 +45,16 @@ export type ParseResult = {
 
 /**
  * Creates initial parser state
+ * @param filterKimiTokens - Whether to filter out Kimi's internal special tokens
  */
-export function createStreamParserState(): StreamParserState {
+export function createStreamParserState(
+  filterKimiTokens = false,
+): StreamParserState {
   return {
     buffer: '',
     insideToolCall: false,
+    filterKimiTokens,
+    kimiFilterState: createKimiFilterState(),
   }
 }
 
@@ -58,8 +73,14 @@ export function parseStreamChunk(
     return { filteredText: '', toolCalls: [] }
   }
 
+  // Filter Kimi internal tokens if enabled
+  let processedChunk = chunk
+  if (state.filterKimiTokens) {
+    processedChunk = filterKimiTokensStreaming(chunk, state.kimiFilterState)
+  }
+
   // Combine buffer with new chunk
-  let text = state.buffer + chunk
+  let text = state.buffer + processedChunk
   state.buffer = ''
 
   let filteredText = ''

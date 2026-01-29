@@ -1,4 +1,5 @@
 import { AnalyticsEvent } from '@codebuff/common/constants/analytics-events'
+import { isKimiModelOverrideEnabled } from '@codebuff/common/util/kimi-model-override'
 
 import {
   createStreamParserState,
@@ -59,7 +60,10 @@ export async function* processStreamWithTools(params: {
   let autocompleted = false
 
   // State for parsing XML tool calls from text stream
-  const xmlParserState: StreamParserState = createStreamParserState()
+  // Enable Kimi token filtering when Kimi model override is active
+  const xmlParserState: StreamParserState = createStreamParserState(
+    isKimiModelOverrideEnabled(),
+  )
 
   function processToolCallObject(params: {
     toolName: string
