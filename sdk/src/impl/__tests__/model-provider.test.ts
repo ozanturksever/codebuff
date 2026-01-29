@@ -1,6 +1,6 @@
 import { describe, test, expect, afterEach } from 'bun:test'
 
-import { applyKimiModelOverride } from '../model-provider'
+import { applyKimiModelOverride } from '@codebuff/common/util/kimi-model-override'
 
 describe('model-provider', () => {
   describe('applyKimiModelOverride', () => {

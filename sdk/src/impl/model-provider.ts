@@ -17,13 +17,18 @@ import {
   toAnthropicModelId,
 } from '@codebuff/common/constants/claude-oauth'
 import {
+  applyKimiModelOverride,
+  isKimiModelOverrideEnabled,
+  KIMI_MODEL_ID,
+} from '@codebuff/common/util/kimi-model-override'
+import {
   OpenAICompatibleChatLanguageModel,
   VERSION,
 } from '@codebuff/internal/openai-compatible/index'
 
 import { WEBSITE_URL } from '../constants'
 import { getValidClaudeOAuthCredentials } from '../credentials'
-import { getByokOpenrouterApiKeyFromEnv, isKimiModelOverrideEnabled } from '../env'
+import { getByokOpenrouterApiKeyFromEnv } from '../env'
 
 import type { LanguageModel } from 'ai'
 
@@ -159,26 +164,8 @@ type OpenRouterUsageAccounting = {
   }
 }
 
-/** The Kimi K2.5 model ID on OpenRouter */
-const KIMI_MODEL_ID = 'moonshotai/kimi-k2.5'
-
-/**
- * Apply Kimi model override if enabled.
- * Replaces Claude/Anthropic models with Kimi K2.5.
- * @internal Exported for testing purposes
- */
-export function applyKimiModelOverride(model: string): string {
-  if (!isKimiModelOverrideEnabled()) {
-    return model
-  }
-  
-  // Replace any Claude/Anthropic model with Kimi
-  if (model.startsWith('anthropic/') || model.includes('claude')) {
-    return KIMI_MODEL_ID
-  }
-  
-  return model
-}
+// Re-export for backward compatibility and testing
+export { applyKimiModelOverride, KIMI_MODEL_ID }
 
 /**
  * Get the appropriate model for a request.

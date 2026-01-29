@@ -1,6 +1,7 @@
 import { MAX_AGENT_STEPS_DEFAULT } from '@codebuff/common/constants/agents'
 import { toolNames } from '@codebuff/common/tools/constants'
 import { parseAgentId } from '@codebuff/common/util/agent-id-parsing'
+import { applyKimiModelOverride } from '@codebuff/common/util/kimi-model-override'
 import { generateCompactId } from '@codebuff/common/util/string'
 
 import { loopAgentSteps } from '../../../run-agent-step'
@@ -423,7 +424,7 @@ export async function executeSubagent(
     agentId: withDefaults.agentState.agentId,
     agentType: agentTemplate.id,
     displayName: agentTemplate.displayName,
-    model: agentTemplate.model,
+    model: applyKimiModelOverride(agentTemplate.model),
     onlyChild: isOnlyChild,
     parentAgentId: parentAgentState.agentId,
     prompt,
@@ -446,7 +447,7 @@ export async function executeSubagent(
     agentId: result.agentState.agentId,
     agentType: agentTemplate.id,
     displayName: agentTemplate.displayName,
-    model: agentTemplate.model,
+    model: applyKimiModelOverride(agentTemplate.model),
     onlyChild: isOnlyChild,
     parentAgentId: parentAgentState.agentId,
     prompt,

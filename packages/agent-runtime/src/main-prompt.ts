@@ -1,6 +1,7 @@
 import { trackEvent } from '@codebuff/common/analytics'
 import { AnalyticsEvent } from '@codebuff/common/constants/analytics-events'
 import { AgentTemplateTypes } from '@codebuff/common/types/session-state'
+import { applyKimiModelOverride } from '@codebuff/common/util/kimi-model-override'
 
 import { loopAgentSteps } from './run-agent-step'
 import {
@@ -199,11 +200,12 @@ export async function callMainPrompt(
     action.agentId ??
     ({
       ask: AgentTemplateTypes.ask,
-      lite: AgentTemplateTypes.base_lite,
+      free: AgentTemplateTypes.base_free,
       normal: AgentTemplateTypes.base,
       max: AgentTemplateTypes.base_max,
       experimental: 'base2',
-    } as const)[action.costMode ?? 'normal']
+    } as const)[action.costMode ?? 'normal'] ??
+    AgentTemplateTypes.base
 
   const mainAgentTemplate = await getAgentTemplate({
     ...params,
@@ -218,7 +220,9 @@ export async function callMainPrompt(
       chunk: {
         type: 'start',
         agentId: action.sessionState.mainAgentState.agentType ?? undefined,
-        model: mainAgentTemplate?.model,
+        model: mainAgentTemplate?.model
+          ? applyKimiModelOverride(mainAgentTemplate.model)
+          : undefined,
         messageHistoryLength:
           action.sessionState.mainAgentState.messageHistory.length,
       },

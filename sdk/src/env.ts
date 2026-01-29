@@ -50,10 +50,5 @@ export const getClaudeOAuthTokenFromEnv = (): string | undefined => {
   return process.env[CLAUDE_OAUTH_TOKEN_ENV_VAR]
 }
 
-/**
- * Check if Kimi model override is enabled.
- * When enabled, Claude models should be replaced with moonshotai/kimi-k2.5.
- */
-export const isKimiModelOverrideEnabled = (): boolean => {
-  return process.env.CODEBUFF_USE_KIMI === '1'
-}
+// Re-export Kimi model override utilities from common for backward compatibility
+export { isKimiModelOverrideEnabled } from '@codebuff/common/util/kimi-model-override'
