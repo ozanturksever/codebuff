@@ -23,7 +23,7 @@ import {
 
 import { WEBSITE_URL } from '../constants'
 import { getValidClaudeOAuthCredentials } from '../credentials'
-import { getByokOpenrouterApiKeyFromEnv } from '../env'
+import { getByokOpenrouterApiKeyFromEnv, isKimiModelOverrideEnabled } from '../env'
 
 import type { LanguageModel } from 'ai'
 
@@ -159,6 +159,27 @@ type OpenRouterUsageAccounting = {
   }
 }
 
+/** The Kimi K2.5 model ID on OpenRouter */
+const KIMI_MODEL_ID = 'moonshotai/kimi-k2.5'
+
+/**
+ * Apply Kimi model override if enabled.
+ * Replaces Claude/Anthropic models with Kimi K2.5.
+ * @internal Exported for testing purposes
+ */
+export function applyKimiModelOverride(model: string): string {
+  if (!isKimiModelOverrideEnabled()) {
+    return model
+  }
+  
+  // Replace any Claude/Anthropic model with Kimi
+  if (model.startsWith('anthropic/') || model.includes('claude')) {
+    return KIMI_MODEL_ID
+  }
+  
+  return model
+}
+
 /**
  * Get the appropriate model for a request.
  *
@@ -168,11 +189,14 @@ type OpenRouterUsageAccounting = {
  * This function is async because it may need to refresh the OAuth token.
  */
 export async function getModelForRequest(params: ModelRequestParams): Promise<ModelResult> {
-  const { apiKey, model, skipClaudeOAuth } = params
+  const { apiKey, skipClaudeOAuth } = params
+  
+  // Apply Kimi model override if enabled
+  const model = applyKimiModelOverride(params.model)
 
   // Check if we should use Claude OAuth direct
-  // Skip if explicitly requested, if rate-limited, or if not a Claude model
-  if (!skipClaudeOAuth && !isClaudeOAuthRateLimited() && isClaudeModel(model)) {
+  // Skip if explicitly requested, if rate-limited, if not a Claude model, or if Kimi override is enabled
+  if (!skipClaudeOAuth && !isClaudeOAuthRateLimited() && isClaudeModel(model) && !isKimiModelOverrideEnabled()) {
     // Get valid credentials (will refresh if needed)
     const claudeOAuthCredentials = await getValidClaudeOAuthCredentials()
     if (claudeOAuthCredentials) {

@@ -107,6 +107,7 @@ type ParsedArgs = {
   quiet: boolean
   timeout?: number
   output?: string
+  kimi: boolean
 }
 
 function parseArgs(): ParsedArgs {
@@ -153,6 +154,10 @@ function parseArgs(): ParsedArgs {
       '-o, --output <file>',
       'Write output to a file instead of stdout (implies --non-interactive)',
     )
+    .option(
+      '--kimi',
+      'Use Kimi K2.5 model instead of Claude models (via OpenRouter)',
+    )
     .helpOption('-h, --help', 'Show this help message')
     .argument('[prompt...]', 'Initial prompt to send to the agent')
     .allowExcessArguments(true)
@@ -185,6 +190,7 @@ function parseArgs(): ParsedArgs {
     quiet: options.quiet || false,
     timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
     output: options.output,
+    kimi: options.kimi || false,
   }
 }
 
@@ -510,7 +516,17 @@ async function main(): Promise<void> {
     quiet,
     timeout,
     output: outputFile,
+    kimi,
   } = parseArgs()
+
+  // Set environment variable for Kimi model override
+  if (kimi) {
+    process.env.CODEBUFF_USE_KIMI = '1'
+    // Show Kimi mode indicator for non-interactive mode
+    if (nonInteractive && !quiet) {
+      console.error(magenta('🌙 Kimi mode: Using moonshotai/kimi-k2.5 instead of Claude models'))
+    }
+  }
 
   const isPublishCommand = process.argv.includes('publish')
   const hasAgentOverride = Boolean(agent && agent.trim().length > 0)

@@ -17,6 +17,7 @@ import { useTheme } from './hooks/use-theme'
 import { getProjectRoot } from './project-files'
 import { useChatHistoryStore } from './state/chat-history-store'
 import { useChatStore, type TopBannerType } from './state/chat-store'
+import { getCliEnv } from './utils/env'
 import { findGitRoot } from './utils/git'
 import { openFileAtPath } from './utils/open-file'
 import { formatCwd } from './utils/path-helpers'
@@ -197,6 +198,8 @@ export const App = ({
   const effectiveContinueChat = continueChat || resumeChatId !== null
   const effectiveContinueChatId = resumeChatId ?? continueChatId
 
+  const isKimiMode = getCliEnv().CODEBUFF_USE_KIMI === '1'
+
   const headerContent = useMemo(() => {
     const displayPath = formatCwd(projectRoot)
 
@@ -235,9 +238,16 @@ export const App = ({
             onActivate={() => openFileAtPath(projectRoot)}
           />
         </text>
+        {isKimiMode && (
+          <text
+            style={{ wrapMode: 'word', marginBottom: 1, fg: theme.info }}
+          >
+            🌙 Kimi mode: Using moonshotai/kimi-k2.5 instead of Claude models
+          </text>
+        )}
       </box>
     )
-  }, [logoComponent, projectRoot, theme])
+  }, [logoComponent, projectRoot, theme, isKimiMode])
 
   // Derive auth reachability + retrying state from authQuery error
   const authError = authQuery.error

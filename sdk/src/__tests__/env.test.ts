@@ -1,6 +1,6 @@
 import { describe, test, expect, afterEach } from 'bun:test'
 
-import { getSdkEnv } from '../env'
+import { getSdkEnv, isKimiModelOverrideEnabled } from '../env'
 import { createTestSdkEnv } from '../testing/env'
 
 describe('sdk/env', () => {
@@ -109,6 +109,46 @@ describe('sdk/env', () => {
       })
       expect(env.HOME).toBe('/custom/home')
       expect(env.NODE_ENV).toBe('production')
+    })
+  })
+
+  describe('isKimiModelOverrideEnabled', () => {
+    const originalEnv = { ...process.env }
+
+    afterEach(() => {
+      // Restore original env
+      Object.keys(process.env).forEach((key) => {
+        if (!(key in originalEnv)) {
+          delete process.env[key]
+        }
+      })
+      Object.assign(process.env, originalEnv)
+    })
+
+    test('returns false when CODEBUFF_USE_KIMI is not set', () => {
+      delete process.env.CODEBUFF_USE_KIMI
+      expect(isKimiModelOverrideEnabled()).toBe(false)
+    })
+
+    test('returns true when CODEBUFF_USE_KIMI is "1"', () => {
+      process.env.CODEBUFF_USE_KIMI = '1'
+      expect(isKimiModelOverrideEnabled()).toBe(true)
+    })
+
+    test('returns false when CODEBUFF_USE_KIMI is "0"', () => {
+      process.env.CODEBUFF_USE_KIMI = '0'
+      expect(isKimiModelOverrideEnabled()).toBe(false)
+    })
+
+    test('returns false when CODEBUFF_USE_KIMI is any other value', () => {
+      process.env.CODEBUFF_USE_KIMI = 'true'
+      expect(isKimiModelOverrideEnabled()).toBe(false)
+
+      process.env.CODEBUFF_USE_KIMI = 'yes'
+      expect(isKimiModelOverrideEnabled()).toBe(false)
+
+      process.env.CODEBUFF_USE_KIMI = ''
+      expect(isKimiModelOverrideEnabled()).toBe(false)
     })
   })
 })

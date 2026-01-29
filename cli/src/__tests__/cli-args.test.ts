@@ -21,6 +21,7 @@ describe('CLI Argument Parsing', () => {
       .version('1.0.0', '-v, --version', 'Print the CLI version')
       .option('--agent <agent-id>', 'Specify which agent to use')
       .option('--clear-logs', 'Remove any existing CLI log files')
+      .option('--kimi', 'Use Kimi K2.5 model instead of Claude models')
       .argument('[prompt...]', 'Initial prompt to send')
       .allowExcessArguments(true)
       .exitOverride() // Prevent process.exit in tests
@@ -47,6 +48,7 @@ describe('CLI Argument Parsing', () => {
     return {
       agent: options.agent,
       clearLogs: options.clearLogs || false,
+      kimi: options.kimi || false,
       initialPrompt: promptArgs.length > 0 ? promptArgs.join(' ') : null,
     }
   }
@@ -137,5 +139,23 @@ describe('CLI Argument Parsing', () => {
   test('handles -v flag', () => {
     const result = parseTestArgs(['-v'])
     expect(result.version).toBe(true)
+  })
+
+  test('parses --kimi flag', () => {
+    const result = parseTestArgs(['--kimi', 'hello world'])
+    expect(result.kimi).toBe(true)
+    expect(result.initialPrompt).toBe('hello world')
+  })
+
+  test('handles --kimi with other flags', () => {
+    const result = parseTestArgs(['--kimi', '--agent', 'base', 'test prompt'])
+    expect(result.kimi).toBe(true)
+    expect(result.agent).toBe('base')
+    expect(result.initialPrompt).toBe('test prompt')
+  })
+
+  test('--kimi defaults to false when not provided', () => {
+    const result = parseTestArgs(['hello'])
+    expect(result.kimi).toBe(false)
   })
 })

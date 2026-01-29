@@ -64,6 +64,10 @@ export type CliEnv = BaseEnv & {
   CODEBUFF_RG_PATH?: string
   CODEBUFF_SCROLL_MULTIPLIER?: string
   CODEBUFF_PERF_TEST?: string
+
+  // Model override flags
+  /** When set to '1', replaces Claude models with Kimi K2.5 */
+  CODEBUFF_USE_KIMI?: string
 }
 
 /**
