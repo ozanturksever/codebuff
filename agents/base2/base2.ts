@@ -419,7 +419,7 @@ This is more like an extremely short PRD which describes the end result of what 
 
 function buildPlanOnlyStepPrompt({ }: {}) {
   return buildArray(
-    `You are in plan mode. Do not make any file changes. Do not call write_file or str_replace. Do not use the write_todos tool.`,
+    `You are in plan mode. By default, do not make any file changes. However, if the user explicitly requests to write, save, or output to a specific file in their prompt (e.g., "write it to plan.md", "save to output.md"), you should fulfill that request using write_file. Do not use the write_todos tool.`,
   ).join('\n')
 }
 
