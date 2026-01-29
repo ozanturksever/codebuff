@@ -168,6 +168,12 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     label: 'oldralph',
     description: 'Legacy PRD-driven development (oldralph lite for faster base2-lite)',
   },
+  {
+    id: 'worktree',
+    label: 'worktree',
+    description: 'Manage git worktrees (new, merge, remove)',
+    aliases: ['wt'],
+  },
 ]
 
 export const SLASHLESS_COMMAND_IDS = new Set(

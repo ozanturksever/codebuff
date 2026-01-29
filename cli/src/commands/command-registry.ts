@@ -7,6 +7,7 @@ import { handleHooksCommand, handleHooksInitCommand } from './hooks'
 import { handleImageCommand } from './image'
 import { handleInitializationFlowLocally } from './init'
 import { handleRalphCommand } from './ralph'
+import { handleWorktreeCommand } from './worktree'
 import { useRalphStore } from '../state/ralph-store'
 import { handleReferralCode } from './referral'
 import { runBashCommand } from './router'
@@ -622,6 +623,50 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
 
       // Otherwise just show the message (list, status, delete, help)
       params.setMessages((prev) => result.postUserMessage(prev))
+    },
+  }),
+  defineCommandWithArgs({
+    name: 'worktree',
+    aliases: ['wt'],
+    handler: async (params, args) => {
+      params.saveToHistory(params.inputValue.trim())
+      clearInput(params)
+
+      const result = await handleWorktreeCommand(args)
+
+      // If there's a prompt to send (merge command)
+      if (result.prompt) {
+        params.setCanProcessQueue(true)
+        params.sendMessage({
+          content: result.prompt,
+          agentMode: params.agentMode,
+          postUserMessage: result.postUserMessage,
+        })
+        setTimeout(() => {
+          params.scrollToLatest()
+        }, 0)
+        return
+      }
+
+      // Show the message
+      params.setMessages((prev) => result.postUserMessage(prev))
+
+      // If there's a new cwd to switch to
+      if (result.newCwd) {
+        try {
+          process.chdir(result.newCwd)
+          params.setMessages((prev) => [
+            ...prev,
+            getSystemMessage(`📁 Working directory: ${result.newCwd}`),
+          ])
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error)
+          params.setMessages((prev) => [
+            ...prev,
+            getSystemMessage(`⚠️ Could not change directory: ${errorMsg}`),
+          ])
+        }
+      }
     },
   }),
   defineCommandWithArgs({
