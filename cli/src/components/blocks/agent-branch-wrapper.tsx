@@ -87,6 +87,7 @@ interface AgentBodyProps {
   onToggleCollapsed: (id: string) => void
   onBuildFast: () => void
   onBuildMax: () => void
+  onRunSavedPlan: () => void
   isLastMessage?: boolean
 }
 
@@ -101,6 +102,7 @@ interface AgentBodyPropsRef {
   onToggleCollapsed: (id: string) => void
   onBuildFast: () => void
   onBuildMax: () => void
+  onRunSavedPlan: () => void
   isLastMessage?: boolean
   theme: ReturnType<typeof useTheme>
   getAgentMarkdownOptions: (indent: number) => {
@@ -119,6 +121,7 @@ const AgentBody = memo(
     onToggleCollapsed,
     onBuildFast,
     onBuildMax,
+    onRunSavedPlan,
     isLastMessage,
   }: AgentBodyProps): ReactNode[] => {
     const theme = useTheme()
@@ -155,6 +158,7 @@ const AgentBody = memo(
       onToggleCollapsed,
       onBuildFast,
       onBuildMax,
+      onRunSavedPlan,
       isLastMessage,
       theme,
       getAgentMarkdownOptions,
@@ -226,6 +230,7 @@ const AgentBody = memo(
                   onToggleCollapsed={p.onToggleCollapsed}
                   onBuildFast={p.onBuildFast}
                   onBuildMax={p.onBuildMax}
+                  onRunSavedPlan={p.onRunSavedPlan}
                   siblingBlocks={p.nestedBlocks}
                   isLastMessage={p.isLastMessage}
                 />
@@ -312,6 +317,7 @@ export interface AgentBranchWrapperProps {
   onToggleCollapsed: (id: string) => void
   onBuildFast: () => void
   onBuildMax: () => void
+  onRunSavedPlan: () => void
   siblingBlocks?: ContentBlock[]
   isLastMessage?: boolean
 }
@@ -325,6 +331,7 @@ export const AgentBranchWrapper = memo(
     onToggleCollapsed,
     onBuildFast,
     onBuildMax,
+    onRunSavedPlan,
     siblingBlocks,
     isLastMessage,
   }: AgentBranchWrapperProps) => {
@@ -442,6 +449,7 @@ export const AgentBranchWrapper = memo(
             onToggleCollapsed={onToggleCollapsed}
             onBuildFast={onBuildFast}
             onBuildMax={onBuildMax}
+            onRunSavedPlan={onRunSavedPlan}
             isLastMessage={isLastMessage}
           />
         </AgentBranchItem>

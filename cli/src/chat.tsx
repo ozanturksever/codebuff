@@ -628,7 +628,7 @@ export const Chat = ({
     ],
   )
 
-  const { inputWidth, handleBuildFast, handleBuildMax } = useChatInput({
+  const { inputWidth, handleBuildFast, handleBuildMax, handleRunSavedPlan } = useChatInput({
     setInputValue,
     agentMode,
     setAgentMode,
@@ -1206,6 +1206,7 @@ export const Chat = ({
       onToggleCollapsed: handleCollapseToggle,
       onBuildFast: handleBuildFast,
       onBuildMax: handleBuildMax,
+      onRunSavedPlan: handleRunSavedPlan,
       onFeedback: handleMessageFeedback,
       onCloseFeedback: handleCloseFeedback,
     })
@@ -1213,6 +1214,7 @@ export const Chat = ({
     handleCollapseToggle,
     handleBuildFast,
     handleBuildMax,
+    handleRunSavedPlan,
     handleMessageFeedback,
     handleCloseFeedback,
     setMessageBlockCallbacks,

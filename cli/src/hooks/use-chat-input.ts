@@ -18,6 +18,7 @@ interface UseChatInputOptions {
 }
 
 const BUILD_IT_TEXT = 'Build it!'
+const RUN_SAVED_PLAN_TEXT = 'run the saved plan'
 
 export const useChatInput = ({
   setInputValue,
@@ -71,6 +72,19 @@ export const useChatInput = ({
     }, 0)
   }, [setAgentMode, setInputValue, onSubmitPrompt])
 
+  const handleRunSavedPlan = useCallback(() => {
+    setAgentMode('DEFAULT')
+    setInputValue({
+      text: RUN_SAVED_PLAN_TEXT,
+      cursorPosition: RUN_SAVED_PLAN_TEXT.length,
+      lastEditDueToNav: true,
+    })
+    setTimeout(() => {
+      onSubmitPrompt(RUN_SAVED_PLAN_TEXT, 'DEFAULT')
+      setInputValue({ text: '', cursorPosition: 0, lastEditDueToNav: false })
+    }, 0)
+  }, [setAgentMode, setInputValue, onSubmitPrompt])
+
   useEffect(() => {
     if (initialPrompt && !hasAutoSubmittedRef.current) {
       hasAutoSubmittedRef.current = true
@@ -86,5 +100,6 @@ export const useChatInput = ({
     inputWidth,
     handleBuildFast,
     handleBuildMax,
+    handleRunSavedPlan,
   }
 }

@@ -10,14 +10,16 @@ export const BuildModeButtons = ({
   theme,
   onBuildFast,
   onBuildMax,
+  onRunSavedPlan,
 }: {
   theme: ChatTheme
   onBuildFast: () => void
   onBuildMax: () => void
+  onRunSavedPlan: () => void
 }) => {
-  const [hoveredButton, setHoveredButton] = useState<'fast' | 'max' | null>(
-    null,
-  )
+  const [hoveredButton, setHoveredButton] = useState<
+    'fast' | 'max' | 'runPlan' | null
+  >(null)
   const { width } = useTerminalLayout()
   const isNarrow = width.is('xs')
 
@@ -78,6 +80,25 @@ export const BuildModeButtons = ({
         >
           <text wrapMode="none">
             <span fg={theme.foreground}>Build MAX</span>
+          </text>
+        </Button>
+        <Button
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingLeft: 2,
+            paddingRight: 2,
+            borderStyle: 'single',
+            borderColor:
+              hoveredButton === 'runPlan' ? theme.foreground : theme.secondary,
+            customBorderChars: BORDER_CHARS,
+          }}
+          onClick={onRunSavedPlan}
+          onMouseOver={() => setHoveredButton('runPlan')}
+          onMouseOut={() => setHoveredButton(null)}
+        >
+          <text wrapMode="none">
+            <span fg={theme.foreground}>Run Plan</span>
           </text>
         </Button>
       </box>

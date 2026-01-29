@@ -33,6 +33,7 @@ interface SingleBlockProps {
   onToggleCollapsed: (id: string) => void
   onBuildFast: () => void
   onBuildMax: () => void
+  onRunSavedPlan: () => void
   isLastMessage?: boolean
   contentToCopy?: string
 }
@@ -52,6 +53,7 @@ export const SingleBlock = memo(
     onToggleCollapsed,
     onBuildFast,
     onBuildMax,
+    onRunSavedPlan,
     isLastMessage,
     contentToCopy,
   }: SingleBlockProps): ReactNode => {
@@ -120,6 +122,7 @@ export const SingleBlock = memo(
               markdownPalette={markdownPalette}
               onBuildFast={onBuildFast}
               onBuildMax={onBuildMax}
+              onRunSavedPlan={onRunSavedPlan}
             />
           </box>
         )
@@ -178,6 +181,7 @@ export const SingleBlock = memo(
             onToggleCollapsed={onToggleCollapsed}
             onBuildFast={onBuildFast}
             onBuildMax={onBuildMax}
+            onRunSavedPlan={onRunSavedPlan}
             siblingBlocks={blocks}
             isLastMessage={isLastMessage}
           />

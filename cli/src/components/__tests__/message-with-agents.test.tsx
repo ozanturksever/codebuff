@@ -85,6 +85,7 @@ const defaultCallbacks = {
   onToggleCollapsed: () => {},
   onBuildFast: () => {},
   onBuildMax: () => {},
+  onRunSavedPlan: () => {},
   onFeedback: () => {},
   onCloseFeedback: () => {},
 }
@@ -196,6 +197,7 @@ describe('MessageBlockStore', () => {
         onToggleCollapsed: mockToggle,
         onBuildFast: mockBuildFast,
         onBuildMax: mockBuildMax,
+        onRunSavedPlan: () => {},
         onFeedback: mockFeedback,
         onCloseFeedback: mockCloseFeedback,
       })
@@ -246,6 +248,7 @@ describe('MessageBlockStore', () => {
         onToggleCollapsed: mockFn,
         onBuildFast: mockFn,
         onBuildMax: mockFn,
+        onRunSavedPlan: mockFn,
         onFeedback: mockFn,
         onCloseFeedback: mockFn,
       })

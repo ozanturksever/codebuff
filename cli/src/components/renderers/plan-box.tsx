@@ -11,6 +11,7 @@ interface PlanBoxProps {
   markdownPalette: MarkdownPalette
   onBuildFast: () => void
   onBuildMax: () => void
+  onRunSavedPlan: () => void
 }
 
 export const PlanBox = memo(
@@ -20,6 +21,7 @@ export const PlanBox = memo(
     markdownPalette,
     onBuildFast,
     onBuildMax,
+    onRunSavedPlan,
   }: PlanBoxProps) => {
     const theme = useTheme()
 
@@ -48,6 +50,7 @@ export const PlanBox = memo(
           theme={theme}
           onBuildFast={onBuildFast}
           onBuildMax={onBuildMax}
+          onRunSavedPlan={onRunSavedPlan}
         />
       </box>
     )
