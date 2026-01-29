@@ -5,6 +5,8 @@
 # Usage:
 #   codebuff-cloud              # Uses cloud backend with your local CLI code
 #   codebuff-cloud "prompt"     # Run with a prompt
+#   codebuff-cloud wt <name>    # Create a worktree for current repo and start codebuff there
+#   codebuff-cloud wt <name> "prompt"  # Same as above, with an initial prompt
 
 # Capture the original working directory before any cd
 ORIGINAL_CWD="$(pwd)"
@@ -18,6 +20,72 @@ while [ -L "$SOURCE" ]; do
   [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+
+# Handle 'wt' subcommand for worktree management
+if [[ "$1" == "wt" ]]; then
+  if [[ -z "$2" ]]; then
+    echo "Usage: codebuff-cloud wt <name> [prompt]"
+    echo "  Creates a git worktree for the current repo and starts codebuff there"
+    echo "  If worktree already exists, just starts codebuff in it"
+    exit 1
+  fi
+
+  WORKTREE_NAME="$2"
+  shift 2  # Remove 'wt' and '<name>' from arguments, keep the rest for codebuff
+
+  # Get the current repo's root directory
+  REPO_ROOT="$(cd "$ORIGINAL_CWD" && git rev-parse --show-toplevel 2>/dev/null)"
+  if [[ -z "$REPO_ROOT" ]]; then
+    echo "❌ Not in a git repository"
+    exit 1
+  fi
+
+  # Get repo name from directory name
+  REPO_NAME="$(basename "$REPO_ROOT")"
+  
+  # Create worktrees in a sibling folder: ../<reponame>-worktrees/<name>
+  WORKTREES_DIR="$(dirname "$REPO_ROOT")/${REPO_NAME}-worktrees"
+  WORKTREE_PATH="$WORKTREES_DIR/$WORKTREE_NAME"
+
+  # Check if worktree already exists
+  if [[ -d "$WORKTREE_PATH" ]]; then
+    echo "📁 Worktree '$WORKTREE_NAME' already exists at $WORKTREE_PATH"
+  else
+    echo "🌿 Creating worktree '$WORKTREE_NAME' for $REPO_NAME..."
+    
+    # Ensure worktrees directory exists
+    mkdir -p "$WORKTREES_DIR"
+    
+    # Create the worktree from current branch
+    cd "$REPO_ROOT"
+    git worktree add -b "$WORKTREE_NAME" "$WORKTREE_PATH" HEAD
+    if [[ $? -ne 0 ]]; then
+      # Branch might already exist, try without -b
+      git worktree add "$WORKTREE_PATH" "$WORKTREE_NAME" 2>/dev/null || \
+      git worktree add "$WORKTREE_PATH" HEAD
+      if [[ $? -ne 0 ]]; then
+        echo "❌ Failed to create worktree"
+        exit 1
+      fi
+    fi
+    echo "✅ Worktree created at $WORKTREE_PATH"
+  fi
+
+  echo "🚀 Starting codebuff in worktree..."
+  # Run codebuff-cloud with the worktree as the working directory
+  cd "$SCRIPT_DIR/cli"
+  exec env \
+    NEXT_PUBLIC_CODEBUFF_APP_URL=https://www.codebuff.com \
+    NEXT_PUBLIC_CB_ENVIRONMENT=prod \
+    NEXT_PUBLIC_WEB_PORT=3000 \
+    LOG_LEVEL=debug \
+    NEXT_PUBLIC_SUPPORT_EMAIL=support@codebuff.com \
+    NEXT_PUBLIC_POSTHOG_API_KEY=dummy \
+    NEXT_PUBLIC_POSTHOG_HOST_URL=https://us.i.posthog.com \
+    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy \
+    NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL=https://billing.stripe.com/p/login/dummy \
+    bun run src/index.tsx --cwd "$WORKTREE_PATH" "$@"
+fi
 
 # Check if running in non-interactive mode
 NON_INTERACTIVE=false

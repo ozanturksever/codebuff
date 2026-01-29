@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { defineToolComponent } from './types'
 import { useTerminalDimensions } from '../../hooks/use-terminal-dimensions'
 import { useTheme } from '../../hooks/use-theme'
+import { useTimeout } from '../../hooks/use-timeout'
 import {
   getLatestFollowupToolCallId,
   useChatStore,
 } from '../../state/chat-store'
 import { Button } from '../button'
+import { copyTextToClipboard } from '../../utils/clipboard'
 
 import type { ToolRenderConfig } from './types'
 import type { ChatMessage } from '../../types/chat'
@@ -127,6 +129,9 @@ interface FollowupLineProps {
   labelColumnWidth: number
 }
 
+/** Duration to show "copied" feedback before resetting */
+const COPIED_FEEDBACK_DURATION_MS = 1500
+
 const FollowupLine = ({
   followup,
   index,
@@ -139,6 +144,8 @@ const FollowupLine = ({
 }: FollowupLineProps) => {
   const theme = useTheme()
   const { terminalWidth } = useTerminalDimensions()
+  const [isCopied, setIsCopied] = useState(false)
+  const { setTimeout } = useTimeout()
 
   const handleClick = useCallback(() => {
     if (!disabled) {
@@ -148,6 +155,15 @@ const FollowupLine = ({
 
   const handleMouseOver = useCallback(() => onHover(index), [onHover, index])
   const handleMouseOut = useCallback(() => onHover(null), [onHover])
+
+  const handleCopy = useCallback(() => {
+    void copyTextToClipboard(followup.prompt, {
+      suppressGlobalMessage: true,
+    }).then(() => {
+      setIsCopied(true)
+      setTimeout('reset-copied', () => setIsCopied(false), COPIED_FEEDBACK_DURATION_MS)
+    })
+  }, [followup.prompt, setTimeout])
 
   // Compute effective hover state declaratively
   // Show hover effects if actually hovered AND not disabled AND not already clicked
@@ -161,9 +177,11 @@ const FollowupLine = ({
     showHoverState && hasLabel && terminalWidth >= MIN_WIDTH_FOR_DESCRIPTION
 
   // Calculate truncated prompt with ellipsis only when needed
+  // Account for copy icon width (always visible): " ⎘" or " ✔" = 2 chars
+  const copyIconWidth = 2
   const truncatedPrompt = showDescription
     ? (() => {
-        const availableWidth = Math.max(0, terminalWidth - labelColumnWidth - 4)
+        const availableWidth = Math.max(0, terminalWidth - labelColumnWidth - 4 - copyIconWidth)
         return followup.prompt.length > availableWidth
           ? followup.prompt.slice(0, availableWidth - 1) + '…'
           : followup.prompt
@@ -191,7 +209,7 @@ const FollowupLine = ({
 
   return (
     <box style={{ flexDirection: 'column' }}>
-      {/* Row layout: clickable label + non-clickable description */}
+      {/* Row layout: clickable label + copy icon + description */}
       <box style={{ flexDirection: 'row', width: '100%' }}>
         {/* Clickable label area - only the text itself is clickable */}
         <Button
@@ -215,9 +233,22 @@ const FollowupLine = ({
             </span>
           </text>
         </Button>
+        {/* Copy button - always visible, right after the label */}
+        <Button
+          onClick={handleCopy}
+          onMouseOver={handleMouseOver}
+          onMouseOut={handleMouseOut}
+          style={{ marginLeft: 1, flexShrink: 0 }}
+        >
+          <text>
+            <span fg={isCopied ? theme.success : theme.muted}>
+              {isCopied ? '✔' : '⎘'}
+            </span>
+          </text>
+        </Button>
         {/* Flexible description column - NOT clickable, with padding for alignment */}
         {showDescription && hasLabel && (
-          <box style={{ flexGrow: 1 }}>
+          <box style={{ flexGrow: 1, flexDirection: 'row' }}>
             <text style={{ wrapMode: 'none' }}>
               <span fg={theme.muted} attributes={TextAttributes.ITALIC}>
                 {paddingSpaces}{truncatedPrompt}
