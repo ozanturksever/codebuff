@@ -9,10 +9,9 @@ interface MockLogger {
   error: (...args: unknown[]) => void
 }
 
-interface MockAgentState {
-  messageHistory: unknown[]
-  contextTokenCount: number
-}
+// Use the actual AgentState type from the agent definition types
+import type { AgentState } from '../types/agent-definition'
+import type { ToolResultOutput, JSONValue } from '../types/util-types'
 
 const createMockPRD = (stories: Array<{ id: string; title: string; passes: boolean; priority?: number }>) => {
   return JSON.stringify({
@@ -34,15 +33,21 @@ const createMockPRD = (stories: Array<{ id: string; title: string; passes: boole
 }
 
 describe('ralph handleSteps', () => {
-  let mockAgentState: MockAgentState
+  let mockAgentState: AgentState
   let mockLogger: MockLogger
   let logMessages: string[]
 
   beforeEach(() => {
     mockAgentState = {
+      agentId: 'ralph',
+      runId: 'test-run-id',
+      parentId: undefined,
       messageHistory: [],
+      output: undefined,
+      systemPrompt: 'Test system prompt',
+      toolDefinitions: {},
       contextTokenCount: 0,
-    }
+    } as AgentState
     logMessages = []
     mockLogger = {
       debug: () => {},
@@ -77,16 +82,16 @@ describe('ralph handleSteps', () => {
       if (typeof value === 'object' && value !== null && 'toolName' in value) {
         const toolName = (value as { toolName: string }).toolName
 
-        let toolResult: unknown[] | undefined
+        let toolResult: ToolResultOutput[] | undefined
 
         if (toolName === 'read_files' && toolResults?.has('read_files')) {
-          toolResult = [toolResults.get('read_files')]
+          toolResult = [{ type: 'json', value: (toolResults.get('read_files') ?? null) as JSONValue }]
         } else if (toolName === 'run_terminal_command') {
-          toolResult = [{ stdout: '', exitCode: 0 }]
+          toolResult = [{ type: 'json', value: { stdout: '', exitCode: 0 } }]
         } else if (toolName === 'spawn_agents') {
-          toolResult = [{ success: true }]
+          toolResult = [{ type: 'json', value: { success: true } }]
         } else if (toolName === 'set_output') {
-          toolResult = [{ success: true }]
+          toolResult = [{ type: 'json', value: { success: true } }]
         }
 
         result = generator.next({ toolResult, agentState: mockAgentState, stepsComplete: false })
