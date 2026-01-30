@@ -28,6 +28,8 @@ import type {
   SuggestedFollowup,
   SuggestedFollowupsState,
   ClickedFollowupsMap,
+  FollowupHook,
+  FollowupHookResult,
 } from '../types/store'
 
 // Re-export types from the types/store module to maintain backwards compatibility
@@ -46,6 +48,8 @@ export type {
   SuggestedFollowup,
   SuggestedFollowupsState,
   ClickedFollowupsMap,
+  FollowupHook,
+  FollowupHookResult,
 }
 
 export type ChatStoreState = {

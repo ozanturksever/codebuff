@@ -16,7 +16,6 @@ import { useTerminalFocus } from './hooks/use-terminal-focus'
 import { useTheme } from './hooks/use-theme'
 import { getProjectRoot } from './project-files'
 import { useChatHistoryStore } from './state/chat-history-store'
-<<<<<<< HEAD
 import { useChatStore } from './state/chat-store'
 import type { TopBannerType } from './types/store'
 import { getCliEnv } from './utils/env'

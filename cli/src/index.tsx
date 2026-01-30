@@ -29,7 +29,7 @@ import { initAnalytics, trackEvent } from './utils/analytics'
 import { getAuthTokenDetails } from './utils/auth'
 import { resetCodebuffClient } from './utils/codebuff-client'
 import { AGENT_MODE_TO_ID } from './utils/constants'
-import { getCliEnv } from './utils/env'
+import { getCliEnv, getSystemProcessEnv } from './utils/env'
 import { initializeAgentRegistry, loadAgentDefinitions } from './utils/local-agent-registry'
 import { clearLogFile, logger } from './utils/logger'
 import { shouldShowProjectPicker } from './utils/project-picker'
@@ -522,13 +522,14 @@ async function main(): Promise<void> {
 
   // Set environment variable for Kimi model override
   if (kimi) {
-    process.env.CODEBUFF_USE_KIMI = '1'
+    getSystemProcessEnv().CODEBUFF_USE_KIMI = '1'
     // Show Kimi mode indicator for non-interactive mode
     if (nonInteractive && !quiet) {
       console.error(magenta('🌙 Kimi mode: Using moonshotai/kimi-k2.5 instead of Claude models'))
     }
   }
 
+  const isLoginCommand = process.argv[2] === 'login'
   const isPublishCommand = process.argv.includes('publish')
   const hasAgentOverride = Boolean(agent && agent.trim().length > 0)
 

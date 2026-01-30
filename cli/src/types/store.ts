@@ -86,6 +86,29 @@ export type SuggestedFollowup = {
   label?: string
 }
 
+/**
+ * Result returned by a followup hook.
+ * - `followups`: The transformed followups to display (can filter, modify, or add)
+ * - `autoExecute`: If set, the followup at this index will be auto-executed
+ */
+export type FollowupHookResult = {
+  followups: SuggestedFollowup[]
+  autoExecuteIndex?: number
+}
+
+/**
+ * A hook function that intercepts followups before they're displayed.
+ * Receives the original followups, toolCallId, and context about completed work.
+ * Can optionally specify an index to auto-execute.
+ *
+ * Hooks can be async to support external command execution (e.g., project hooks).
+ */
+export type FollowupHook = (
+  followups: SuggestedFollowup[],
+  toolCallId: string,
+  context: import('../utils/project-hooks').FollowupHookContext,
+) => FollowupHookResult | Promise<FollowupHookResult>
+
 export type SuggestedFollowupsState = {
   /** The tool call ID that created these followups */
   toolCallId: string
