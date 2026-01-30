@@ -11,7 +11,6 @@ interface MockLogger {
 
 // Use the actual AgentState type from the agent definition types
 import type { AgentState } from '../types/agent-definition'
-import type { ToolResultOutput, JSONValue } from '../types/util-types'
 
 const createMockPRD = (stories: Array<{ id: string; title: string; passes: boolean; priority?: number }>) => {
   return JSON.stringify({
@@ -82,16 +81,21 @@ describe('ralph handleSteps', () => {
       if (typeof value === 'object' && value !== null && 'toolName' in value) {
         const toolName = (value as { toolName: string }).toolName
 
-        let toolResult: ToolResultOutput[] | undefined
+        // Tool results are passed directly to the generator, not wrapped in ToolResultOutput
+        // The generator receives the raw result from the tool execution
+        let toolResult: unknown[] | undefined
 
         if (toolName === 'read_files' && toolResults?.has('read_files')) {
-          toolResult = [{ type: 'json', value: (toolResults.get('read_files') ?? null) as JSONValue }]
+          // read_files returns an array of file contents (strings or objects with error)
+          toolResult = [toolResults.get('read_files')]
         } else if (toolName === 'run_terminal_command') {
-          toolResult = [{ type: 'json', value: { stdout: '', exitCode: 0 } }]
+          toolResult = [{ stdout: '', exitCode: 0 }]
         } else if (toolName === 'spawn_agents') {
-          toolResult = [{ type: 'json', value: { success: true } }]
+          toolResult = [{ success: true }]
         } else if (toolName === 'set_output') {
-          toolResult = [{ type: 'json', value: { success: true } }]
+          toolResult = [{ success: true }]
+        } else if (toolName === 'list_directory') {
+          toolResult = [{ entries: [] }]
         }
 
         result = generator.next({ toolResult, agentState: mockAgentState, stepsComplete: false })
@@ -423,11 +427,30 @@ describe('ralph handleSteps', () => {
       expect(yields).toEqual([])
     })
 
-    test('returns immediately for run mode without parallel flag', () => {
-      const yields = runHandleSteps({ mode: 'run', prdName: 'test-prd' })
+    test('run mode makes tool calls to read PRD and execute story', () => {
+      const prdContent = createMockPRD([
+        { id: 'US-001', title: 'Story 1', passes: false },
+      ])
 
-      // Should return early for non-parallel mode
-      expect(yields).toEqual([])
+      const yields = runHandleSteps(
+        { mode: 'run', prdName: 'test-prd' },
+        undefined,
+        new Map([['read_files', prdContent]]),
+      )
+
+      // Run mode reads the PRD first
+      expect(yields[0]).toEqual(
+        expect.objectContaining({
+          toolName: 'read_files',
+          input: { paths: ['prd/test-prd.json'] },
+        }),
+      )
+
+      // Then yields STEP_TEXT with story execution prompt
+      const stepTextYields = yields.filter(
+        (y) => typeof y === 'object' && y !== null && (y as any).type === 'STEP_TEXT',
+      )
+      expect(stepTextYields.length).toBeGreaterThan(0)
     })
 
     test('returns immediately for create mode', () => {
@@ -436,10 +459,31 @@ describe('ralph handleSteps', () => {
       expect(yields).toEqual([])
     })
 
-    test('returns immediately for status mode', () => {
-      const yields = runHandleSteps({ mode: 'status', prdName: 'test-prd' })
+    test('status mode makes tool calls to read and display PRD status', () => {
+      const prdContent = createMockPRD([
+        { id: 'US-001', title: 'Story 1', passes: true },
+        { id: 'US-002', title: 'Story 2', passes: false },
+      ])
 
-      expect(yields).toEqual([])
+      const yields = runHandleSteps(
+        { mode: 'status', prdName: 'test-prd' },
+        undefined,
+        new Map([['read_files', prdContent]]),
+      )
+
+      // Status mode reads the PRD first
+      expect(yields[0]).toEqual(
+        expect.objectContaining({
+          toolName: 'read_files',
+          input: { paths: ['prd/test-prd.json'] },
+        }),
+      )
+
+      // Then yields STEP_TEXT with status information
+      const stepTextYields = yields.filter(
+        (y) => typeof y === 'object' && y !== null && (y as any).type === 'STEP_TEXT',
+      )
+      expect(stepTextYields.length).toBeGreaterThan(0)
     })
 
     test('returns immediately when prdName is missing for parallel mode', () => {
