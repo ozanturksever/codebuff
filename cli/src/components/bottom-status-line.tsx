@@ -13,6 +13,8 @@ interface BottomStatusLineProps {
   isClaudeActive: boolean
   /** Quota data from Anthropic API */
   claudeQuota?: ClaudeQuotaData | null
+  /** Whether Kimi mode is enabled via --kimi flag */
+  isKimiMode?: boolean
 }
 
 /**
@@ -23,6 +25,7 @@ export const BottomStatusLine: React.FC<BottomStatusLineProps> = ({
   isClaudeConnected,
   isClaudeActive,
   claudeQuota,
+  isKimiMode = false,
 }) => {
   const theme = useTheme()
 
@@ -67,7 +70,12 @@ export const BottomStatusLine: React.FC<BottomStatusLineProps> = ({
         }}
       >
         <text style={{ fg: theme.muted }}>{directoryName}</text>
-        {isClaudeConnected && (
+        {isKimiMode ? (
+          <>
+            <text style={{ fg: isClaudeActive ? theme.success : theme.muted }}> ●</text>
+            <text style={{ fg: theme.muted }}> Kimi</text>
+          </>
+        ) : isClaudeConnected ? (
           <>
             <text style={{ fg: dotColor }}> ●</text>
             <text style={{ fg: theme.muted }}> Claude</text>
@@ -77,7 +85,7 @@ export const BottomStatusLine: React.FC<BottomStatusLineProps> = ({
               <BatteryIndicator value={displayRemaining} theme={theme} />
             ) : null}
           </>
-        )}
+        ) : null}
       </box>
     </box>
   )

@@ -90,7 +90,7 @@ describe('non-interactive-mode', () => {
     const continueFlag = options.continue
 
     let initialMode: AgentMode | undefined
-    if (options.lite) initialMode = 'LITE'
+    if (options.lite) initialMode = 'FREE'
     if (options.max) initialMode = 'MAX'
     if (options.plan) initialMode = 'PLAN'
 
@@ -283,11 +283,11 @@ describe('non-interactive-mode', () => {
     })
 
     describe('combining with mode flags', () => {
-      test('-n with --lite sets initialMode to LITE', () => {
+      test('-n with --lite sets initialMode to FREE', () => {
         const result = parseTestArgs(['-n', '--lite', 'quick task'])
         const parsed = result as ParsedArgs
         expect(parsed.nonInteractive).toBe(true)
-        expect(parsed.initialMode).toBe('LITE')
+        expect(parsed.initialMode).toBe('FREE')
         expect(parsed.initialPrompt).toBe('quick task')
       })
 
@@ -312,7 +312,7 @@ describe('non-interactive-mode', () => {
         const parsed = result as ParsedArgs
         expect(parsed.json).toBe(true)
         expect(parsed.nonInteractive).toBe(true)
-        expect(parsed.initialMode).toBe('LITE')
+        expect(parsed.initialMode).toBe('FREE')
       })
 
       test('last mode flag wins when multiple specified', () => {

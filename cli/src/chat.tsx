@@ -74,6 +74,7 @@ import {
   getStatusIndicatorState,
   type AuthStatus,
 } from './utils/status-indicator-state'
+import { getCliEnv } from './utils/env'
 import { createPasteHandler } from './utils/strings'
 import { setTerminalTitle } from './utils/terminal-title'
 import { computeInputLayoutMetrics } from './utils/text-layout'
@@ -1295,6 +1296,9 @@ export const Chat = ({
   // Determine if Claude is actively streaming/waiting
   const isClaudeActive = isStreaming || isWaitingForResponse
 
+  // Determine if Kimi mode is enabled (memoized since env won't change during session)
+  const isKimiMode = useMemo(() => getCliEnv().CODEBUFF_USE_KIMI === '1', [])
+
   // Track mouse movement for ad activity (throttled)
   const lastMouseActivityRef = useRef<number>(0)
   const handleMouseActivity = useCallback(() => {
@@ -1472,6 +1476,7 @@ export const Chat = ({
           isClaudeConnected={isClaudeOAuthActive}
           isClaudeActive={isClaudeActive}
           claudeQuota={claudeQuota}
+          isKimiMode={isKimiMode}
         />
       </box>
     </box>

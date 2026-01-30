@@ -543,9 +543,9 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
       // which has proper worktree-based parallel execution with SDK
       let useAgentMode: AgentMode = params.agentMode
 
-      // Handle lite mode - switch to LITE agent mode and parse remaining args
+      // Handle lite mode - switch to FREE agent mode and parse remaining args
       if (subcommand === 'lite') {
-        useAgentMode = 'LITE'
+        useAgentMode = 'FREE'
         const liteArgs = words.slice(1).join(' ')
         trimmedArgs = liteArgs
         words = liteArgs.split(/\s+/)
@@ -675,7 +675,7 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
       let useAgentMode: AgentMode = params.agentMode
       let handlerArgs = args
       if (handlerArgs.trim().startsWith('lite ')) {
-        useAgentMode = 'LITE'
+        useAgentMode = 'FREE'
         handlerArgs = handlerArgs.trim().slice(5)
       }
       const result = handleRalphCommand(handlerArgs)
