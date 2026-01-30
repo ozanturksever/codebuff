@@ -12,128 +12,41 @@ import type { InputMode } from '../utils/input-modes'
 import type { RunState } from '@codebuff/sdk'
 import type { FollowupHookContext } from '../utils/project-hooks'
 
-/** Types of banners that can appear at the top of the chat */
-export type TopBannerType = 'homeDir' | 'gitRoot' | null
+// Import types from the types/store module to avoid circular dependencies
+import type {
+  TopBannerType,
+  InputValue,
+  AskUserQuestion,
+  AnswerState,
+  AskUserState,
+  PendingImageStatus,
+  PendingImageAttachment,
+  PendingTextAttachment,
+  PendingAttachment,
+  PendingImage,
+  PendingBashMessage,
+  SuggestedFollowup,
+  SuggestedFollowupsState,
+  ClickedFollowupsMap,
+} from '../types/store'
 
-export type InputValue = {
-  text: string
-  cursorPosition: number
-  lastEditDueToNav: boolean
+// Re-export types from the types/store module to maintain backwards compatibility
+export type {
+  TopBannerType,
+  InputValue,
+  AskUserQuestion,
+  AnswerState,
+  AskUserState,
+  PendingImageStatus,
+  PendingImageAttachment,
+  PendingTextAttachment,
+  PendingAttachment,
+  PendingImage,
+  PendingBashMessage,
+  SuggestedFollowup,
+  SuggestedFollowupsState,
+  ClickedFollowupsMap,
 }
-
-export type AskUserQuestion = {
-  question: string
-  header?: string
-  options:
-    | string[]
-    | Array<{
-        label: string
-        description?: string
-      }>
-  multiSelect?: boolean
-  validation?: {
-    maxLength?: number
-    minLength?: number
-    pattern?: string
-    patternError?: string
-  }
-}
-
-export type AnswerState = number | number[]
-
-export type AskUserState = {
-  toolCallId: string
-  questions: AskUserQuestion[]
-  selectedAnswers: AnswerState[] // Single-select: number (-1 = not answered), Multi-select: number[]
-  otherTexts: string[] // Custom text input for each question (empty string if not used)
-} | null
-
-export type PendingImageStatus = 'processing' | 'ready' | 'error'
-
-/** Image attachment with processed data */
-export type PendingImageAttachment = {
-  kind: 'image'
-  path: string
-  filename: string
-  status: PendingImageStatus
-  size?: number
-  width?: number
-  height?: number
-  note?: string // Display note: "compressed" | error message
-  processedImage?: {
-    base64: string
-    mediaType: string
-  }
-}
-
-/** Text attachment (large pasted text) */
-export type PendingTextAttachment = {
-  kind: 'text'
-  id: string
-  content: string
-  preview: string // First ~100 chars for display
-  charCount: number
-}
-
-/** Unified attachment type with discriminator */
-export type PendingAttachment = PendingImageAttachment | PendingTextAttachment
-
-/** @deprecated Use PendingImageAttachment instead */
-export type PendingImage = PendingImageAttachment
-
-export type PendingBashMessage = {
-  id: string
-  command: string
-  stdout: string
-  stderr: string
-  exitCode: number
-  /** Whether the command is still running */
-  isRunning: boolean
-  startTime?: number
-  cwd?: string
-  /** Whether the message was already added to UI chat history (non-ghost mode) */
-  addedToHistory?: boolean
-}
-
-export type SuggestedFollowup = {
-  prompt: string
-  label?: string
-}
-
-/**
- * Result returned by a followup hook.
- * - `followups`: The transformed followups to display (can filter, modify, or add)
- * - `autoExecute`: If set, the followup at this index will be auto-executed
- */
-export type FollowupHookResult = {
-  followups: SuggestedFollowup[]
-  autoExecuteIndex?: number
-}
-
-/**
- * A hook function that intercepts followups before they're displayed.
- * Receives the original followups, toolCallId, and context about completed work.
- * Can optionally specify an index to auto-execute.
- * 
- * Hooks can be async to support external command execution (e.g., project hooks).
- */
-export type FollowupHook = (
-  followups: SuggestedFollowup[],
-  toolCallId: string,
-  context: FollowupHookContext,
-) => FollowupHookResult | Promise<FollowupHookResult>
-
-export type SuggestedFollowupsState = {
-  /** The tool call ID that created these followups */
-  toolCallId: string
-  /** The list of followup suggestions */
-  followups: SuggestedFollowup[]
-  /** Set of indices that have been clicked */
-  clickedIndices: Set<number>
-}
-
-/** Map of toolCallId -> Set of clicked indices (persists across followup sets) */
-export type ClickedFollowupsMap = Map<string, Set<number>>
 
 export type ChatStoreState = {
   /** Unique ID for this chat session, regenerated on /new */
@@ -454,6 +367,15 @@ export const useChatStore = create<ChatStore>()(
     },
 
     removePendingImage: (path) => {
+      // Clear any auto-remove timer to prevent memory leaks
+      // Import dynamically to avoid circular dependency
+      import('../utils/pending-attachments')
+        .then(({ clearErrorImageTimer }) => {
+          clearErrorImageTimer(path)
+        })
+        .catch(() => {
+          // Silently ignore import errors - timer cleanup is best-effort
+        })
       useChatStore.getState().removePendingAttachment(path)
     },
 
