@@ -99,4 +99,20 @@ describe('UserErrorBanner', () => {
     expect(markup).toContain('Network Error')
     expect(markup).toContain('Something went wrong')
   })
+
+  test('renders close button when onClose is provided', () => {
+    const markup = renderToStaticMarkup(
+      <UserErrorBanner error="Something went wrong" onClose={() => {}} />,
+    )
+
+    expect(markup).toContain('[x]')
+  })
+
+  test('does not render close button when onClose is not provided', () => {
+    const markup = renderToStaticMarkup(
+      <UserErrorBanner error="Something went wrong" />,
+    )
+
+    expect(markup).not.toContain('[x]')
+  })
 })

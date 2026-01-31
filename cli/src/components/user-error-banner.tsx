@@ -1,19 +1,23 @@
-import React from 'react'
+import React, { useState } from 'react'
 
+import { Button } from './button'
 import { useTheme } from '../hooks/use-theme'
 import { BORDER_CHARS } from '../utils/ui-constants'
 
 interface UserErrorBannerProps {
   error: string
   title?: string
+  onClose?: () => void
 }
 
 /** Displays runtime errors in the UI (not sent to LLM). */
 export const UserErrorBanner = React.memo(function UserErrorBanner({
   error,
   title,
+  onClose,
 }: UserErrorBannerProps) {
   const theme = useTheme()
+  const [isCloseHovered, setIsCloseHovered] = useState(false)
 
   // Handle empty and whitespace-only errors
   const trimmedError = error.trim()
@@ -44,9 +48,33 @@ export const UserErrorBanner = React.memo(function UserErrorBanner({
           gap: 0,
         }}
       >
-        <text style={{ fg: theme.error, wrapMode: 'word' }}>
-          {title ?? 'Error'}
-        </text>
+        <box
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <text style={{ fg: theme.error, wrapMode: 'word' }}>
+            {title ?? 'Error'}
+          </text>
+          {onClose && (
+            <Button
+              onClick={onClose}
+              onMouseOver={() => setIsCloseHovered(true)}
+              onMouseOut={() => setIsCloseHovered(false)}
+            >
+              <text
+                style={{
+                  fg: isCloseHovered ? theme.foreground : theme.secondary,
+                  wrapMode: 'none',
+                }}
+              >
+                [x]
+              </text>
+            </Button>
+          )}
+        </box>
         <text style={{ fg: theme.foreground, wrapMode: 'word' }}>
           {error}
         </text>

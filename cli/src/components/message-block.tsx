@@ -129,6 +129,7 @@ export const MessageBlock = memo(({
   isLastMessage,
 }: MessageBlockProps) => {
   const [showValidationPopover, setShowValidationPopover] = useState(false)
+  const [showUserError, setShowUserError] = useState(true)
 
   const bashCwd = metadata?.bashCwd ? formatCwd(metadata.bashCwd) : undefined
 
@@ -309,7 +310,12 @@ export const MessageBlock = memo(({
       </box>
 
       {/* Display runtime error banner for AI messages */}
-      {isAi && userError && <UserErrorBanner error={userError} />}
+      {isAi && userError && showUserError && (
+        <UserErrorBanner
+          error={userError}
+          onClose={() => setShowUserError(false)}
+        />
+      )}
 
       {isAi && (
         <MessageFooter
