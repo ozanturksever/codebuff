@@ -105,6 +105,7 @@ type ParsedArgs = {
   initialMode?: AgentMode
   nonInteractive: boolean
   json: boolean
+  streamJson: boolean
   quiet: boolean
   timeout?: number
   output?: string
@@ -142,6 +143,10 @@ function parseArgs(): ParsedArgs {
     .option(
       '--json',
       'Output structured JSON (only valid with --non-interactive)',
+    )
+    .option(
+      '--stream-json',
+      'Output streaming JSONL events (one JSON object per line, for machine consumption)',
     )
     .option(
       '-q, --quiet',
@@ -186,8 +191,9 @@ function parseArgs(): ParsedArgs {
         : null,
     cwd: options.cwd,
     initialMode,
-    nonInteractive: options.nonInteractive || options.json || options.quiet || options.output || false,
+    nonInteractive: options.nonInteractive || options.json || options.streamJson || options.quiet || options.output || false,
     json: options.json || false,
+    streamJson: options.streamJson || false,
     quiet: options.quiet || false,
     timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
     output: options.output,
@@ -251,6 +257,7 @@ async function runNonInteractive({
   agent,
   initialMode,
   json,
+  streamJson,
   quiet,
   timeout,
   outputFile,
@@ -259,6 +266,7 @@ async function runNonInteractive({
   agent?: string
   initialMode?: AgentMode
   json: boolean
+  streamJson: boolean
   quiet: boolean
   timeout?: number
   outputFile?: string
@@ -359,10 +367,10 @@ async function runNonInteractive({
   }
 
   // Always show traces to stderr so user can see progress (even with --json)
-  // Only suppress in quiet mode
-  const showTraces = !quiet
-  // Stream text to stdout only when not in JSON/quiet/outputFile mode
-  const streamTextToStdout = !json && !quiet && !outputFile
+  // Only suppress in quiet mode or stream-json mode (stream-json outputs raw events to stdout)
+  const showTraces = !quiet && !streamJson
+  // Stream text to stdout only when not in JSON/quiet/outputFile/streamJson mode
+  const streamTextToStdout = !json && !streamJson && !quiet && !outputFile
   
   // Track all events for JSON output (included when json: true)
   const allEvents: Array<{ type: string; [key: string]: unknown }> = []
@@ -400,6 +408,12 @@ async function runNonInteractive({
         }
       },
       handleEvent: (event: PrintModeEvent) => {
+        // For stream-json mode, output raw events as JSONL to stdout
+        if (streamJson) {
+          console.log(JSON.stringify(event))
+          return
+        }
+        
         // Track events for JSON output (simplified format)
         const simplified = simplifyEventForJson(event)
         if (simplified) {
@@ -439,6 +453,11 @@ async function runNonInteractive({
 
       if (output.type === 'error') {
         console.error(`Error: ${output.message}`)
+        process.exit(1)
+      }
+    } else if (streamJson) {
+      // stream-json mode: events were already streamed, just exit with appropriate code
+      if (output.type === 'error') {
         process.exit(1)
       }
     } else if (json) {
@@ -514,6 +533,7 @@ async function main(): Promise<void> {
     initialMode,
     nonInteractive,
     json,
+    streamJson,
     quiet,
     timeout,
     output: outputFile,
@@ -566,7 +586,7 @@ async function main(): Promise<void> {
       process.exit(1)
     }
 
-    await runNonInteractive({ prompt, agent, initialMode, json, quiet, timeout, outputFile })
+    await runNonInteractive({ prompt, agent, initialMode, json, streamJson, quiet, timeout, outputFile })
     process.exit(0)
   }
 

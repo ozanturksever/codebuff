@@ -27,6 +27,7 @@ type ParsedArgs = {
   initialMode?: AgentMode
   nonInteractive: boolean
   json: boolean
+  streamJson: boolean
   quiet: boolean
   timeout?: number
   output?: string
@@ -63,6 +64,7 @@ describe('non-interactive-mode', () => {
       .option('--plan', 'Start in PLAN mode')
       .option('-n, --non-interactive', 'Run in non-interactive mode')
       .option('--json', 'Output structured JSON (implies --non-interactive)')
+      .option('--stream-json', 'Output streaming JSONL events (implies --non-interactive)')
       .option('-q, --quiet', 'Suppress streaming output (implies --non-interactive)')
       .option('--timeout <seconds>', 'Timeout in seconds for non-interactive mode')
       .option('-o, --output <file>', 'Write output to a file (implies --non-interactive)')
@@ -105,9 +107,10 @@ describe('non-interactive-mode', () => {
           : null,
       cwd: options.cwd,
       initialMode,
-      // --json, --quiet, and --output imply non-interactive
-      nonInteractive: options.nonInteractive || options.json || options.quiet || options.output || false,
+      // --json, --stream-json, --quiet, and --output imply non-interactive
+      nonInteractive: options.nonInteractive || options.json || options.streamJson || options.quiet || options.output || false,
       json: options.json || false,
+      streamJson: options.streamJson || false,
       quiet: options.quiet || false,
       timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
       output: options.output,
@@ -140,6 +143,7 @@ describe('non-interactive-mode', () => {
         const parsed = result as ParsedArgs
         expect(parsed.nonInteractive).toBe(false)
         expect(parsed.json).toBe(false)
+        expect(parsed.streamJson).toBe(false)
         expect(parsed.quiet).toBe(false)
       })
     })
@@ -165,6 +169,66 @@ describe('non-interactive-mode', () => {
         const result = parseTestArgs(['-n', 'hello'])
         const parsed = result as ParsedArgs
         expect(parsed.json).toBe(false)
+      })
+    })
+
+    describe('--stream-json flag', () => {
+      test('parses --stream-json flag and sets nonInteractive to true', () => {
+        const result = parseTestArgs(['--stream-json', 'analyze this'])
+        const parsed = result as ParsedArgs
+        expect(parsed.streamJson).toBe(true)
+        expect(parsed.nonInteractive).toBe(true)
+        expect(parsed.initialPrompt).toBe('analyze this')
+      })
+
+      test('--stream-json can be combined with explicit -n (redundant but valid)', () => {
+        const result = parseTestArgs(['-n', '--stream-json', 'test prompt'])
+        const parsed = result as ParsedArgs
+        expect(parsed.streamJson).toBe(true)
+        expect(parsed.nonInteractive).toBe(true)
+        expect(parsed.initialPrompt).toBe('test prompt')
+      })
+
+      test('--stream-json defaults to false when not specified', () => {
+        const result = parseTestArgs(['-n', 'hello'])
+        const parsed = result as ParsedArgs
+        expect(parsed.streamJson).toBe(false)
+      })
+
+      test('--stream-json and --json are mutually independent', () => {
+        const result1 = parseTestArgs(['--stream-json', 'prompt'])
+        const parsed1 = result1 as ParsedArgs
+        expect(parsed1.streamJson).toBe(true)
+        expect(parsed1.json).toBe(false)
+
+        const result2 = parseTestArgs(['--json', 'prompt'])
+        const parsed2 = result2 as ParsedArgs
+        expect(parsed2.streamJson).toBe(false)
+        expect(parsed2.json).toBe(true)
+      })
+
+      test('--stream-json can be combined with mode flags', () => {
+        const result = parseTestArgs(['--stream-json', '--max', 'complex task'])
+        const parsed = result as ParsedArgs
+        expect(parsed.streamJson).toBe(true)
+        expect(parsed.nonInteractive).toBe(true)
+        expect(parsed.initialMode).toBe('MAX')
+        expect(parsed.initialPrompt).toBe('complex task')
+      })
+
+      test('--stream-json can be combined with --agent', () => {
+        const result = parseTestArgs(['--stream-json', '--agent', 'file-picker', 'find files'])
+        const parsed = result as ParsedArgs
+        expect(parsed.streamJson).toBe(true)
+        expect(parsed.agent).toBe('file-picker')
+        expect(parsed.initialPrompt).toBe('find files')
+      })
+
+      test('--stream-json can be combined with --timeout', () => {
+        const result = parseTestArgs(['--stream-json', '--timeout', '60', 'task'])
+        const parsed = result as ParsedArgs
+        expect(parsed.streamJson).toBe(true)
+        expect(parsed.timeout).toBe(60)
       })
     })
 
@@ -545,6 +609,7 @@ describe('non-interactive-mode', () => {
 
       expect(parsed.nonInteractive).toBe(true)
       expect(parsed.json).toBe(false)
+      expect(parsed.streamJson).toBe(false)
       expect(parsed.quiet).toBe(false)
       // This should stream output to stdout (not JSON, not quiet)
     })
@@ -556,6 +621,15 @@ describe('non-interactive-mode', () => {
       expect(parsed.json).toBe(true)
       // When json is true, output should be:
       // { "success": true/false, "output": "...", "error": "..." }
+    })
+
+    test('--stream-json mode expects JSONL output', () => {
+      const result = parseTestArgs(['--stream-json', 'prompt'])
+      const parsed = result as ParsedArgs
+
+      expect(parsed.streamJson).toBe(true)
+      // When streamJson is true, output should be one JSON object per line
+      // Each line is a raw PrintModeEvent
     })
 
     test('--quiet mode expects suppressed streaming', () => {
