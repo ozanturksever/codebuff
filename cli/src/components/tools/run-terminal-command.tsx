@@ -71,6 +71,7 @@ export const RunTerminalCommandComponent = defineToolComponent({
         cwd={startingCwd}
         isRunning={isRunning}
         timeoutSeconds={timeoutSeconds}
+        availableWidth={options.availableWidth}
       />
     )
 

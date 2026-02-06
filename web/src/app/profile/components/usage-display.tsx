@@ -10,7 +10,6 @@ import {
   CreditCard,
   Star,
   Megaphone,
-  Zap,
 } from 'lucide-react'
 import React from 'react'
 
@@ -54,13 +53,29 @@ const grantTypeInfo: Record<
     label: 'Monthly Free',
     description: 'Your monthly allowance',
   },
+  subscription: {
+    bg: 'bg-indigo-500',
+    text: 'text-indigo-600 dark:text-indigo-400',
+    gradient: 'from-indigo-500/70 to-indigo-600/70',
+    icon: <Star className="h-4 w-4" />,
+    label: 'Strong',
+    description: 'Credits from your Strong subscription',
+  },
   referral: {
     bg: 'bg-green-500',
     text: 'text-green-600 dark:text-green-400',
     gradient: 'from-green-500/70 to-green-600/70',
     icon: <Users className="h-4 w-4" />,
     label: 'Referral Bonus',
-    description: 'Earned by referring others',
+    description: 'One-time bonus from referrals',
+  },
+  referral_legacy: {
+    bg: 'bg-emerald-500',
+    text: 'text-emerald-600 dark:text-emerald-400',
+    gradient: 'from-emerald-500/70 to-emerald-600/70',
+    icon: <Users className="h-4 w-4" />,
+    label: 'Referral Bonus (Legacy)',
+    description: 'Monthly recurring referral bonus',
   },
   purchase: {
     bg: 'bg-yellow-500',
@@ -85,14 +100,6 @@ const grantTypeInfo: Record<
     icon: <Megaphone className="h-4 w-4" />,
     label: 'Ad Credits',
     description: 'Earned from viewing ads',
-  },
-  subscription: {
-    bg: 'bg-teal-500',
-    text: 'text-teal-600 dark:text-teal-400',
-    gradient: 'from-teal-500/70 to-teal-600/70',
-    icon: <Zap className="h-4 w-4" />,
-    label: 'Subscription',
-    description: 'Credits from your subscription',
   },
 }
 
@@ -243,6 +250,7 @@ export const UsageDisplay = ({
   const usedCredits: Record<FilteredGrantType, number> = {
     free: 0,
     referral: 0,
+    referral_legacy: 0,
     subscription: 0,
     purchase: 0,
     admin: 0,
@@ -262,8 +270,9 @@ export const UsageDisplay = ({
   })
 
   // Group credits by expiration type (excluding organization)
-  const expiringTypes: FilteredGrantType[] = ['free', 'referral', 'subscription']
-  const nonExpiringTypes: FilteredGrantType[] = ['admin', 'purchase', 'ad']
+  // referral_legacy and subscription renew monthly, referral (one-time) never expires
+  const expiringTypes: FilteredGrantType[] = ['free', 'referral_legacy', 'subscription']
+  const nonExpiringTypes: FilteredGrantType[] = ['referral', 'admin', 'purchase', 'ad']
 
   const expiringTotal = expiringTypes.reduce(
     (acc, type) => acc + (principals?.[type] || breakdown[type] || 0),
@@ -286,7 +295,7 @@ export const UsageDisplay = ({
   )
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
+    <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-xl font-bold mb-3">Credit Balance</CardTitle>
 
@@ -386,7 +395,7 @@ export const UsageDisplay = ({
 }
 
 export const UsageDisplaySkeleton = () => (
-  <Card className="w-full max-w-2xl mx-auto">
+  <Card>
     <CardHeader className="pb-4">
       <div className="h-7 w-32 bg-muted rounded animate-pulse mb-3" />
       <div className="h-5 w-64 bg-muted/70 rounded animate-pulse mb-3" />

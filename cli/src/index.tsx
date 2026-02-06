@@ -26,8 +26,9 @@ import { runPlainLogin } from './login/plain-login'
 import { initializeApp } from './init/init-app'
 import { getProjectRoot, setProjectRoot } from './project-files'
 import { initAnalytics, trackEvent } from './utils/analytics'
-import { getAuthTokenDetails } from './utils/auth'
+import { getAuthToken, getAuthTokenDetails } from './utils/auth'
 import { resetCodebuffClient } from './utils/codebuff-client'
+import { setApiClientAuthToken } from './utils/codebuff-api'
 import { AGENT_MODE_TO_ID } from './utils/constants'
 import { getCliEnv, getSystemProcessEnv } from './utils/env'
 import { initializeAgentRegistry, loadAgentDefinitions } from './utils/local-agent-registry'
@@ -605,6 +606,9 @@ async function main(): Promise<void> {
   }
 
   await initializeApp({ cwd })
+
+  // Set the auth token for the API client
+  setApiClientAuthToken(getAuthToken())
 
   // Handle login command before rendering the app
   if (isLoginCommand) {

@@ -16,7 +16,7 @@ export const createBestOfNImplementor = (options: {
     model: isSonnet
       ? 'anthropic/claude-sonnet-4.5'
       : isOpus
-        ? 'anthropic/claude-opus-4.5'
+        ? 'anthropic/claude-opus-4.6'
         : isGemini
           ? 'google/gemini-3-pro-preview'
           : 'openai/gpt-5.1',
@@ -42,7 +42,7 @@ IMPORTANT: Use propose_str_replace and propose_write_file tools to make your edi
 You can make multiple tool calls across multiple steps to complete the implementation. Only the file changes will be passed on, so you can say whatever you want to help you think. Do not write any final summary as that would be a waste of tokens because no one is reading it.
 <codebuff_tool_call>
 {
-  "cb_tool_name": "str_replace",
+  "cb_tool_name": "propose_str_replace",
   "path": "path/to/file",
   "replacements": [
     {
@@ -61,16 +61,15 @@ OR for new files or major rewrites:
 
 <codebuff_tool_call>
 {
-  "cb_tool_name": "write_file",
+  "cb_tool_name": "propose_write_file",
   "path": "path/to/file",
   "instructions": "What the change does",
   "content": "Complete file content or edit snippet"
 }
 </codebuff_tool_call>
-${
-  isGpt5 || isGemini
-    ? ``
-    : `
+${isGpt5 || isGemini
+        ? ``
+        : `
 IMPORTANT: Before you start writing your implementation, you should use <think> tags to think about the best way to implement the changes. You should think really really hard to make sure you implement the changes in the best way possible. Take as much time as you to think through all the cases to produce the best changes.
 
 You can also use <think> tags interspersed between tool calls to think about the best way to implement the changes.
@@ -98,7 +97,7 @@ You can also use <think> tags interspersed between tool calls to think about the
 </codebuff_tool_call>
 
 </example>`
-}
+      }
 
 After the edit tool calls, you can optionally mention any follow-up steps to take, like deleting a file, or a specific way to validate the changes. There's no need to use the set_output tool as your entire response will be included in the output.
 

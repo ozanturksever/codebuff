@@ -39,6 +39,9 @@ import type { AgentMode } from '../utils/constants'
 import type { SendMessageTimerEvent } from '../utils/send-message-timer'
 import type { AgentDefinition, MessageContent, RunState } from '@codebuff/sdk'
 import { useQueryClient } from '@tanstack/react-query'
+import { isCoveredBySubscription } from '../utils/subscription'
+
+import type { SubscriptionResponse } from './use-subscription-query'
 
 interface UseSendMessageOptions {
   inputRef: React.MutableRefObject<any>
@@ -60,6 +63,7 @@ interface UseSendMessageOptions {
   resumeQueue?: () => void
   continueChat: boolean
   continueChatId?: string
+  subscriptionData?: SubscriptionResponse | null
 }
 
 // Choose the agent definition by explicit selection or mode-based fallback.
@@ -104,12 +108,13 @@ export const useSendMessage = ({
   onBeforeMessageSend,
   mainAgentTimer,
   scrollToLatest,
-  onTimerEvent = () => {},
+  onTimerEvent = () => { },
   isQueuePausedRef,
   isProcessingQueueRef,
   resumeQueue,
   continueChat,
   continueChatId,
+  subscriptionData,
 }: UseSendMessageOptions): {
   sendMessage: SendMessageFn
   clearMessages: () => void
@@ -291,12 +296,13 @@ export const useSendMessage = ({
           const errorsToAttach =
             validationResult.errors.length === 0
               ? [
-                  {
-                    id: NETWORK_ERROR_ID,
-                    message:
-                      'Agent validation failed. This may be due to a network issue or temporary server problem. Please try again.',
-                  },
-                ]
+                // Hide this for now, as validate endpoint may be flaky and we don't want to bother users.
+                // {
+                //   id: NETWORK_ERROR_ID,
+                //   message:
+                //     'Agent validation failed. This may be due to a network issue or temporary server problem. Please try again.',
+                // },
+              ]
               : validationResult.errors
 
           setMessages((prev) =>
@@ -432,7 +438,11 @@ export const useSendMessage = ({
           setIsRetrying,
           onTotalCost: (cost: number) => {
             actualCredits = cost
-            addSessionCredits(cost)
+            // Only add to session credits if not covered by subscription
+            // (subscription credits are shown separately in the UI)
+            if (!isCoveredBySubscription(subscriptionData)) {
+              addSessionCredits(cost)
+            }
           },
         })
 

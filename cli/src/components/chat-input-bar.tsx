@@ -114,6 +114,9 @@ export const ChatInputBar = ({
   const modeConfig = getInputModeConfig(inputMode)
   const askUserState = useChatStore((state) => state.askUserState)
   const hasAnyPreview = hasSuggestionMenu
+
+  // Increase menu size on larger screen heights
+  const normalModeMaxVisible = terminalHeight > 35 ? 15 : 10
   const { submitAnswers, skip } = useAskUserBridge()
   const [askUserTitle] = React.useState(' Some questions for you ')
 
@@ -185,6 +188,11 @@ export const ChatInputBar = ({
   // Out of credits mode: replace entire input with out-of-credits banner
   if (inputMode === 'outOfCredits') {
     return <OutOfCreditsBanner />
+  }
+
+  // Subscription limit mode: show only the limit banner (no input box)
+  if (inputMode === 'subscriptionLimit') {
+    return <InputModeBanner />
   }
 
   // Handle input changes with special mode entry detection
@@ -382,7 +390,7 @@ export const ChatInputBar = ({
           <SuggestionMenu
             items={slashSuggestionItems}
             selectedIndex={slashSelectedIndex}
-            maxVisible={10}
+            maxVisible={normalModeMaxVisible}
             prefix="/"
             onItemClick={onSlashItemClick}
           />
@@ -391,7 +399,7 @@ export const ChatInputBar = ({
           <SuggestionMenu
             items={[...agentSuggestionItems, ...fileSuggestionItems]}
             selectedIndex={agentSelectedIndex}
-            maxVisible={10}
+            maxVisible={normalModeMaxVisible}
             prefix="@"
             onItemClick={onMentionItemClick}
           />

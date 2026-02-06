@@ -4,23 +4,58 @@ import {
   getSubscriptionLimits,
 } from '@codebuff/billing'
 import { SUBSCRIPTION_DISPLAY_NAME } from '@codebuff/common/constants/subscription-plans'
+import db from '@codebuff/internal/db'
+import * as schema from '@codebuff/internal/db/schema'
+import { eq } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options'
+import { extractApiKeyFromHeader, getUserIdFromSessionToken } from '@/util/auth'
 import { logger } from '@/util/logger'
 
-export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
+import type {
+  NoSubscriptionResponse,
+  ActiveSubscriptionResponse,
+} from '@codebuff/common/types/subscription'
+import type { NextRequest } from 'next/server'
+
+export async function GET(req: NextRequest) {
+  let userId: string | undefined
+
+  // First, try Bearer token authentication (for CLI clients)
+  const apiKey = extractApiKeyFromHeader(req)
+  if (apiKey) {
+    const userIdFromToken = await getUserIdFromSessionToken(apiKey)
+    if (userIdFromToken) {
+      userId = userIdFromToken
+    }
+  }
+
+  // Fall back to NextAuth session authentication (for web clients)
+  if (!userId) {
+    const session = await getServerSession(authOptions)
+    userId = session?.user?.id
+  }
+
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const userId = session.user.id
-  const subscription = await getActiveSubscription({ userId, logger })
+  // Fetch user preference for always use a-la-carte
+  const [subscription, userPrefs] = await Promise.all([
+    getActiveSubscription({ userId, logger }),
+    db.query.user.findFirst({
+      where: eq(schema.user.id, userId),
+      columns: { fallback_to_a_la_carte: true },
+    }),
+  ])
 
-  if (!subscription) {
-    return NextResponse.json({ hasSubscription: false })
+  const fallbackToALaCarte = userPrefs?.fallback_to_a_la_carte ?? false
+
+  if (!subscription || !subscription.tier) {
+    const response: NoSubscriptionResponse = { hasSubscription: false, fallbackToALaCarte }
+    return NextResponse.json(response)
   }
 
   const [rateLimit, limits] = await Promise.all([
@@ -28,10 +63,11 @@ export async function GET() {
     getSubscriptionLimits({ userId, logger, tier: subscription.tier }),
   ])
 
-  return NextResponse.json({
+  const response: ActiveSubscriptionResponse = {
     hasSubscription: true,
     displayName: SUBSCRIPTION_DISPLAY_NAME,
     subscription: {
+      id: subscription.stripe_subscription_id,
       status: subscription.status,
       billingPeriodEnd: subscription.billing_period_end.toISOString(),
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
@@ -52,5 +88,7 @@ export async function GET() {
       weeklyPercentUsed: rateLimit.weeklyPercentUsed,
     },
     limits,
-  })
+    fallbackToALaCarte,
+  }
+  return NextResponse.json(response)
 }

@@ -1,6 +1,6 @@
 {
-  "id": "14a00b85-f71c-42bf-911c-44fc725de438",
-  "prevId": "7835ce78-4836-46c4-b91b-5941d93544e9",
+  "id": "db3b93eb-3ed2-4468-80d1-0d082f4cecbd",
+  "prevId": "20f36987-146d-4bca-ab34-2f0201235556",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1080,7 +1080,7 @@
           "name": "idx_credit_ledger_subscription",
           "columns": [
             {
-              "expression": "stripe_subscription_id",
+              "expression": "user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2396,6 +2396,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "is_legacy": {
+          "name": "is_legacy",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -2559,6 +2566,18 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "tier": {
+          "name": "tier",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scheduled_tier": {
+          "name": "scheduled_tier",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         },
         "status": {
           "name": "status",
@@ -2798,12 +2817,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "stripe_price_id": {
-          "name": "stripe_price_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "next_quota_reset": {
           "name": "next_quota_reset",
           "type": "timestamp",
@@ -2865,6 +2878,13 @@
         },
         "banned": {
           "name": "banned",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "fallback_to_a_la_carte": {
+          "name": "fallback_to_a_la_carte",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -2998,6 +3018,7 @@
       "values": [
         "free",
         "referral",
+        "referral_legacy",
         "subscription",
         "purchase",
         "admin",

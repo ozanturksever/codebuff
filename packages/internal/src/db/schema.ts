@@ -73,7 +73,6 @@ export const user = pgTable('user', {
   emailVerified: timestamp('emailVerified', { mode: 'date' }),
   image: text('image'),
   stripe_customer_id: text('stripe_customer_id').unique(),
-  stripe_price_id: text('stripe_price_id'),
   next_quota_reset: timestamp('next_quota_reset', { mode: 'date' }).default(
     sql<Date>`now() + INTERVAL '1 month'`,
   ),
@@ -88,6 +87,7 @@ export const user = pgTable('user', {
   auto_topup_threshold: integer('auto_topup_threshold'),
   auto_topup_amount: integer('auto_topup_amount'),
   banned: boolean('banned').notNull().default(false),
+  fallback_to_a_la_carte: boolean('fallback_to_a_la_carte').notNull().default(false),
 })
 
 export const account = pgTable(
@@ -190,6 +190,7 @@ export const referral = pgTable(
       .references(() => user.id),
     status: ReferralStatus('status').notNull().default('pending'),
     credits: integer('credits').notNull(),
+    is_legacy: boolean('is_legacy').notNull().default(false),
     created_at: timestamp('created_at', { mode: 'date' })
       .notNull()
       .defaultNow(),

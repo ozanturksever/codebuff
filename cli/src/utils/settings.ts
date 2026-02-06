@@ -33,6 +33,10 @@ export interface Settings {
    * Default: true
    */
   autoHandoff?: boolean
+  /** @deprecated Use server-side fallbackToALaCarte setting instead */
+  alwaysUseALaCarte?: boolean
+  /** @deprecated Use server-side fallbackToALaCarte setting instead */
+  fallbackToALaCarte?: boolean
 }
 
 /**
@@ -118,6 +122,16 @@ const validateSettings = (parsed: unknown): Settings => {
   // Validate autoHandoff
   if (typeof obj.autoHandoff === 'boolean') {
     settings.autoHandoff = obj.autoHandoff
+  }
+
+  // Validate alwaysUseALaCarte (legacy)
+  if (typeof obj.alwaysUseALaCarte === 'boolean') {
+    settings.alwaysUseALaCarte = obj.alwaysUseALaCarte
+  }
+
+  // Validate fallbackToALaCarte (legacy)
+  if (typeof obj.fallbackToALaCarte === 'boolean') {
+    settings.fallbackToALaCarte = obj.fallbackToALaCarte
   }
 
   return settings

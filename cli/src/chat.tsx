@@ -19,6 +19,7 @@ import { RalphAutoContinue } from './components/ralph-auto-continue'
 import { BottomStatusLine } from './components/bottom-status-line'
 import { ChatInputBar } from './components/chat-input-bar'
 import { LoadPreviousButton } from './components/load-previous-button'
+import { ReviewScreen } from './components/review-screen'
 import { MessageWithAgents } from './components/message-with-agents'
 import { areCreditsRestored } from './components/out-of-credits-banner'
 import { PendingBashMessage } from './components/pending-bash-message'
@@ -37,6 +38,7 @@ import { useChatState } from './hooks/use-chat-state'
 import { useChatStreaming } from './hooks/use-chat-streaming'
 import { useChatUI } from './hooks/use-chat-ui'
 import { useClaudeQuotaQuery } from './hooks/use-claude-quota-query'
+import { useSubscriptionQuery } from './hooks/use-subscription-query'
 import { useClipboard } from './hooks/use-clipboard'
 import { useEvent } from './hooks/use-event'
 import { useGravityAd } from './hooks/use-gravity-ad'
@@ -49,6 +51,7 @@ import { WEBSITE_URL } from './login/constants'
 import { getProjectRoot } from './project-files'
 import { useChatHistoryStore } from './state/chat-history-store'
 import { useChatStore } from './state/chat-store'
+import { useReviewStore } from './state/review-store'
 import { useFeedbackStore } from './state/feedback-store'
 import { useMessageBlockStore } from './state/message-block-store'
 import { usePublishStore } from './state/publish-store'
@@ -58,6 +61,7 @@ import { getClaudeOAuthStatus } from './utils/claude-oauth'
 import { showClipboardMessage } from './utils/clipboard'
 import { readClipboardImage } from './utils/clipboard-image'
 import { getInputModeConfig } from './utils/input-modes'
+
 import {
   type ChatKeyboardState,
   createDefaultChatKeyboardState,
@@ -166,6 +170,11 @@ export const Chat = ({
 
   const { statusMessage } = useClipboard()
   const { ad } = useGravityAd()
+
+  // Fetch subscription data early - needed for session credits tracking
+  const { data: subscriptionData } = useSubscriptionQuery({
+    refetchInterval: 60 * 1000,
+  })
 
   // Set initial mode from CLI flag on mount
   useEffect(() => {
@@ -431,6 +440,7 @@ export const Chat = ({
     resumeQueue,
     continueChat,
     continueChatId,
+    subscriptionData,
   })
 
   sendMessageRef.current = sendMessage
@@ -669,6 +679,13 @@ export const Chat = ({
       })),
     )
 
+  const { reviewMode, closeReviewScreen } = useReviewStore(
+    useShallow((state) => ({
+      reviewMode: state.reviewMode,
+      closeReviewScreen: state.closeReviewScreen,
+    })),
+  )
+
   const publishMutation = usePublishMutation()
 
   const handleCommandResult = useCallback(
@@ -699,6 +716,10 @@ export const Chat = ({
 
       if (result.openChatHistory) {
         useChatHistoryStore.getState().openChatHistory()
+      }
+
+      if (result.openReviewScreen) {
+        useReviewStore.getState().openReviewScreen()
       }
     },
     [
@@ -825,6 +846,26 @@ export const Chat = ({
     closePublish()
     setInputFocused(true)
   }, [closePublish, setInputFocused])
+
+  const handleReviewOptionSelect = useCallback(
+    (reviewText: string) => {
+      closeReviewScreen()
+      setInputFocused(true)
+      // Submit the review request
+      onSubmitPrompt(reviewText, agentMode)
+        .then((result) => handleCommandResult(result))
+        .catch((error) => {
+          logger.error({ error }, '[review] Failed to submit review prompt')
+          showClipboardMessage('Failed to send review request', { durationMs: 3000 })
+        })
+    },
+    [closeReviewScreen, setInputFocused, onSubmitPrompt, agentMode, handleCommandResult],
+  )
+
+  const handleCloseReviewScreen = useCallback(() => {
+    closeReviewScreen()
+    setInputFocused(true)
+  }, [closeReviewScreen, setInputFocused])
 
   const handlePublish = useCallback(
     async (agentIds: string[]) => {
@@ -1178,7 +1219,7 @@ export const Chat = ({
   useChatKeyboard({
     state: chatKeyboardState,
     handlers: chatKeyboardHandlers,
-    disabled: askUserState !== null,
+    disabled: askUserState !== null || reviewMode,
   })
 
   // Sync message block context to zustand store for child components
@@ -1282,6 +1323,26 @@ export const Chat = ({
     enabled: isClaudeOAuthActive,
     refetchInterval: 60 * 1000, // Refetch every 60 seconds
   })
+
+  // Auto-show subscription limit banner when rate limit becomes active
+  const subscriptionLimitShownRef = useRef(false)
+  const subscriptionRateLimit = subscriptionData?.hasSubscription ? subscriptionData.rateLimit : undefined
+  const fallbackToALaCarte = subscriptionData?.fallbackToALaCarte ?? false
+  useEffect(() => {
+    const isLimited = subscriptionRateLimit?.limited === true
+    if (isLimited && !subscriptionLimitShownRef.current) {
+      subscriptionLimitShownRef.current = true
+      // Skip showing the banner if user prefers to always fall back to a-la-carte
+      if (!fallbackToALaCarte) {
+        useChatStore.getState().setInputMode('subscriptionLimit')
+      }
+    } else if (!isLimited) {
+      subscriptionLimitShownRef.current = false
+      if (useChatStore.getState().inputMode === 'subscriptionLimit') {
+        useChatStore.getState().setInputMode('default')
+      }
+    }
+  }, [subscriptionRateLimit?.limited, fallbackToALaCarte])
 
   const inputBoxTitle = useMemo(() => {
     const segments: string[] = []
@@ -1422,64 +1483,71 @@ export const Chat = ({
 
         {ad && getAdsEnabled() && <AdBanner ad={ad} />}
 
-        <ChatInputBar
-          inputValue={inputValue}
-          cursorPosition={cursorPosition}
-          setInputValue={setInputValue}
-          inputFocused={inputFocused}
-          inputRef={inputRef}
-          inputPlaceholder={inputPlaceholder}
-          lastEditDueToNav={lastEditDueToNav}
-          agentMode={agentMode}
-          toggleAgentMode={toggleAgentMode}
-          setAgentMode={setAgentMode}
-          hasSlashSuggestions={hasSlashSuggestions}
-          hasMentionSuggestions={hasMentionSuggestions}
-          hasSuggestionMenu={hasSuggestionMenu}
-          slashSuggestionItems={slashSuggestionItems}
-          agentSuggestionItems={agentSuggestionItems}
-          fileSuggestionItems={fileSuggestionItems}
-          slashSelectedIndex={slashSelectedIndex}
-          agentSelectedIndex={agentSelectedIndex}
-          onSlashItemClick={handleSlashItemClick}
-          onMentionItemClick={handleMentionItemClick}
-          theme={theme}
-          terminalHeight={terminalHeight}
-          separatorWidth={separatorWidth}
-          shouldCenterInputVertically={shouldCenterInputVertically}
-          inputBoxTitle={inputBoxTitle}
-          isCompactHeight={isCompactHeight}
-          isNarrowWidth={isNarrowWidth}
-          feedbackMode={feedbackMode}
-          handleExitFeedback={handleExitFeedback}
-          publishMode={publishMode}
-          handleExitPublish={handleExitPublish}
-          handlePublish={handlePublish}
-          handleSubmit={handleSubmit}
-          onPaste={createPasteHandler({
-            text: inputValue,
-            cursorPosition,
-            onChange: setInputValue,
-            onPasteImage: chatKeyboardHandlers.onPasteImage,
-            onPasteImagePath: chatKeyboardHandlers.onPasteImagePath,
-            onPasteLongText: (pastedText) => {
-              const id = crypto.randomUUID()
-              const preview = pastedText.slice(0, 100).replace(/\n/g, ' ')
-              useChatStore.getState().addPendingTextAttachment({
-                id,
-                content: pastedText,
-                preview,
-                charCount: pastedText.length,
-              })
-              // Show temporary status message
-              showClipboardMessage(
-                `📋 Pasted text (${pastedText.length.toLocaleString()} chars)`,
-                { durationMs: 5000 },
-              )
-            },
-            cwd: getProjectRoot() ?? process.cwd(),
-          })}
-        />
+        {reviewMode ? (
+          <ReviewScreen
+            onSelectOption={handleReviewOptionSelect}
+            onCancel={handleCloseReviewScreen}
+          />
+        ) : (
+          <ChatInputBar
+            inputValue={inputValue}
+            cursorPosition={cursorPosition}
+            setInputValue={setInputValue}
+            inputFocused={inputFocused}
+            inputRef={inputRef}
+            inputPlaceholder={inputPlaceholder}
+            lastEditDueToNav={lastEditDueToNav}
+            agentMode={agentMode}
+            toggleAgentMode={toggleAgentMode}
+            setAgentMode={setAgentMode}
+            hasSlashSuggestions={hasSlashSuggestions}
+            hasMentionSuggestions={hasMentionSuggestions}
+            hasSuggestionMenu={hasSuggestionMenu}
+            slashSuggestionItems={slashSuggestionItems}
+            agentSuggestionItems={agentSuggestionItems}
+            fileSuggestionItems={fileSuggestionItems}
+            slashSelectedIndex={slashSelectedIndex}
+            agentSelectedIndex={agentSelectedIndex}
+            onSlashItemClick={handleSlashItemClick}
+            onMentionItemClick={handleMentionItemClick}
+            theme={theme}
+            terminalHeight={terminalHeight}
+            separatorWidth={separatorWidth}
+            shouldCenterInputVertically={shouldCenterInputVertically}
+            inputBoxTitle={inputBoxTitle}
+            isCompactHeight={isCompactHeight}
+            isNarrowWidth={isNarrowWidth}
+            feedbackMode={feedbackMode}
+            handleExitFeedback={handleExitFeedback}
+            publishMode={publishMode}
+            handleExitPublish={handleExitPublish}
+            handlePublish={handlePublish}
+            handleSubmit={handleSubmit}
+            onPaste={createPasteHandler({
+              text: inputValue,
+              cursorPosition,
+              onChange: setInputValue,
+              onPasteImage: chatKeyboardHandlers.onPasteImage,
+              onPasteImagePath: chatKeyboardHandlers.onPasteImagePath,
+              onPasteLongText: (pastedText) => {
+                const id = crypto.randomUUID()
+                const preview = pastedText.slice(0, 100).replace(/\n/g, ' ')
+                useChatStore.getState().addPendingTextAttachment({
+                  id,
+                  content: pastedText,
+                  preview,
+                  charCount: pastedText.length,
+                })
+                // Show temporary status message
+                showClipboardMessage(
+                  `📋 Pasted text (${pastedText.length.toLocaleString()} chars)`,
+                  { durationMs: 5000 },
+                )
+              },
+              cwd: getProjectRoot() ?? process.cwd(),
+            })}
+          />
+        )}
 
         <BottomStatusLine
           isClaudeConnected={isClaudeOAuthActive}

@@ -2,6 +2,7 @@ import open from 'open'
 
 import { handleAdsEnable, handleAdsDisable } from './ads'
 import { handleHandoffCommand } from './handoff'
+import { useThemeStore } from '../hooks/use-theme'
 import { handleHelpCommand } from './help'
 import { handleHooksCommand, handleHooksInitCommand } from './hooks'
 import { handleImageCommand } from './image'
@@ -61,6 +62,7 @@ export type CommandResult = {
   openFeedbackMode?: boolean
   openPublishMode?: boolean
   openChatHistory?: boolean
+  openReviewScreen?: boolean
   preSelectAgents?: string[]
 } | void
 
@@ -386,6 +388,14 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
     },
   }),
   defineCommand({
+    name: 'subscribe',
+    aliases: ['strong'],
+    handler: (params) => {
+      open(WEBSITE_URL + '/pricing')
+      clearInput(params)
+    },
+  }),
+  defineCommand({
     name: 'buy-credits',
     handler: (params) => {
       open(WEBSITE_URL + '/profile?tab=usage')
@@ -529,6 +539,31 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
         params.setMessages((prev) => postUserMessage(prev))
       }
       // If handoffPrompt exists, handoff was successful and input was set
+    },
+  }),
+  defineCommandWithArgs({
+    name: 'review',
+    handler: (params, args) => {
+      const trimmedArgs = args.trim()
+
+      params.saveToHistory(params.inputValue.trim())
+      clearInput(params)
+
+      // If user provided review text directly, send it immediately without showing the screen
+      if (trimmedArgs) {
+        const reviewPrompt = `@GPT-5 Agent Please review: ${trimmedArgs}`
+        params.sendMessage({
+          content: reviewPrompt,
+          agentMode: params.agentMode,
+        })
+        setTimeout(() => {
+          params.scrollToLatest()
+        }, 0)
+        return
+      }
+
+      // Otherwise open the selection UI
+      return { openReviewScreen: true }
     },
   }),
   defineCommandWithArgs({
@@ -737,6 +772,20 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
       // Otherwise just show the message (list, status, delete, help)
       params.setMessages((prev) => result.postUserMessage(prev))
       params.saveToHistory(params.inputValue.trim())
+      clearInput(params)
+    },
+  }),
+  defineCommand({
+    name: 'theme:toggle',
+    handler: (params) => {
+      const { theme, setThemeName } = useThemeStore.getState()
+      const newTheme = theme.name === 'dark' ? 'light' : 'dark'
+      setThemeName(newTheme)
+      params.setMessages((prev) => [
+        ...prev,
+        getUserMessage(params.inputValue.trim()),
+        getSystemMessage(`Switched to ${newTheme} theme.`),
+      ])
       clearInput(params)
     },
   }),

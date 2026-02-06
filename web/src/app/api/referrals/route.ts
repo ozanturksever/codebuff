@@ -10,16 +10,20 @@ import { authOptions } from '../auth/[...nextauth]/auth-options'
 
 import type { NextRequest } from 'next/server'
 
-import { extractApiKeyFromHeader } from '@/util/auth'
+import {
+  extractApiKeyFromHeader,
+  getUserIdFromSessionToken,
+} from '@/util/auth'
 
 
 type Referral = Pick<typeof schema.user.$inferSelect, 'id' | 'name' | 'email'> &
-  Pick<typeof schema.referral.$inferSelect, 'credits'>
+  Pick<typeof schema.referral.$inferSelect, 'credits' | 'is_legacy'>
 const ReferralSchema = z.object({
   id: z.string(),
   name: z.string(),
   email: z.string().email(),
   credits: z.coerce.number(),
+  is_legacy: z.boolean().default(false),
 })
 
 export type ReferralData = {
@@ -53,6 +57,7 @@ export async function GET() {
       .select({
         id: schema.referral.referred_id,
         credits: schema.referral.credits,
+        is_legacy: schema.referral.is_legacy,
       })
       .from(schema.referral)
       .where(eq(schema.referral.referrer_id, session.user.id))
@@ -63,6 +68,7 @@ export async function GET() {
         name: schema.user.name,
         email: schema.user.email,
         credits: referralsQuery.credits,
+        is_legacy: referralsQuery.is_legacy,
       })
       .from(referralsQuery)
       .leftJoin(schema.user, eq(schema.user.id, referralsQuery.id))
@@ -72,6 +78,7 @@ export async function GET() {
       .select({
         id: schema.referral.referrer_id,
         credits: schema.referral.credits,
+        is_legacy: schema.referral.is_legacy,
       })
       .from(schema.referral)
       .where(eq(schema.referral.referred_id, session.user.id))
@@ -83,6 +90,7 @@ export async function GET() {
         name: schema.user.name,
         email: schema.user.email,
         credits: referredByIdQuery.credits,
+        is_legacy: referredByIdQuery.is_legacy,
       })
       .from(referredByIdQuery)
       .leftJoin(schema.user, eq(schema.user.id, referredByIdQuery.id))
@@ -164,16 +172,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const user = await db.query.session.findFirst({
-    where: eq(schema.session.sessionToken, authToken),
-    columns: {
-      userId: true,
-    },
-  })
+  const userId = await getUserIdFromSessionToken(authToken)
 
-  if (!user?.userId) {
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  return redeemReferralCode(referralCode, user.userId)
+  return redeemReferralCode(referralCode, userId)
 }
