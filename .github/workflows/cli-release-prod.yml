@@ -81,7 +81,7 @@ jobs:
       new-version: ${{ needs.prepare-and-commit-prod.outputs.new_version }}
       artifact-name: updated-package
       checkout-ref: ${{ github.sha }}
-      env-overrides: '{"NEXT_PUBLIC_CB_ENVIRONMENT": "prod"}'
+      env-overrides: '{"NEXT_PUBLIC_CB_ENVIRONMENT":"prod","NEXT_PUBLIC_CODEBUFF_APP_URL":"https://www.codebuff.com","NEXT_PUBLIC_SUPPORT_EMAIL":"support@codebuff.com","NEXT_PUBLIC_POSTHOG_API_KEY":"phc_test","NEXT_PUBLIC_POSTHOG_HOST_URL":"https://us.i.posthog.com","NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY":"pk_live_placeholder","NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL":"https://billing.stripe.com/p/login/placeholder","NEXT_PUBLIC_WEB_PORT":"3000"}'
     secrets: inherit
 
   # Create GitHub release with all binaries
