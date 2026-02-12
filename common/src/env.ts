@@ -10,7 +10,7 @@ export const env = parsedEnv.data
 // Only log environment in non-production and when not in machine-readable output mode
 // Check for --stream-json, --json, or --quiet flags that require clean stdout
 const isMachineReadableMode = process.argv.some(arg => 
-  arg === '--stream-json' || arg === '--json' || arg === '-q' || arg === '--quiet'
+  arg === '--stream-json' || arg === '--json' || arg === '-q' || arg === '--quiet' || arg === 'acp'
 )
 if (env.NEXT_PUBLIC_CB_ENVIRONMENT !== 'prod' && !isMachineReadableMode) {
   console.log('Using environment:', env.NEXT_PUBLIC_CB_ENVIRONMENT)

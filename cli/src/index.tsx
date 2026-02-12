@@ -524,6 +524,18 @@ async function runNonInteractive({
 }
 
 async function main(): Promise<void> {
+  // Handle ACP subcommand before parseArgs (not a commander command)
+  if (process.argv[2] === 'acp') {
+    const cwd = process.argv.includes('--cwd')
+      ? process.argv[process.argv.indexOf('--cwd') + 1]!
+      : process.cwd()
+    // ACP mode: minimal init — skip analytics, theme, direnv
+    if (cwd) process.chdir(cwd)
+    const { runAcp } = await import('./commands/acp')
+    await runAcp({ cwd })
+    return
+  }
+
   const {
     initialPrompt,
     agent,
