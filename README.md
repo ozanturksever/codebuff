@@ -26,13 +26,27 @@ This multi-agent approach gives you better context understanding, more accurate 
 
 ## CLI: Install and start coding
 
-Install:
+### One-line install (macOS & Linux)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ozanturksever/codebuff/main/install.sh | bash
+```
+
+This auto-detects your platform and architecture, installs the binary to `/usr/local/bin`, and works as an upgrader too — run it again to get the latest release.
+
+Custom install directory:
+
+```bash
+CODEBUFF_INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/ozanturksever/codebuff/main/install.sh | bash
+```
+
+### Manual / npm install
 
 ```bash
 npm install -g codebuff
 ```
 
-Run:
+### Run
 
 ```bash
 cd your-project
@@ -199,7 +213,12 @@ Some ways you can help:
 
 ### Install
 
-**CLI**: `npm install -g codebuff`
+**CLI (recommended)**:
+```bash
+curl -fsSL https://raw.githubusercontent.com/ozanturksever/codebuff/main/install.sh | bash
+```
+
+**CLI (npm)**: `npm install -g codebuff`
 
 **SDK**: `npm install @codebuff/sdk`
 

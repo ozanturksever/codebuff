@@ -126,8 +126,8 @@ jobs:
             - `codebuff-win32-x64.tar.gz` - Windows x64
           files: |
             binaries/*/codebuff-*
-          repository: CodebuffAI/codebuff-community
-          token: ${{ secrets.CODEBUFF_GITHUB_TOKEN }}
+          repository: ozanturksever/codebuff
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   # Publish npm package
   publish-prod-npm:
