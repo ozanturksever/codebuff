@@ -287,7 +287,7 @@ ${PLACEHOLDER.GIT_CHANGES_PROMPT}
   }
 }
 
-const EXPLORE_PROMPT = `- Iteratively spawn file pickers, code-searchers, directory-listers, glob-matchers, commanders, and web/docs researchers to gather context as needed. The file-picker agent in particular is very useful to find relevant files -- try spawning multiple in parallel (say, 2-5) to explore different parts of the codebase. Use read_subtree if you need to grok a particular part of the codebase. Read all the relevant files using the read_files tool.`
+const EXPLORE_PROMPT = `- Iteratively spawn file pickers, code-searchers, directory-listers, glob-matchers, commanders, and web/docs researchers to gather context as needed. The file-picker agent in particular is very useful to find relevant files -- try spawning multiple in parallel (say, 2-5) to explore different parts of the codebase. Use read_subtree if you need to grok a particular part of the codebase (call it directly as a tool, not via spawn_agents). Read all the relevant files using the read_files tool.`
 
 function buildImplementationInstructionsPrompt({
   isSonnet,
