@@ -23,7 +23,9 @@ export type ClientEnv = z.infer<typeof clientEnvSchema>
 // Bun will inject all these values, so we need to reference them individually (no for-loops)
 export const clientProcessEnv: ClientInput = {
   NEXT_PUBLIC_CB_ENVIRONMENT: process.env.NEXT_PUBLIC_CB_ENVIRONMENT,
-  NEXT_PUBLIC_CODEBUFF_APP_URL: process.env.NEXT_PUBLIC_CODEBUFF_APP_URL,
+  // CODEBUFF_API_URL is a runtime override (not baked in by --define during binary compilation).
+  // Falls back to the compile-time NEXT_PUBLIC_CODEBUFF_APP_URL, then to codebuff.com.
+  NEXT_PUBLIC_CODEBUFF_APP_URL: process.env.CODEBUFF_API_URL || process.env.NEXT_PUBLIC_CODEBUFF_APP_URL || 'https://www.codebuff.com',
   NEXT_PUBLIC_SUPPORT_EMAIL: process.env.NEXT_PUBLIC_SUPPORT_EMAIL,
   NEXT_PUBLIC_POSTHOG_API_KEY: process.env.NEXT_PUBLIC_POSTHOG_API_KEY,
   NEXT_PUBLIC_POSTHOG_HOST_URL: process.env.NEXT_PUBLIC_POSTHOG_HOST_URL,

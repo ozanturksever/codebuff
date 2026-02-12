@@ -222,6 +222,17 @@ curl -fsSL https://raw.githubusercontent.com/ozanturksever/codebuff/main/install
 
 **SDK**: `npm install @codebuff/sdk`
 
+### Custom Server URL
+
+To point the CLI at a self-hosted or alternative server, set `CODEBUFF_API_URL`:
+
+```bash
+export CODEBUFF_API_URL=https://your-server.com
+codebuff
+```
+
+If unset, the CLI defaults to `https://www.codebuff.com`. See [DOCKER.md](./DOCKER.md) for self-hosting instructions.
+
 ### Resources
 
 **Documentation**: [codebuff.com/docs](https://codebuff.com/docs)
